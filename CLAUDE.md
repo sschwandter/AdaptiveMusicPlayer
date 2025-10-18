@@ -59,15 +59,21 @@ The project uses Swift Testing framework (not XCTest). Tests are located in:
 
 ### Critical Design Patterns
 
-**Thread Safety**
+**Thread Safety (Swift 6 Strict Concurrency)**
 - All AudioPlayer methods are `@MainActor` to ensure UI updates happen on main thread
 - Async file loading with `Task` and `await MainActor.run` for state updates
 - Weak self captures in timer callbacks and completion handlers to prevent retain cycles
+- Timer property marked `nonisolated(unsafe)` to allow access from deinit (necessary for cleanup)
+- Deinit directly invalidates timer (can't call MainActor methods or create Tasks in deinit per Swift 6 rules)
 
 **Sample Rate Management**
 - File sample rate detected from AVAudioFile's `processingFormat.sampleRate`
 - Hardware sample rate queried via Core Audio `kAudioDevicePropertyNominalSampleRate`
 - Automatic switching attempts to set hardware to match file, falls back gracefully with warning
+- Hardware sample rate updated:
+  - After loading a file (with 0.5 second delay for hardware to switch)
+  - When playback starts
+  - Every 2 seconds during playback (via timer polling)
 - Visual feedback: green = matched (bit-perfect), orange = mismatched (resampling), dash = no file
 
 **State Synchronization**
@@ -80,6 +86,12 @@ The project uses Swift Testing framework (not XCTest). Tests are located in:
 - Clamps time values to `0...duration` to prevent crashes
 - Resumes playback if `wasPlaying` flag is true
 - Skip forward/backward use same mechanism with ±10 second offsets
+
+**File Loading and Playback Scheduling**
+- When loading a new file, `audioFile` is set to nil first to prevent old file playback
+- All scheduling happens at playback time (play/seek/skip), not pre-scheduled in stop()
+- Each play operation schedules the current `audioFile` fresh to avoid stale buffers
+- `stop()` only stops the player node without rescheduling
 
 ### File Structure
 
@@ -100,8 +112,11 @@ AdaptiveMusicPlayerUITests/
 
 ## Key Technical Constraints
 
-- **macOS 13.0+ only** - Uses AVAudioSession APIs
-- **Swift 6.0+** - Strict concurrency checking with `@MainActor`
+- **macOS 13.0+ only** - macOS-specific APIs (no iOS AVAudioSession)
+- **Swift 6.0+** - Strict concurrency checking enabled
+  - All `@MainActor` methods must be called from main thread
+  - Cannot call actor-isolated methods or create Tasks in deinit
+  - Use `nonisolated(unsafe)` for properties that need non-isolated access (e.g., Timer in deinit)
 - **No external dependencies** - Pure Apple frameworks (AVFoundation, Core Audio, SwiftUI)
 - **Security-scoped resources** - All file access must call `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`
 - **Sample rate switching** - Not all audio interfaces support all rates; verify with `getSupportedSampleRates()` before setting

@@ -23,7 +23,7 @@ class AudioPlayer: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var audioFile: AVAudioFile?
-    private var timer: Timer?
+    private nonisolated(unsafe) var timer: Timer?
     private var currentFileURL: URL?
     private var audioLengthSamples: AVAudioFramePosition = 0
     private var sampleRate: Double = 0
@@ -35,9 +35,9 @@ class AudioPlayer: ObservableObject {
     }
 
     deinit {
-        Task { @MainActor in
-            stopTimer()
-        }
+        // Timer cleanup will happen automatically when the timer is deallocated
+        // We can't call stopTimer() here because deinit can't be async in Swift 6
+        timer?.invalidate()
     }
     
     private func setupAudioEngine() {
@@ -60,14 +60,15 @@ class AudioPlayer: ObservableObject {
     }
     
     private func loadFileAsync(url: URL) async {
-        stop()
-        
+        // Stop playback and clear the old file first
         await MainActor.run {
+            stop()
+            audioFile = nil
             isLoading = true
             statusMessage = "Loading file..."
             hasError = false
         }
-        
+
         guard url.startAccessingSecurityScopedResource() else {
             await MainActor.run {
                 statusMessage = "Error: Cannot access file"
@@ -76,11 +77,11 @@ class AudioPlayer: ObservableObject {
             }
             return
         }
-        
+
         defer {
             url.stopAccessingSecurityScopedResource()
         }
-        
+
         currentFileURL = url
         
         do {
@@ -102,7 +103,8 @@ class AudioPlayer: ObservableObject {
             // Set hardware sample rate
             do {
                 try setSystemSampleRate(sampleRate)
-                try await Task.sleep(nanoseconds: 200_000_000) // 0.2 second delay
+                // Wait longer for hardware to actually switch - some devices need more time
+                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
                 updateHardwareSampleRate()
                 await MainActor.run {
                     statusMessage = "Ready to play at \(Int(sampleRate)) Hz"
@@ -115,6 +117,8 @@ class AudioPlayer: ObservableObject {
                     hasError = false // This is a warning, not a critical error
                     isLoading = false
                 }
+                // Still update to show actual hardware rate even if we couldn't set it
+                updateHardwareSampleRate()
             }
             
         } catch {
@@ -138,12 +142,12 @@ class AudioPlayer: ObservableObject {
     }
     
     private func play() {
-        guard let file = audioFile else { 
+        guard let file = audioFile else {
             statusMessage = "No audio file loaded"
             hasError = true
-            return 
+            return
         }
-        
+
         if !audioEngine.isRunning {
             do {
                 try audioEngine.start()
@@ -153,17 +157,20 @@ class AudioPlayer: ObservableObject {
                 return
             }
         }
-        
+
         // Schedule file for playback
         playerNode.scheduleFile(file, at: nil) { [weak self] in
             Task { @MainActor in
                 self?.handlePlaybackFinished()
             }
         }
-        
+
         playerNode.play()
         isPlaying = true
         startTimer()
+
+        // Update hardware sample rate to ensure display is current
+        updateHardwareSampleRate()
         statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
         hasError = false
     }
@@ -181,11 +188,6 @@ class AudioPlayer: ObservableObject {
         currentTime = 0
         stopTimer()
         statusMessage = "Stopped"
-        
-        // Reschedule file for next play
-        if let file = audioFile {
-            playerNode.scheduleFile(file, at: nil, completionHandler: nil)
-        }
     }
     
     func seek(to time: Double) {
@@ -268,8 +270,11 @@ class AudioPlayer: ObservableObject {
     
     // MARK: - Private Methods
     
+    private var timerTickCount = 0
+
     private func startTimer() {
         stopTimer() // Ensure we don't have multiple timers
+        timerTickCount = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
@@ -280,6 +285,13 @@ class AudioPlayer: ObservableObject {
                     if abs(newTime - self.currentTime) > 0.05 { // Only update if significant change
                         self.currentTime = min(newTime, self.duration)
                     }
+                }
+
+                // Update hardware sample rate every 2 seconds (20 ticks at 0.1s interval)
+                self.timerTickCount += 1
+                if self.timerTickCount >= 20 {
+                    self.updateHardwareSampleRate()
+                    self.timerTickCount = 0
                 }
             }
         }
