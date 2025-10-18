@@ -7,6 +7,19 @@ import Combine
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
+
+    // MARK: - Constants
+
+    private enum Constants {
+        static let hardwareSwitchDelay: UInt64 = 500_000_000  // nanoseconds (0.5 seconds)
+        static let skipInterval: Double = 10  // seconds
+        static let timerInterval: TimeInterval = 0.1  // seconds
+        static let timeUpdateThreshold: Double = 0.05  // seconds
+        static let sampleRateUpdateTicks = 20  // timer ticks (2 seconds at 0.1s interval)
+    }
+
+    // MARK: - Public Properties
+
     var isPlaying = false
     var currentTime: Double = 0
     var duration: Double = 0
@@ -26,10 +39,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let playerNode = AVAudioPlayerNode()
     private var audioFile: AVAudioFile?
     private var playbackUpdateTask: Task<Void, Never>?
-    private var currentFileURL: URL?
     private var audioLengthSamples: AVAudioFramePosition = 0
     private var sampleRate: Double = 0
-    private var wasPlayingBeforeInterruption: Bool = false
     private var loadingTask: Task<Void, Never>?
     private var segmentStartFrame: AVAudioFramePosition = 0  // Track offset for timer calculations
     private var playbackSessionID: Int = 0  // Increment on each seek/play to track which playback session is current
@@ -101,8 +112,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             return
         }
 
-        currentFileURL = url
-
         do {
             // Load audio file
             let file = try AVAudioFile(forReading: url)
@@ -127,7 +136,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             do {
                 try setSystemSampleRate(sampleRate)
                 // Wait longer for hardware to actually switch - some devices need more time
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+                try await Task.sleep(nanoseconds: Constants.hardwareSwitchDelay)
 
                 guard !Task.isCancelled else {
                     isLoading = false
@@ -213,13 +222,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         statusMessage = "Stopped"
     }
     
-    func seek(to time: Double) {
+    private func performSeek(to time: Double, wasPlaying: Bool) {
         guard let file = audioFile else { return }
 
-        let wasPlaying = isPlaying
-
         playerNode.stop()
-        stopTimer()  // Stop the timer while seeking
+        stopTimer()
         isPaused = false  // Clear paused state since we're rescheduling
 
         let seekTime = max(0, min(time, duration))
@@ -237,77 +244,27 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 ensureEngineStarted()
                 guard !hasError else { return }
                 playerNode.play()
-                isPlaying = true  // Restore playing state
-                startTimer()      // Restart the timer
+                isPlaying = true
+                startTimer()
             } else {
                 // If we weren't playing, restore paused state so next play will resume
                 isPaused = true
             }
         }
+    }
+
+    func seek(to time: Double) {
+        performSeek(to: time, wasPlaying: isPlaying)
     }
     
     func skipForward() {
-        guard let file = audioFile else { return }
-
-        let wasPlaying = isPlaying
-
-        playerNode.stop()
-        stopTimer()  // Stop the timer while skipping
-        isPaused = false  // Clear paused state since we're rescheduling
-
-        let newTime = min(currentTime + 10, duration)
-        let startFrame = AVAudioFramePosition(newTime * sampleRate)
-        let frameCount = AVAudioFrameCount(audioLengthSamples - startFrame)
-
-        if frameCount > 0 {
-            // Schedule segment with session tracking
-            scheduleSegmentWithCompletion(file, startingFrame: startFrame, frameCount: frameCount)
-
-            segmentStartFrame = startFrame  // Track offset for timer
-            currentTime = newTime
-
-            if wasPlaying {
-                ensureEngineStarted()
-                guard !hasError else { return }
-                playerNode.play()
-                isPlaying = true  // Restore playing state
-                startTimer()      // Restart the timer
-            } else {
-                // If we weren't playing, restore paused state so next play will resume
-                isPaused = true
-            }
-        }
+        let newTime = min(currentTime + Constants.skipInterval, duration)
+        performSeek(to: newTime, wasPlaying: isPlaying)
     }
 
     func skipBackward() {
-        guard let file = audioFile else { return }
-
-        let wasPlaying = isPlaying
-
-        playerNode.stop()
-        stopTimer()  // Stop the timer while skipping
-        isPaused = false  // Clear paused state since we're rescheduling
-
-        let newTime = max(currentTime - 10, 0)
-        let startFrame = AVAudioFramePosition(newTime * sampleRate)
-        let frameCount = AVAudioFrameCount(audioLengthSamples - startFrame)
-
-        // Schedule segment with session tracking
-        scheduleSegmentWithCompletion(file, startingFrame: startFrame, frameCount: frameCount)
-
-        segmentStartFrame = startFrame  // Track offset for timer
-        currentTime = newTime
-
-        if wasPlaying {
-            ensureEngineStarted()
-            guard !hasError else { return }
-            playerNode.play()
-            isPlaying = true  // Restore playing state
-            startTimer()      // Restart the timer
-        } else {
-            // If we weren't playing, restore paused state so next play will resume
-            isPaused = true
-        }
+        let newTime = max(currentTime - Constants.skipInterval, 0)
+        performSeek(to: newTime, wasPlaying: isPlaying)
     }
 
     private func handlePlaybackFinished(sessionID: Int) {
@@ -330,8 +287,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         playerNode.scheduleFile(file, at: nil) { [weak self] in
             guard let self else { return }
-            Task { @MainActor [weak self] in
-                self?.handlePlaybackFinished(sessionID: currentSessionID)
+            Task { @MainActor in
+                self.handlePlaybackFinished(sessionID: currentSessionID)
             }
         }
     }
@@ -343,8 +300,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         playerNode.scheduleSegment(file, startingFrame: startingFrame, frameCount: frameCount, at: nil) { [weak self] in
             guard let self else { return }
-            Task { @MainActor [weak self] in
-                self?.handlePlaybackFinished(sessionID: currentSessionID)
+            Task { @MainActor in
+                self.handlePlaybackFinished(sessionID: currentSessionID)
             }
         }
     }
@@ -359,7 +316,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             guard let self else { return }
 
             // Use Timer.publish as an AsyncSequence for modern Swift concurrency
-            for await _ in Timer.publish(every: 0.1, on: .main, in: .common).autoconnect().values {
+            for await _ in Timer.publish(every: Constants.timerInterval, on: .main, in: .common).autoconnect().values {
                 guard !Task.isCancelled else { break }
 
                 // Update playback time
@@ -368,14 +325,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     // Add segment offset since playerTime is relative to segment start
                     let currentFrame = Double(self.segmentStartFrame + playerTime.sampleTime)
                     let newTime = currentFrame / self.sampleRate
-                    if abs(newTime - self.currentTime) > 0.05 { // Only update if significant change
+                    if abs(newTime - self.currentTime) > Constants.timeUpdateThreshold {
                         self.currentTime = min(newTime, self.duration)
                     }
                 }
 
-                // Update hardware sample rate every 2 seconds (20 ticks at 0.1s interval)
+                // Update hardware sample rate periodically
                 self.timerTickCount += 1
-                if self.timerTickCount >= 20 {
+                if self.timerTickCount >= Constants.sampleRateUpdateTicks {
                     self.updateHardwareSampleRate()
                     self.timerTickCount = 0
                 }
@@ -389,17 +346,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         timerTickCount = 0
     }
     
-    private func setSystemSampleRate(_ sampleRate: Double) throws {
+    private func getDefaultAudioDevice() throws -> AudioDeviceID {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        
+
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        var status = AudioObjectGetPropertyData(
+
+        let status = AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
             0,
@@ -407,12 +364,18 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             &size,
             &deviceID
         )
-        
+
         guard status == noErr else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
                 NSLocalizedDescriptionKey: "Failed to get audio device"
             ])
         }
+
+        return deviceID
+    }
+
+    private func setSystemSampleRate(_ sampleRate: Double) throws {
+        let deviceID = try getDefaultAudioDevice()
         
         // Check if sample rate is supported
         let supportedRates = getSupportedSampleRates(deviceID: deviceID)
@@ -421,13 +384,16 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 NSLocalizedDescriptionKey: "Sample rate \(Int(sampleRate)) Hz not supported by device"
             ])
         }
-        
+
         // Set sample rate
         var nominalSampleRate = sampleRate
-        address.mSelector = kAudioDevicePropertyNominalSampleRate
-        address.mScope = kAudioObjectPropertyScopeGlobal
-        
-        status = AudioObjectSetPropertyData(
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectSetPropertyData(
             deviceID,
             &address,
             0,
@@ -435,7 +401,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             UInt32(MemoryLayout<Double>.size),
             &nominalSampleRate
         )
-        
+
         guard status == noErr else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
                 NSLocalizedDescriptionKey: "Failed to set sample rate"
@@ -466,29 +432,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
     
     private func updateHardwareSampleRate() {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        
+        guard let deviceID = try? getDefaultAudioDevice() else {
+            return
+        }
+
+        var sampleRate: Double = 0
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mSelector: kAudioDevicePropertyNominalSampleRate,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &deviceID
-        ) == noErr else {
-            return
-        }
-        
-        var sampleRate: Double = 0
-        address.mSelector = kAudioDevicePropertyNominalSampleRate
-        size = UInt32(MemoryLayout<Double>.size)
+        var size = UInt32(MemoryLayout<Double>.size)
         
         guard AudioObjectGetPropertyData(
             deviceID,
