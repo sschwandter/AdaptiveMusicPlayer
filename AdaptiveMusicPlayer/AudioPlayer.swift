@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import CoreAudio
 import Observation
 import Combine
 
@@ -37,6 +36,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let sampleRateManager: SampleRateManaging
+    private let fileLoader: AudioFileLoading
     private var audioFile: AVAudioFile?
     private var playbackUpdateTask: Task<Void, Never>?
     private var audioLengthSamples: AVAudioFramePosition = 0
@@ -45,8 +46,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private var segmentStartFrame: AVAudioFramePosition = 0  // Track offset for timer calculations
     private var playbackSessionID: Int = 0  // Increment on each seek/play to track which playback session is current
     private var isPaused: Bool = false  // Track if we're paused (vs stopped) to support pause/resume
-    
-    init() {
+
+    init(
+        sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager(),
+        fileLoader: AudioFileLoading = SecurityScopedFileLoader()
+    ) {
+        self.sampleRateManager = sampleRateManager
+        self.fileLoader = fileLoader
         setupAudioEngine()
         updateHardwareSampleRate()
     }
@@ -95,46 +101,27 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         statusMessage = "Loading file..."
         hasError = false
 
-        guard url.startAccessingSecurityScopedResource() else {
-            statusMessage = "Error: Cannot access file"
-            hasError = true
-            isLoading = false
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        // Check cancellation before expensive operations
-        guard !Task.isCancelled else {
-            isLoading = false
-            return
-        }
-
         do {
-            // Load audio file
-            let file = try AVAudioFile(forReading: url)
+            // Load audio file using file loader
+            let loadedFile = try await fileLoader.load(url: url)
 
             guard !Task.isCancelled else {
                 isLoading = false
                 return
             }
 
-            audioFile = file
-
-            let format = file.processingFormat
-            sampleRate = format.sampleRate
-            audioLengthSamples = file.length
-
-            fileSampleRate = sampleRate
-            currentFileName = url.lastPathComponent
-            duration = Double(audioLengthSamples) / sampleRate
+            // Update properties from loaded file
+            audioFile = loadedFile.file
+            sampleRate = loadedFile.sampleRate
+            audioLengthSamples = loadedFile.lengthSamples
+            fileSampleRate = loadedFile.sampleRate
+            currentFileName = loadedFile.fileName
+            duration = loadedFile.duration
             currentTime = 0
 
             // Set hardware sample rate
             do {
-                try setSystemSampleRate(sampleRate)
+                try sampleRateManager.setSampleRate(sampleRate)
                 // Wait longer for hardware to actually switch - some devices need more time
                 try await Task.sleep(nanoseconds: Constants.hardwareSwitchDelay)
 
@@ -345,116 +332,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         playbackUpdateTask = nil
         timerTickCount = 0
     }
-    
-    private func getDefaultAudioDevice() throws -> AudioDeviceID {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
 
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &deviceID
-        )
-
-        guard status == noErr else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to get audio device"
-            ])
-        }
-
-        return deviceID
-    }
-
-    private func setSystemSampleRate(_ sampleRate: Double) throws {
-        let deviceID = try getDefaultAudioDevice()
-        
-        // Check if sample rate is supported
-        let supportedRates = getSupportedSampleRates(deviceID: deviceID)
-        guard supportedRates.contains(sampleRate) else {
-            throw NSError(domain: "AudioPlayer", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Sample rate \(Int(sampleRate)) Hz not supported by device"
-            ])
-        }
-
-        // Set sample rate
-        var nominalSampleRate = sampleRate
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectSetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            UInt32(MemoryLayout<Double>.size),
-            &nominalSampleRate
-        )
-
-        guard status == noErr else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to set sample rate"
-            ])
-        }
-    }
-    
-    private func getSupportedSampleRates(deviceID: AudioDeviceID) -> [Double] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyAvailableNominalSampleRates,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr else {
-            return []
-        }
-        
-        let count = Int(size) / MemoryLayout<AudioValueRange>.size
-        var ranges = [AudioValueRange](repeating: AudioValueRange(), count: count)
-        
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &ranges) == noErr else {
-            return []
-        }
-        
-        return ranges.map { $0.mMinimum }
-    }
-    
     private func updateHardwareSampleRate() {
-        guard let deviceID = try? getDefaultAudioDevice() else {
-            return
-        }
-
-        var sampleRate: Double = 0
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<Double>.size)
-        
-        guard AudioObjectGetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            &size,
-            &sampleRate
-        ) == noErr else {
-            return
-        }
-        
-        hardwareSampleRate = sampleRate
+        hardwareSampleRate = sampleRateManager.getCurrentSampleRate() ?? 0
     }
 }
