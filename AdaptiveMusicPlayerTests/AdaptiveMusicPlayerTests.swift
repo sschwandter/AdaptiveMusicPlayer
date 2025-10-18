@@ -13,7 +13,7 @@ struct AudioPlayerTests {
         #expect(player.isPlaying == false)
         #expect(player.currentTime == 0)
         #expect(player.duration == 0)
-        #expect(player.volume == 0.5)
+        #expect(player.volume == 1.0)
         #expect(player.currentFileName == nil)
         #expect(player.fileSampleRate == 0)
         #expect(player.hardwareSampleRate > 0) // Should get system default

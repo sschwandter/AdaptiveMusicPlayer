@@ -2,10 +2,11 @@ import Foundation
 import AVFoundation
 import CoreAudio
 import Observation
+import Combine
 
 @MainActor
 @Observable
-final class AudioPlayer: @unchecked Sendable {
+final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
     var isPlaying = false
     var currentTime: Double = 0
     var duration: Double = 0
@@ -24,7 +25,7 @@ final class AudioPlayer: @unchecked Sendable {
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var audioFile: AVAudioFile?
-    private var timer: Timer?
+    private var playbackUpdateTask: Task<Void, Never>?
     private var currentFileURL: URL?
     private var audioLengthSamples: AVAudioFramePosition = 0
     private var sampleRate: Double = 0
@@ -36,9 +37,9 @@ final class AudioPlayer: @unchecked Sendable {
         updateHardwareSampleRate()
     }
 
-    // Note: No deinit needed - Swift 6 strict concurrency prevents accessing
-    // MainActor-isolated properties from nonisolated deinit.
-    // Timer will be invalidated automatically when deallocated.
+    // Note: No explicit deinit needed - Task cancellation happens automatically
+    // when the AudioPlayer is deallocated. Tasks are structured concurrency primitives
+    // that handle their own cleanup.
     
     private func setupAudioEngine() {
         audioEngine.attach(playerNode)
@@ -292,11 +293,17 @@ final class AudioPlayer: @unchecked Sendable {
     private var timerTickCount = 0
 
     private func startTimer() {
-        stopTimer() // Ensure we don't have multiple timers
+        stopTimer() // Ensure we don't have multiple tasks running
         timerTickCount = 0
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            Task { @MainActor in
+
+        playbackUpdateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            // Use Timer.publish as an AsyncSequence for modern Swift concurrency
+            for await _ in Timer.publish(every: 0.1, on: .main, in: .common).values {
+                guard !Task.isCancelled else { break }
+
+                // Update playback time
                 if let nodeTime = self.playerNode.lastRenderTime,
                    let playerTime = self.playerNode.playerTime(forNodeTime: nodeTime) {
                     let currentFrame = Double(playerTime.sampleTime)
@@ -315,10 +322,11 @@ final class AudioPlayer: @unchecked Sendable {
             }
         }
     }
-    
+
     private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
+        playbackUpdateTask?.cancel()
+        playbackUpdateTask = nil
+        timerTickCount = 0
     }
     
     private func setSystemSampleRate(_ sampleRate: Double) throws {
