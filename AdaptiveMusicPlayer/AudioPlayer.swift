@@ -1,7 +1,6 @@
 import Foundation
 import AVFoundation
 import Observation
-import Combine
 
 @MainActor
 @Observable
@@ -53,57 +52,53 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         loadingTask?.cancel()
 
         loadingTask = Task {
-            await loadFileAsync(url: url)
+            // Check for cancellation early
+            guard !Task.isCancelled else { return }
+
+            // Stop playback and clear the old file first
+            stop()
+            player = nil
+            isLoading = true
+            statusMessage = "Loading file..."
+            hasError = false
+
+            do {
+                // Create audio session (handles file loading, player creation, hardware config)
+                let session = try await sessionManager.createSession(from: url)
+
+                guard !Task.isCancelled else {
+                    isLoading = false
+                    return
+                }
+
+                // Update all state from session
+                player = session.player
+                player?.volume = Float(volume)
+                fileSampleRate = session.sampleRate
+                currentFileName = session.fileName
+                duration = session.duration
+                currentTime = 0
+
+                // Update hardware sample rate display
+                updateHardwareSampleRate()
+                statusMessage = "Ready to play at \(Int(fileSampleRate)) Hz"
+                hasError = false
+                isLoading = false
+
+            } catch is CancellationError {
+                statusMessage = "Loading cancelled"
+                isLoading = false
+            } catch {
+                statusMessage = "Error loading file: \(error.localizedDescription)"
+                hasError = true
+                isLoading = false
+                currentFileName = nil
+                fileSampleRate = 0
+                player = nil
+            }
         }
 
         await loadingTask?.value
-    }
-
-    private func loadFileAsync(url: URL) async {
-        // Check for cancellation early
-        guard !Task.isCancelled else { return }
-
-        // Stop playback and clear the old file first
-        stop()
-        player = nil
-        isLoading = true
-        statusMessage = "Loading file..."
-        hasError = false
-
-        do {
-            // Create audio session (handles file loading, player creation, hardware config)
-            let session = try await sessionManager.createSession(from: url)
-
-            guard !Task.isCancelled else {
-                isLoading = false
-                return
-            }
-
-            // Update all state from session
-            player = session.player
-            player?.volume = Float(volume)
-            fileSampleRate = session.sampleRate
-            currentFileName = session.fileName
-            duration = session.duration
-            currentTime = 0
-
-            // Update hardware sample rate display
-            updateHardwareSampleRate()
-            statusMessage = "Ready to play at \(Int(fileSampleRate)) Hz"
-            hasError = false
-            isLoading = false
-
-        } catch is CancellationError {
-            statusMessage = "Loading cancelled"
-            isLoading = false
-        } catch {
-            statusMessage = "Error loading file: \(error.localizedDescription)"
-            hasError = true
-            isLoading = false
-            currentFileName = nil
-            fileSampleRate = 0
-            player = nil
-        }
     }
 
     func togglePlayPause() {

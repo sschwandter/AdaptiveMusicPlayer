@@ -7,13 +7,6 @@ struct AudioSession: @unchecked Sendable {
     let fileName: String
     let sampleRate: Double
     let duration: Double
-
-    nonisolated init(player: AVAudioPlayer, fileName: String, sampleRate: Double, duration: Double) {
-        self.player = player
-        self.fileName = fileName
-        self.sampleRate = sampleRate
-        self.duration = duration
-    }
 }
 
 /// Protocol for managing audio session creation
@@ -54,20 +47,11 @@ final class AudioSessionManager: AudioSessionManaging {
     nonisolated func createSession(from url: URL) async throws -> AudioSession {
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)
-
-        // Check for cancellation
-        guard !Task.isCancelled else {
-            throw CancellationError()
-        }
+        guard !Task.isCancelled else { throw CancellationError() }
 
         // 2. Create AVAudioPlayer from data
         let player = try AVAudioPlayer(data: loadedFile.data, fileTypeHint: loadedFile.fileExtension)
         player.prepareToPlay()
-
-        // Check for cancellation
-        guard !Task.isCancelled else {
-            throw CancellationError()
-        }
 
         // 3. Extract metadata
         let sampleRate = player.format.sampleRate
@@ -78,14 +62,12 @@ final class AudioSessionManager: AudioSessionManaging {
             try sampleRateManager.setSampleRate(sampleRate)
             // Wait for hardware to actually switch
             try await Task.sleep(nanoseconds: Constants.hardwareSwitchDelay)
+            guard !Task.isCancelled else { throw CancellationError() }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             // Hardware sample rate configuration is optional
             // Continue even if it fails - playback will work with resampling
-        }
-
-        // Check for cancellation before returning
-        guard !Task.isCancelled else {
-            throw CancellationError()
         }
 
         // 5. Return complete session

@@ -3,6 +3,7 @@ import AVFoundation
 import Combine
 
 /// Protocol for tracking audio playback progress
+@MainActor
 protocol PlaybackProgressTracking {
     /// Start tracking playback progress
     /// - Parameters:
@@ -26,7 +27,6 @@ protocol PlaybackProgressTracking {
 }
 
 /// Tracks audio playback progress using timer-based polling
-@MainActor
 final class PlaybackProgressTracker: PlaybackProgressTracking {
 
     // MARK: - Constants

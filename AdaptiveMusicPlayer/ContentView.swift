@@ -172,17 +172,17 @@ struct ContentView: View {
         .padding()
         .frame(minWidth: 500, minHeight: 400)
         .onKeyDown(key: .space) {
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.togglePlayPause()
             }
         }
         .onKeyDown(key: .leftArrow) {
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.skipBackward()
             }
         }
         .onKeyDown(key: .rightArrow) {
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.skipForward()
             }
         }
@@ -195,7 +195,7 @@ struct ContentView: View {
             showingFilePicker = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.togglePlayPause()
             }
         }
@@ -205,12 +205,12 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .skipForward)) { _ in
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.skipForward()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .skipBackward)) { _ in
-            if player.currentFileName != nil && !player.isLoading {
+            if canPerformPlaybackAction {
                 player.skipBackward()
             }
         }
@@ -239,6 +239,11 @@ struct ContentView: View {
     }
     
     // MARK: - Computed Properties
+
+    private var canPerformPlaybackAction: Bool {
+        player.currentFileName != nil && !player.isLoading
+    }
+
     private var sampleRateColor: Color {
         guard player.fileSampleRate > 0 && player.hardwareSampleRate > 0 else {
             return .secondary

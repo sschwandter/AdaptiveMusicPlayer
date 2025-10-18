@@ -20,7 +20,7 @@ protocol AudioFileLoading: Sendable {
 final class SecurityScopedFileLoader: AudioFileLoading {
 
     nonisolated func load(url: URL) async throws -> LoadedAudioFile {
-        // Check for cancellation early
+        // Check cancellation before starting
         guard !Task.isCancelled else {
             throw CancellationError()
         }
@@ -29,20 +29,12 @@ final class SecurityScopedFileLoader: AudioFileLoading {
         guard url.startAccessingSecurityScopedResource() else {
             throw LoaderError.cannotAccessFile
         }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        // Check cancellation before expensive operations
-        guard !Task.isCancelled else {
-            throw CancellationError()
-        }
+        defer { url.stopAccessingSecurityScopedResource() }
 
         // Load file data into memory
         let data = try Data(contentsOf: url)
 
-        // Check cancellation after loading
+        // Check cancellation after expensive operation
         guard !Task.isCancelled else {
             throw CancellationError()
         }
