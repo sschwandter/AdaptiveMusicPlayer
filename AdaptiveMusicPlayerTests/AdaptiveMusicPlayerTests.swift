@@ -38,14 +38,12 @@ struct AudioPlayerTests {
     
     @Test("Time formatting works correctly")
     func timeFormatting() async throws {
-        let contentView = ContentView()
-        
-        // Test various time formats
-        #expect(contentView.timeString(0) == "0:00")
-        #expect(contentView.timeString(30) == "0:30")
-        #expect(contentView.timeString(60) == "1:00")
-        #expect(contentView.timeString(90) == "1:30")
-        #expect(contentView.timeString(3661) == "61:01")
+        // Test various time formats using TimeFormatter directly
+        #expect(TimeFormatter.format(0) == "0:00")
+        #expect(TimeFormatter.format(30) == "0:30")
+        #expect(TimeFormatter.format(60) == "1:00")
+        #expect(TimeFormatter.format(90) == "1:30")
+        #expect(TimeFormatter.format(3661) == "61:01")
     }
     
     @Test("Toggle play/pause with no file loaded")
@@ -94,60 +92,31 @@ struct AudioPlayerTests {
     @Test("Error state management")
     func errorStates() async throws {
         let player = AudioPlayer()
-        
+
         // Initially no error
         #expect(player.hasError == false)
-        
+
         // Test loading a non-existent file
         let invalidURL = URL(fileURLWithPath: "/nonexistent/file.mp3")
-        player.loadFile(url: invalidURL)
-        
-        // Give some time for async operation
-        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
-        
+        await player.loadFile(url: invalidURL)
+
         // Should have error state
         #expect(player.hasError == true)
         #expect(!player.statusMessage.isEmpty)
     }
 }
 
-@Suite("ContentView Helper Tests")
-struct ContentViewHelperTests {
-    
+@Suite("TimeFormatter Tests")
+struct TimeFormatterTests {
+
     @Test("Time string formatting edge cases")
     func timeStringEdgeCases() async throws {
-        let contentView = ContentView()
-        
-        // Test edge cases
-        #expect(contentView.timeString(0.5) == "0:00")
-        #expect(contentView.timeString(59.9) == "0:59")
-        #expect(contentView.timeString(3600) == "60:00")
-        #expect(contentView.timeString(Double.infinity).contains(":"))
-        #expect(contentView.timeString(-10) == "0:00") // Negative should be handled gracefully
+        // Test edge cases using TimeFormatter directly
+        #expect(TimeFormatter.format(0.5) == "0:00")
+        #expect(TimeFormatter.format(59.9) == "0:59")
+        #expect(TimeFormatter.format(3600) == "60:00")
+        #expect(TimeFormatter.format(Double.infinity) == "0:00") // Invalid input returns 0:00
+        #expect(TimeFormatter.format(-10) == "0:00") // Negative should be handled gracefully
     }
 }
 
-@Suite("Audio Session Tests")
-@MainActor
-struct AudioSessionTests {
-    
-    @Test("Audio session is configured")
-    func audioSessionSetup() async throws {
-        let player = AudioPlayer()
-        
-        // Give time for initialization
-        try await Task.sleep(nanoseconds: 100_000_000)
-        
-        let session = AVAudioSession.sharedInstance()
-        #expect(session.category == .playback)
-    }
-}
-
-// Extension to make timeString accessible for testing
-extension ContentView {
-    func timeString(_ time: Double) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-}

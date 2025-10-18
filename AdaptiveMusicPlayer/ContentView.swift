@@ -1,9 +1,8 @@
 import SwiftUI
 import AVFoundation
-import Combine
 
 struct ContentView: View {
-    @StateObject private var player = AudioPlayer()
+    @State private var player = AudioPlayer()
     @State private var showingFilePicker = false
     @State private var isDraggingSlider = false
     @State private var sliderValue: Double = 0
@@ -236,7 +235,9 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    player.loadFile(url: url)
+                    Task {
+                        await player.loadFile(url: url)
+                    }
                 }
             case .failure(let error):
                 player.statusMessage = "Error selecting file: \(error.localizedDescription)"
@@ -255,9 +256,7 @@ struct ContentView: View {
     
     // MARK: - Private Methods
     private func timeString(_ time: Double) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+        TimeFormatter.format(time)
     }
 }
 

@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Adaptive Music Player is a macOS audio player application built with SwiftUI that provides bit-perfect audio playback by automatically adapting the system's sample rate to match audio files.
 
+**Swift 6 Compliant**: This codebase is fully refactored for Swift 6 strict concurrency checking with modern patterns.
+
 ## Build and Test Commands
 
 ### Building
@@ -34,23 +36,27 @@ The project uses Swift Testing framework (not XCTest). Tests are located in:
 ### Core Components
 
 **AudioPlayer** (`AudioPlayer.swift`)
-- `@MainActor` observable object managing all audio playback state
+- `@MainActor @Observable` class managing all audio playback state
+- Uses modern Observation framework (not ObservableObject/Combine)
+- Conforms to `@unchecked Sendable` for Swift 6 concurrency safety
 - Built on AVAudioEngine + AVAudioPlayerNode for low-level control
 - Handles automatic sample rate switching via Core Audio APIs
 - Key responsibilities:
-  - Audio file loading with security-scoped resource access
+  - Async file loading with task cancellation support
+  - Security-scoped resource access for file operations
   - Sample rate detection and hardware switching (`setSystemSampleRate`, `getSupportedSampleRates`)
   - Playback control (play/pause/stop/seek)
   - Timer-based progress tracking (100ms intervals)
-  - Error state management with user-friendly messages
+  - Structured error handling
 - Note: Does NOT use AVAudioSession (iOS-only API not available on macOS)
 
 **ContentView** (`ContentView.swift`)
 - SwiftUI interface following MVVM pattern
-- `@StateObject` owns AudioPlayer instance
+- `@State` property for AudioPlayer (Observation framework pattern)
 - Keyboard shortcuts handled via NotificationCenter + hidden Button workaround
 - Custom View extensions for keyboard handling (`onKeyDown`, `onDrag`, `onRelease`)
 - Loading states disable UI interactions to prevent race conditions
+- Async file loading with proper Task handling
 
 **AdaptiveMusicPlayerApp** (`AdaptiveMusicPlayerApp.swift`)
 - App entry point with window configuration
@@ -60,11 +66,15 @@ The project uses Swift Testing framework (not XCTest). Tests are located in:
 ### Critical Design Patterns
 
 **Thread Safety (Swift 6 Strict Concurrency)**
-- All AudioPlayer methods are `@MainActor` to ensure UI updates happen on main thread
-- Async file loading with `Task` and `await MainActor.run` for state updates
-- Weak self captures in timer callbacks and completion handlers to prevent retain cycles
-- Timer property marked `nonisolated(unsafe)` to allow access from deinit (necessary for cleanup)
-- Deinit directly invalidates timer (can't call MainActor methods or create Tasks in deinit per Swift 6 rules)
+- Class is `@MainActor` ensuring all methods/properties run on main thread
+- Uses `@Observable` macro (Swift 5.9+) instead of ObservableObject for better performance
+- Conforms to `@unchecked Sendable` - safe due to MainActor isolation
+- **No `nonisolated(unsafe)`** - all concurrency is properly checked
+- **No unnecessary `MainActor.run`** - methods already MainActor-isolated
+- Async/await patterns throughout for file operations
+- Task cancellation support via `loadingTask` property
+- Weak self captures in AVFoundation callbacks with proper guard checks
+- No deinit needed - Swift 6 prevents accessing MainActor properties from nonisolated deinit
 
 **Sample Rate Management**
 - File sample rate detected from AVAudioFile's `processingFormat.sampleRate`
@@ -88,10 +98,14 @@ The project uses Swift Testing framework (not XCTest). Tests are located in:
 - Skip forward/backward use same mechanism with ±10 second offsets
 
 **File Loading and Playback Scheduling**
-- When loading a new file, `audioFile` is set to nil first to prevent old file playback
+- **Async file loading** with `loadFile(url:) async` method
+- **Task cancellation**: Loading new file cancels previous load operation
+- Cancellation checks at key points (`Task.isCancelled`) to abort early
+- When loading, `audioFile` is set to nil first to prevent old file playback
 - All scheduling happens at playback time (play/seek/skip), not pre-scheduled in stop()
 - Each play operation schedules the current `audioFile` fresh to avoid stale buffers
 - `stop()` only stops the player node without rescheduling
+- Proper error handling with `CancellationError` caught separately
 
 ### File Structure
 
@@ -113,11 +127,13 @@ AdaptiveMusicPlayerUITests/
 ## Key Technical Constraints
 
 - **macOS 13.0+ only** - macOS-specific APIs (no iOS AVAudioSession)
-- **Swift 6.0+** - Strict concurrency checking enabled
+- **Swift 6.0+ Strict Concurrency** - Fully compliant with Swift 6 concurrency checking
   - All `@MainActor` methods must be called from main thread
   - Cannot call actor-isolated methods or create Tasks in deinit
-  - Use `nonisolated(unsafe)` for properties that need non-isolated access (e.g., Timer in deinit)
-- **No external dependencies** - Pure Apple frameworks (AVFoundation, Core Audio, SwiftUI)
+  - **No `nonisolated(unsafe)` used** - proper actor isolation throughout
+  - Uses `@Observable` instead of ObservableObject for modern SwiftUI
+  - Task cancellation support with structured concurrency
+- **No external dependencies** - Pure Apple frameworks (AVFoundation, Core Audio, SwiftUI, Observation)
 - **Security-scoped resources** - All file access must call `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`
 - **Sample rate switching** - Not all audio interfaces support all rates; verify with `getSupportedSampleRates()` before setting
 

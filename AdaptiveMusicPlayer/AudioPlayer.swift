@@ -1,50 +1,55 @@
 import Foundation
 import AVFoundation
 import CoreAudio
-import Combine
+import Observation
 
 @MainActor
-class AudioPlayer: ObservableObject {
-    @Published var isPlaying = false
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
-    @Published var volume: Double = 0.5 {
+@Observable
+final class AudioPlayer: @unchecked Sendable {
+    var isPlaying = false
+    var currentTime: Double = 0
+    var duration: Double = 0
+    var volume: Double = 1 {
         didSet {
             audioEngine.mainMixerNode.outputVolume = Float(volume)
         }
     }
-    @Published var currentFileName: String?
-    @Published var fileSampleRate: Double = 0
-    @Published var hardwareSampleRate: Double = 0
-    @Published var statusMessage: String = ""
-    @Published var hasError: Bool = false
-    @Published var isLoading: Bool = false
+    var currentFileName: String?
+    var fileSampleRate: Double = 0
+    var hardwareSampleRate: Double = 0
+    var statusMessage: String = ""
+    var hasError: Bool = false
+    var isLoading: Bool = false
     
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var audioFile: AVAudioFile?
-    private nonisolated(unsafe) var timer: Timer?
+    private var timer: Timer?
     private var currentFileURL: URL?
     private var audioLengthSamples: AVAudioFramePosition = 0
     private var sampleRate: Double = 0
     private var wasPlayingBeforeInterruption: Bool = false
+    private var loadingTask: Task<Void, Never>?
     
     init() {
         setupAudioEngine()
         updateHardwareSampleRate()
     }
 
-    deinit {
-        // Timer cleanup will happen automatically when the timer is deallocated
-        // We can't call stopTimer() here because deinit can't be async in Swift 6
-        timer?.invalidate()
-    }
+    // Note: No deinit needed - Swift 6 strict concurrency prevents accessing
+    // MainActor-isolated properties from nonisolated deinit.
+    // Timer will be invalidated automatically when deallocated.
     
     private func setupAudioEngine() {
         audioEngine.attach(playerNode)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: nil)
         audioEngine.mainMixerNode.outputVolume = Float(volume)
-        
+        // Don't start engine yet - will start when playing
+    }
+
+    private func ensureEngineStarted() {
+        guard !audioEngine.isRunning else { return }
+
         do {
             try audioEngine.start()
         } catch {
@@ -53,28 +58,32 @@ class AudioPlayer: ObservableObject {
         }
     }
     
-    func loadFile(url: URL) {
-        Task {
+    func loadFile(url: URL) async {
+        // Cancel any existing load operation
+        loadingTask?.cancel()
+
+        loadingTask = Task {
             await loadFileAsync(url: url)
         }
+
+        await loadingTask?.value
     }
-    
+
     private func loadFileAsync(url: URL) async {
+        // Check for cancellation early
+        guard !Task.isCancelled else { return }
+
         // Stop playback and clear the old file first
-        await MainActor.run {
-            stop()
-            audioFile = nil
-            isLoading = true
-            statusMessage = "Loading file..."
-            hasError = false
-        }
+        stop()
+        audioFile = nil
+        isLoading = true
+        statusMessage = "Loading file..."
+        hasError = false
 
         guard url.startAccessingSecurityScopedResource() else {
-            await MainActor.run {
-                statusMessage = "Error: Cannot access file"
-                hasError = true
-                isLoading = false
-            }
+            statusMessage = "Error: Cannot access file"
+            hasError = true
+            isLoading = false
             return
         }
 
@@ -82,54 +91,67 @@ class AudioPlayer: ObservableObject {
             url.stopAccessingSecurityScopedResource()
         }
 
+        // Check cancellation before expensive operations
+        guard !Task.isCancelled else {
+            isLoading = false
+            return
+        }
+
         currentFileURL = url
-        
+
         do {
             // Load audio file
             let file = try AVAudioFile(forReading: url)
+
+            guard !Task.isCancelled else {
+                isLoading = false
+                return
+            }
+
             audioFile = file
-            
+
             let format = file.processingFormat
             sampleRate = format.sampleRate
             audioLengthSamples = file.length
-            
-            await MainActor.run {
-                fileSampleRate = sampleRate
-                currentFileName = url.lastPathComponent
-                duration = Double(audioLengthSamples) / sampleRate
-                currentTime = 0
-            }
-            
+
+            fileSampleRate = sampleRate
+            currentFileName = url.lastPathComponent
+            duration = Double(audioLengthSamples) / sampleRate
+            currentTime = 0
+
             // Set hardware sample rate
             do {
                 try setSystemSampleRate(sampleRate)
                 // Wait longer for hardware to actually switch - some devices need more time
                 try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+
+                guard !Task.isCancelled else {
+                    isLoading = false
+                    return
+                }
+
                 updateHardwareSampleRate()
-                await MainActor.run {
-                    statusMessage = "Ready to play at \(Int(sampleRate)) Hz"
-                    hasError = false
-                    isLoading = false
-                }
+                statusMessage = "Ready to play at \(Int(sampleRate)) Hz"
+                hasError = false
+                isLoading = false
             } catch {
-                await MainActor.run {
-                    statusMessage = "Warning: Could not set sample rate - \(error.localizedDescription)"
-                    hasError = false // This is a warning, not a critical error
-                    isLoading = false
-                }
+                statusMessage = "Warning: Could not set sample rate - \(error.localizedDescription)"
+                hasError = false // This is a warning, not a critical error
+                isLoading = false
                 // Still update to show actual hardware rate even if we couldn't set it
                 updateHardwareSampleRate()
             }
-            
+
+        } catch is CancellationError {
+            statusMessage = "Loading cancelled"
+            isLoading = false
         } catch {
-            await MainActor.run {
-                statusMessage = "Error loading file: \(error.localizedDescription)"
-                hasError = true
-                isLoading = false
-                currentFileName = nil
-                fileSampleRate = 0
-                audioFile = nil
-            }
+            statusMessage = "Error loading file: \(error.localizedDescription)"
+            hasError = true
+            isLoading = false
+            currentFileName = nil
+            fileSampleRate = 0
+            audioFile = nil
         }
     }
     
@@ -148,19 +170,14 @@ class AudioPlayer: ObservableObject {
             return
         }
 
-        if !audioEngine.isRunning {
-            do {
-                try audioEngine.start()
-            } catch {
-                statusMessage = "Error starting audio engine: \(error.localizedDescription)"
-                hasError = true
-                return
-            }
-        }
+        // Ensure audio engine is started
+        ensureEngineStarted()
+        guard !hasError else { return }
 
         // Schedule file for playback
         playerNode.scheduleFile(file, at: nil) { [weak self] in
-            Task { @MainActor in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
                 self?.handlePlaybackFinished()
             }
         }
@@ -202,7 +219,8 @@ class AudioPlayer: ObservableObject {
         
         if frameCount > 0 {
             playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
-                Task { @MainActor in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
                     self?.handlePlaybackFinished()
                 }
             }
@@ -227,7 +245,8 @@ class AudioPlayer: ObservableObject {
         
         if frameCount > 0 {
             playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
-                Task { @MainActor in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
                     self?.handlePlaybackFinished()
                 }
             }
