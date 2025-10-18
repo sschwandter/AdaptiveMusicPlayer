@@ -2,25 +2,25 @@ import Foundation
 import CoreAudio
 
 /// Protocol for managing audio device sample rates
-protocol SampleRateManaging {
+protocol SampleRateManaging: Sendable {
     /// Get the current hardware sample rate
     /// - Returns: The current sample rate in Hz, or nil if unavailable
-    func getCurrentSampleRate() -> Double?
+    nonisolated func getCurrentSampleRate() -> Double?
 
     /// Set the hardware sample rate
     /// - Parameter rate: The desired sample rate in Hz
     /// - Throws: Error if the rate is not supported or cannot be set
-    func setSampleRate(_ rate: Double) throws
+    nonisolated func setSampleRate(_ rate: Double) throws
 
     /// Get all supported sample rates for the current device
     /// - Returns: Array of supported sample rates in Hz
-    func getSupportedSampleRates() -> [Double]
+    nonisolated func getSupportedSampleRates() -> [Double]
 }
 
 /// Core Audio implementation of sample rate management
 final class CoreAudioSampleRateManager: SampleRateManaging {
 
-    func getCurrentSampleRate() -> Double? {
+    nonisolated func getCurrentSampleRate() -> Double? {
         guard let deviceID = try? getDefaultAudioDevice() else {
             return nil
         }
@@ -47,7 +47,7 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         return sampleRate
     }
 
-    func setSampleRate(_ rate: Double) throws {
+    nonisolated func setSampleRate(_ rate: Double) throws {
         let deviceID = try getDefaultAudioDevice()
 
         // Check if sample rate is supported
@@ -82,7 +82,7 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         }
     }
 
-    func getSupportedSampleRates() -> [Double] {
+    nonisolated func getSupportedSampleRates() -> [Double] {
         guard let deviceID = try? getDefaultAudioDevice() else {
             return []
         }
@@ -91,7 +91,7 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
 
     // MARK: - Private Methods
 
-    private func getDefaultAudioDevice() throws -> AudioDeviceID {
+    nonisolated private func getDefaultAudioDevice() throws -> AudioDeviceID {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
 
@@ -119,7 +119,7 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         return deviceID
     }
 
-    private func getSupportedSampleRates(deviceID: AudioDeviceID) -> [Double] {
+    nonisolated private func getSupportedSampleRates(deviceID: AudioDeviceID) -> [Double] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyAvailableNominalSampleRates,
             mScope: kAudioObjectPropertyScopeGlobal,

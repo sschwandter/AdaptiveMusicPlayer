@@ -2,15 +2,22 @@ import Foundation
 import AVFoundation
 
 /// Represents a complete audio playback session
-struct AudioSession {
-    let player: AVAudioPlayer
+struct AudioSession: @unchecked Sendable {
+    nonisolated(unsafe) let player: AVAudioPlayer
     let fileName: String
     let sampleRate: Double
     let duration: Double
+
+    nonisolated init(player: AVAudioPlayer, fileName: String, sampleRate: Double, duration: Double) {
+        self.player = player
+        self.fileName = fileName
+        self.sampleRate = sampleRate
+        self.duration = duration
+    }
 }
 
 /// Protocol for managing audio session creation
-protocol AudioSessionManaging {
+protocol AudioSessionManaging: Sendable {
     /// Create a new audio session from a URL
     /// - Parameter url: The file URL to load
     /// - Returns: Complete audio session ready for playback
@@ -34,7 +41,7 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Initialization
 
-    init(
+    nonisolated init(
         fileLoader: AudioFileLoading = SecurityScopedFileLoader(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
@@ -44,7 +51,7 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Public Methods
 
-    func createSession(from url: URL) async throws -> AudioSession {
+    nonisolated func createSession(from url: URL) async throws -> AudioSession {
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)
 

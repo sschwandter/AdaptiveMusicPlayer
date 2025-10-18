@@ -8,7 +8,7 @@ struct LoadedAudioFile {
 }
 
 /// Protocol for loading audio files
-protocol AudioFileLoading {
+protocol AudioFileLoading: Sendable {
     /// Load an audio file from the given URL
     /// - Parameter url: The file URL to load
     /// - Returns: Loaded audio file data
@@ -19,7 +19,7 @@ protocol AudioFileLoading {
 /// File loader that handles security-scoped resource access
 final class SecurityScopedFileLoader: AudioFileLoading {
 
-    func load(url: URL) async throws -> LoadedAudioFile {
+    nonisolated func load(url: URL) async throws -> LoadedAudioFile {
         // Check for cancellation early
         guard !Task.isCancelled else {
             throw CancellationError()
