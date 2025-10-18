@@ -1,20 +1,17 @@
 import Foundation
-import AVFoundation
 
-/// Metadata and file reference for a loaded audio file
+/// Loaded audio file data
 struct LoadedAudioFile {
-    let file: AVAudioFile
-    let sampleRate: Double
-    let duration: Double
-    let lengthSamples: AVAudioFramePosition
+    let data: Data
     let fileName: String
+    let fileExtension: String
 }
 
 /// Protocol for loading audio files
 protocol AudioFileLoading {
     /// Load an audio file from the given URL
     /// - Parameter url: The file URL to load
-    /// - Returns: Loaded audio file with metadata
+    /// - Returns: Loaded audio file data
     /// - Throws: Error if file cannot be loaded or accessed
     func load(url: URL) async throws -> LoadedAudioFile
 }
@@ -42,27 +39,18 @@ final class SecurityScopedFileLoader: AudioFileLoading {
             throw CancellationError()
         }
 
-        // Load audio file
-        let file = try AVAudioFile(forReading: url)
+        // Load file data into memory
+        let data = try Data(contentsOf: url)
 
         // Check cancellation after loading
         guard !Task.isCancelled else {
             throw CancellationError()
         }
 
-        // Extract metadata
-        let format = file.processingFormat
-        let sampleRate = format.sampleRate
-        let lengthSamples = file.length
-        let duration = Double(lengthSamples) / sampleRate
-        let fileName = url.lastPathComponent
-
         return LoadedAudioFile(
-            file: file,
-            sampleRate: sampleRate,
-            duration: duration,
-            lengthSamples: lengthSamples,
-            fileName: fileName
+            data: data,
+            fileName: url.lastPathComponent,
+            fileExtension: url.pathExtension
         )
     }
 

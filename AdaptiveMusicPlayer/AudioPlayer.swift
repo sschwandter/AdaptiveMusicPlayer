@@ -10,10 +10,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Constants
 
     private enum Constants {
-        static let hardwareSwitchDelay: UInt64 = 500_000_000  // nanoseconds (0.5 seconds)
         static let skipInterval: Double = 10  // seconds
         static let progressUpdateInterval: TimeInterval = 0.1  // seconds
-        static let sampleRateUpdateTicks = 20  // timer ticks (2 seconds at 0.1s interval)
     }
 
     // MARK: - Public Properties
@@ -35,14 +33,18 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private var player: AVAudioPlayer?
     private let sampleRateManager: SampleRateManaging
+    private let sessionManager: AudioSessionManaging
+    private let progressTracker: PlaybackProgressTracking
     private var loadingTask: Task<Void, Never>?
-    private var progressUpdateTask: Task<Void, Never>?
-    private var timerTickCount = 0
 
     init(
-        sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
+        sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager(),
+        sessionManager: AudioSessionManaging = AudioSessionManager(),
+        progressTracker: PlaybackProgressTracking = PlaybackProgressTracker()
     ) {
         self.sampleRateManager = sampleRateManager
+        self.sessionManager = sessionManager
+        self.progressTracker = progressTracker
         updateHardwareSampleRate()
     }
 
@@ -68,67 +70,28 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         statusMessage = "Loading file..."
         hasError = false
 
-        // Access security-scoped resource
-        guard url.startAccessingSecurityScopedResource() else {
-            statusMessage = "Error: Cannot access file"
-            hasError = true
-            isLoading = false
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        // Check cancellation before expensive operations
-        guard !Task.isCancelled else {
-            isLoading = false
-            return
-        }
-
         do {
-            // Create AVAudioPlayer - this loads the file into memory
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.volume = Float(volume)
-            player?.prepareToPlay()
+            // Create audio session (handles file loading, player creation, hardware config)
+            let session = try await sessionManager.createSession(from: url)
 
             guard !Task.isCancelled else {
                 isLoading = false
                 return
             }
 
-            // Extract metadata from player
-            guard let player = player else {
-                throw NSError(domain: "AudioPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create player"])
-            }
-
-            fileSampleRate = player.format.sampleRate
-            currentFileName = url.lastPathComponent
-            duration = player.duration
+            // Update all state from session
+            player = session.player
+            player?.volume = Float(volume)
+            fileSampleRate = session.sampleRate
+            currentFileName = session.fileName
+            duration = session.duration
             currentTime = 0
 
-            // Set hardware sample rate
-            do {
-                try sampleRateManager.setSampleRate(fileSampleRate)
-                // Wait longer for hardware to actually switch - some devices need more time
-                try await Task.sleep(nanoseconds: Constants.hardwareSwitchDelay)
-
-                guard !Task.isCancelled else {
-                    isLoading = false
-                    return
-                }
-
-                updateHardwareSampleRate()
-                statusMessage = "Ready to play at \(Int(fileSampleRate)) Hz"
-                hasError = false
-                isLoading = false
-            } catch {
-                statusMessage = "Warning: Could not set sample rate - \(error.localizedDescription)"
-                hasError = false // This is a warning, not a critical error
-                isLoading = false
-                // Still update to show actual hardware rate even if we couldn't set it
-                updateHardwareSampleRate()
-            }
+            // Update hardware sample rate display
+            updateHardwareSampleRate()
+            statusMessage = "Ready to play at \(Int(fileSampleRate)) Hz"
+            hasError = false
+            isLoading = false
 
         } catch is CancellationError {
             statusMessage = "Loading cancelled"
@@ -160,7 +123,25 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         player.play()
         isPlaying = true
-        startProgressUpdates()
+
+        // Start tracking playback progress
+        progressTracker.startTracking(
+            player: player,
+            duration: duration,
+            updateInterval: Constants.progressUpdateInterval,
+            onProgressUpdate: { [weak self] time in
+                self?.currentTime = time
+            },
+            onPlaybackFinished: { [weak self] in
+                guard let self else { return }
+                self.isPlaying = false
+                self.currentTime = self.duration
+                self.statusMessage = "Playback finished"
+            },
+            onPeriodicUpdate: { [weak self] in
+                self?.updateHardwareSampleRate()
+            }
+        )
 
         // Update hardware sample rate to ensure display is current
         updateHardwareSampleRate()
@@ -171,7 +152,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func pause() {
         player?.pause()
         isPlaying = false
-        stopProgressUpdates()
+        progressTracker.stopTracking()
         statusMessage = "Paused"
     }
 
@@ -180,7 +161,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         player?.currentTime = 0
         isPlaying = false
         currentTime = 0
-        stopProgressUpdates()
+        progressTracker.stopTracking()
         statusMessage = "Stopped"
     }
 
@@ -203,50 +184,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     // MARK: - Private Methods
-
-    private func startProgressUpdates() {
-        stopProgressUpdates() // Ensure we don't have multiple tasks running
-        timerTickCount = 0
-
-        progressUpdateTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            // Use Timer.publish as an AsyncSequence for modern Swift concurrency
-            for await _ in Timer.publish(every: Constants.progressUpdateInterval, on: .main, in: .common).autoconnect().values {
-                guard !Task.isCancelled else { break }
-
-                // Update current time from player
-                if let player = self.player {
-                    self.currentTime = player.currentTime
-
-                    // Check if playback finished naturally
-                    if player.currentTime >= self.duration - 0.05 && self.isPlaying {
-                        self.handlePlaybackFinished()
-                    }
-                }
-
-                // Update hardware sample rate periodically
-                self.timerTickCount += 1
-                if self.timerTickCount >= Constants.sampleRateUpdateTicks {
-                    self.updateHardwareSampleRate()
-                    self.timerTickCount = 0
-                }
-            }
-        }
-    }
-
-    private func stopProgressUpdates() {
-        progressUpdateTask?.cancel()
-        progressUpdateTask = nil
-        timerTickCount = 0
-    }
-
-    private func handlePlaybackFinished() {
-        isPlaying = false
-        currentTime = duration
-        stopProgressUpdates()
-        statusMessage = "Playback finished"
-    }
 
     private func updateHardwareSampleRate() {
         hardwareSampleRate = sampleRateManager.getCurrentSampleRate() ?? 0
