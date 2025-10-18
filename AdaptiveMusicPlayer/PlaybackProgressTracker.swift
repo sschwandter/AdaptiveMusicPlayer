@@ -26,13 +26,12 @@ protocol PlaybackProgressTracking {
     func stopTracking()
 }
 
-/// Tracks audio playback progress using timer-based polling
-final class PlaybackProgressTracker: PlaybackProgressTracking {
+/// Tracks audio playback progress using timer-based polling and delegate for finish detection
+final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudioPlayerDelegate {
 
     // MARK: - Constants
 
     private enum Constants {
-        static let finishThreshold: Double = 0.05  // seconds - how close to end counts as "finished"
         static let periodicUpdateTicks = 20  // timer ticks between periodic updates
     }
 
@@ -40,6 +39,7 @@ final class PlaybackProgressTracker: PlaybackProgressTracking {
 
     private var progressUpdateTask: Task<Void, Never>?
     private var timerTickCount = 0
+    private var onPlaybackFinished: (() -> Void)?
 
     // MARK: - Public Methods
 
@@ -54,6 +54,12 @@ final class PlaybackProgressTracker: PlaybackProgressTracking {
         // Ensure we don't have multiple tasks running
         stopTracking()
 
+        // Store callback for delegate to use
+        self.onPlaybackFinished = onPlaybackFinished
+
+        // Set ourselves as the player's delegate for finish detection
+        player.delegate = self
+
         progressUpdateTask = Task { @MainActor in
             // Use Timer.publish as an AsyncSequence for modern Swift concurrency
             for await _ in Timer.publish(every: updateInterval, on: .main, in: .common).autoconnect().values {
@@ -62,12 +68,6 @@ final class PlaybackProgressTracker: PlaybackProgressTracking {
                 // Update current time from player
                 let currentTime = player.currentTime
                 onProgressUpdate(currentTime)
-
-                // Check if playback finished naturally
-                if currentTime >= duration - Constants.finishThreshold && player.isPlaying {
-                    onPlaybackFinished()
-                    break  // Stop tracking when finished
-                }
 
                 // Trigger periodic updates (e.g., for hardware sample rate display)
                 timerTickCount += 1
@@ -83,5 +83,15 @@ final class PlaybackProgressTracker: PlaybackProgressTracking {
         progressUpdateTask?.cancel()
         progressUpdateTask = nil
         timerTickCount = 0
+        onPlaybackFinished = nil
+    }
+
+    // MARK: - AVAudioPlayerDelegate
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        // Delegate is called on arbitrary thread, dispatch to main actor
+        Task { @MainActor in
+            onPlaybackFinished?()
+        }
     }
 }
