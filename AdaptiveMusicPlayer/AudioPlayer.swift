@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import Observation
 
+/// ViewModel for audio playback
+/// Translates domain logic to presentation state
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
@@ -9,97 +11,83 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Constants
 
     private enum Constants {
-        static let skipInterval: Double = 10  // seconds
         static let progressUpdateInterval: TimeInterval = 0.1  // seconds
     }
 
-    // MARK: - Public Properties
+    // MARK: - Presentation State
 
-    var currentTime: Double = 0
-    var duration: Double = 0
-    var volume: Double = 1 {
-        didSet {
-            player?.volume = Float(volume)
-        }
-    }
-    var currentFileName: String?
-    var fileSampleRate: Double = 0
-    var hardwareSampleRate: Double = 0
     var statusMessage: String = ""
     var hasError: Bool = false
-    var isLoading: Bool = false
-    var isPlaying: Bool = false
 
-    private var player: AVAudioPlayer?
-    private let sampleRateManager: SampleRateManaging
-    private let sessionManager: AudioSessionManaging
+    // MARK: - Domain State (exposed to UI)
+
+    var currentTime: Double = 0
+    var duration: Double { engine.state.audioInfo?.duration ?? 0 }
+    var volume: Double = 1 {
+        didSet {
+            engine.setVolume(volume)
+        }
+    }
+    var currentFileName: String? { engine.state.audioInfo?.fileName }
+    var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
+    var hardwareSampleRate: Double = 0
+    var isLoading: Bool { engine.state.isLoading }
+    var isPlaying: Bool { engine.state.isPlaying }
+
+    // MARK: - Dependencies
+
+    private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
     private var loadingTask: Task<Void, Never>?
 
+    // MARK: - Initialization
+
     init(
-        sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager(),
-        sessionManager: AudioSessionManaging = AudioSessionManager(),
+        engine: AudioPlaybackEngine = AudioPlaybackEngine(),
         progressTracker: PlaybackProgressTracking = PlaybackProgressTracker()
     ) {
-        self.sampleRateManager = sampleRateManager
-        self.sessionManager = sessionManager
+        self.engine = engine
         self.progressTracker = progressTracker
         updateHardwareSampleRate()
     }
+
+    // MARK: - File Loading
 
     func loadFile(url: URL) async {
         // Cancel any existing load operation
         loadingTask?.cancel()
 
         loadingTask = Task {
-            // Check for cancellation early
             guard !Task.isCancelled else { return }
 
-            // Stop playback and clear the old file first
+            // Stop playback before loading
             stop()
-            player = nil
-            isLoading = true
-            statusMessage = "Loading file..."
-            hasError = false
+            updateStatus(.loading)
 
             do {
-                // Create audio session (handles file loading, player creation, hardware config)
-                let session = try await sessionManager.createSession(from: url)
+                let audioInfo = try await engine.loadFile(from: url)
 
                 guard !Task.isCancelled else {
-                    isLoading = false
+                    updateStatus(.loadingCancelled)
                     return
                 }
 
-                // Update all state from session
-                player = session.player
-                player?.volume = Float(volume)
-                fileSampleRate = session.sampleRate
-                currentFileName = session.fileName
-                duration = session.duration
                 currentTime = 0
-
-                // Update hardware sample rate display
+                engine.setVolume(volume)
                 updateHardwareSampleRate()
-                statusMessage = "Ready to play at \(Int(fileSampleRate)) Hz"
-                hasError = false
-                isLoading = false
+                updateStatus(.ready(audioInfo))
 
-            } catch is CancellationError {
-                statusMessage = "Loading cancelled"
-                isLoading = false
+            } catch let error as PlaybackError {
+                updateStatus(.error(error))
             } catch {
-                statusMessage = "Error loading file: \(error.localizedDescription)"
-                hasError = true
-                isLoading = false
-                currentFileName = nil
-                fileSampleRate = 0
-                player = nil
+                updateStatus(.error(.loadFailed(error.localizedDescription)))
             }
         }
 
         await loadingTask?.value
     }
+
+    // MARK: - Playback Control
 
     func togglePlayPause() {
         if isPlaying {
@@ -110,16 +98,71 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func play() {
-        guard let player = player else {
-            statusMessage = "No audio file loaded"
-            hasError = true
-            return
+        do {
+            try engine.play()
+            startProgressTracking()
+            updateHardwareSampleRate()
+            updateStatus(.playing)
+        } catch let error as PlaybackError {
+            updateStatus(.error(error))
+        } catch {
+            updateStatus(.error(.notReady))
         }
+    }
 
-        player.play()
-        isPlaying = true
+    private func pause() {
+        do {
+            try engine.pause()
+            progressTracker.stopTracking()
+            updateStatus(.paused)
+        } catch let error as PlaybackError {
+            updateStatus(.error(error))
+        } catch {
+            updateStatus(.error(.notPlaying))
+        }
+    }
 
-        // Start tracking playback progress
+    func stop() {
+        engine.stop()
+        progressTracker.stopTracking()
+        currentTime = 0
+        updateStatus(.stopped)
+    }
+
+    // MARK: - Seeking
+
+    func seek(to time: Double) {
+        do {
+            let newTime = try engine.seek(to: time)
+            currentTime = newTime
+        } catch {
+            // Silently fail for seek - don't show error to user
+        }
+    }
+
+    func skipForward() {
+        do {
+            let newTime = try engine.skipForward(from: currentTime)
+            currentTime = newTime
+        } catch {
+            // Silently fail for skip - don't show error to user
+        }
+    }
+
+    func skipBackward() {
+        do {
+            let newTime = try engine.skipBackward(from: currentTime)
+            currentTime = newTime
+        } catch {
+            // Silently fail for skip - don't show error to user
+        }
+    }
+
+    // MARK: - Progress Tracking
+
+    private func startProgressTracking() {
+        guard let player = engine.getPlayer() else { return }
+
         progressTracker.startTracking(
             player: player,
             duration: duration,
@@ -129,58 +172,70 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             },
             onPlaybackFinished: { [weak self] in
                 guard let self else { return }
-                self.isPlaying = false
+                self.engine.markFinished()
                 self.currentTime = self.duration
-                self.statusMessage = "Playback finished"
+                self.updateStatus(.finished)
             },
             onPeriodicUpdate: { [weak self] in
                 self?.updateHardwareSampleRate()
             }
         )
-
-        // Update hardware sample rate to ensure display is current
-        updateHardwareSampleRate()
-        statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
-        hasError = false
-    }
-
-    private func pause() {
-        player?.pause()
-        isPlaying = false
-        progressTracker.stopTracking()
-        statusMessage = "Paused"
-    }
-
-    func stop() {
-        player?.stop()
-        player?.currentTime = 0
-        isPlaying = false
-        currentTime = 0
-        progressTracker.stopTracking()
-        statusMessage = "Stopped"
-    }
-
-    func seek(to time: Double) {
-        guard let player = player else { return }
-
-        let seekTime = max(0, min(time, duration))
-        player.currentTime = seekTime
-        currentTime = seekTime
-    }
-
-    func skipForward() {
-        let newTime = min(currentTime + Constants.skipInterval, duration)
-        seek(to: newTime)
-    }
-
-    func skipBackward() {
-        let newTime = max(currentTime - Constants.skipInterval, 0)
-        seek(to: newTime)
     }
 
     // MARK: - Private Methods
 
     private func updateHardwareSampleRate() {
-        hardwareSampleRate = sampleRateManager.getCurrentSampleRate() ?? 0
+        hardwareSampleRate = engine.getCurrentHardwareSampleRate()
     }
+
+    /// Update presentation state based on domain state
+    private func updateStatus(_ event: StatusEvent) {
+        switch event {
+        case .loading:
+            statusMessage = "Loading file..."
+            hasError = false
+
+        case .ready(let audioInfo):
+            statusMessage = "Ready to play at \(Int(audioInfo.sampleRate)) Hz"
+            hasError = false
+
+        case .playing:
+            statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
+            hasError = false
+
+        case .paused:
+            statusMessage = "Paused"
+            hasError = false
+
+        case .stopped:
+            statusMessage = "Stopped"
+            hasError = false
+
+        case .finished:
+            statusMessage = "Playback finished"
+            hasError = false
+
+        case .loadingCancelled:
+            statusMessage = "Loading cancelled"
+            hasError = false
+
+        case .error(let error):
+            statusMessage = error.localizedDescription ?? "An error occurred"
+            hasError = true
+        }
+    }
+}
+
+// MARK: - Status Events
+
+/// Events that trigger status message updates
+private enum StatusEvent {
+    case loading
+    case ready(AudioInfo)
+    case playing
+    case paused
+    case stopped
+    case finished
+    case loadingCancelled
+    case error(PlaybackError)
 }
