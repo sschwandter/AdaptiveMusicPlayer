@@ -68,21 +68,19 @@ struct ContentView: View {
                     Slider(
                         value: Binding(
                             get: { isDraggingSlider ? sliderValue : player.currentTime },
-                            set: { newValue in
-                                sliderValue = newValue
-                                if !isDraggingSlider {
-                                    player.seek(to: newValue)
-                                }
-                            }
+                            set: { sliderValue = $0 }
                         ),
                         in: 0...max(player.duration, 1)
-                    )
-                    .onDrag {
-                        isDraggingSlider = true
-                    }
-                    .onRelease {
-                        player.seek(to: sliderValue)
-                        isDraggingSlider = false
+                    ) { isEditing in
+                        if isEditing {
+                            // Start scrubbing: capture current position
+                            sliderValue = player.currentTime
+                            isDraggingSlider = true
+                        } else {
+                            // End scrubbing: seek to final position
+                            player.seek(to: sliderValue)
+                            isDraggingSlider = false
+                        }
                     }
                     
                     HStack {
@@ -267,20 +265,6 @@ extension View {
             Button("", action: action)
                 .keyboardShortcut(key, modifiers: modifiers)
                 .hidden()
-        )
-    }
-    
-    func onDrag(action: @escaping () -> Void) -> some View {
-        simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in action() }
-        )
-    }
-    
-    func onRelease(action: @escaping () -> Void) -> some View {
-        simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onEnded { _ in action() }
         )
     }
 }

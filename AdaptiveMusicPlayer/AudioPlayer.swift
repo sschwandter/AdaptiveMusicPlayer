@@ -31,6 +31,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private var sampleRate: Double = 0
     private var wasPlayingBeforeInterruption: Bool = false
     private var loadingTask: Task<Void, Never>?
+    private var segmentStartFrame: AVAudioFramePosition = 0  // Track offset for timer calculations
+    private var playbackSessionID: Int = 0  // Increment on each seek/play to track which playback session is current
+    private var isPaused: Bool = false  // Track if we're paused (vs stopped) to support pause/resume
     
     init() {
         setupAudioEngine()
@@ -175,14 +178,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         ensureEngineStarted()
         guard !hasError else { return }
 
-        // Schedule file for playback
-        playerNode.scheduleFile(file, at: nil) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor [weak self] in
-                self?.handlePlaybackFinished()
-            }
+        // Only schedule audio if we're not resuming from pause
+        // When paused, the audio is already scheduled and playerNode.play() will resume
+        if !isPaused {
+            scheduleFileWithCompletion(file)
+            segmentStartFrame = 0  // Playing from beginning
         }
 
+        isPaused = false  // Clear paused state when playing
         playerNode.play()
         isPlaying = true
         startTimer()
@@ -196,6 +199,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func pause() {
         playerNode.pause()
         isPlaying = false
+        isPaused = true  // Mark as paused to enable resume
         stopTimer()
         statusMessage = "Paused"
     }
@@ -203,6 +207,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     func stop() {
         playerNode.stop()
         isPlaying = false
+        isPaused = false  // Clear paused state when stopping
         currentTime = 0
         stopTimer()
         statusMessage = "Stopped"
@@ -210,85 +215,139 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     
     func seek(to time: Double) {
         guard let file = audioFile else { return }
+
         let wasPlaying = isPlaying
-        
+
         playerNode.stop()
-        
+        stopTimer()  // Stop the timer while seeking
+        isPaused = false  // Clear paused state since we're rescheduling
+
         let seekTime = max(0, min(time, duration))
         let startFrame = AVAudioFramePosition(seekTime * sampleRate)
         let frameCount = AVAudioFrameCount(audioLengthSamples - startFrame)
-        
+
         if frameCount > 0 {
-            playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
-                guard let self else { return }
-                Task { @MainActor [weak self] in
-                    self?.handlePlaybackFinished()
-                }
-            }
-            
+            // Schedule segment with session tracking
+            scheduleSegmentWithCompletion(file, startingFrame: startFrame, frameCount: frameCount)
+
+            segmentStartFrame = startFrame  // Track offset for timer
             currentTime = seekTime
-            
+
             if wasPlaying {
+                ensureEngineStarted()
+                guard !hasError else { return }
                 playerNode.play()
+                isPlaying = true  // Restore playing state
+                startTimer()      // Restart the timer
+            } else {
+                // If we weren't playing, restore paused state so next play will resume
+                isPaused = true
             }
         }
     }
     
     func skipForward() {
         guard let file = audioFile else { return }
+
         let wasPlaying = isPlaying
-        
+
         playerNode.stop()
-        
+        stopTimer()  // Stop the timer while skipping
+        isPaused = false  // Clear paused state since we're rescheduling
+
         let newTime = min(currentTime + 10, duration)
         let startFrame = AVAudioFramePosition(newTime * sampleRate)
         let frameCount = AVAudioFrameCount(audioLengthSamples - startFrame)
-        
+
         if frameCount > 0 {
-            playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
-                guard let self else { return }
-                Task { @MainActor [weak self] in
-                    self?.handlePlaybackFinished()
-                }
-            }
-            
-            if wasPlaying {
-                playerNode.play()
-            }
+            // Schedule segment with session tracking
+            scheduleSegmentWithCompletion(file, startingFrame: startFrame, frameCount: frameCount)
+
+            segmentStartFrame = startFrame  // Track offset for timer
             currentTime = newTime
+
+            if wasPlaying {
+                ensureEngineStarted()
+                guard !hasError else { return }
+                playerNode.play()
+                isPlaying = true  // Restore playing state
+                startTimer()      // Restart the timer
+            } else {
+                // If we weren't playing, restore paused state so next play will resume
+                isPaused = true
+            }
         }
     }
-    
+
     func skipBackward() {
         guard let file = audioFile else { return }
+
         let wasPlaying = isPlaying
-        
+
         playerNode.stop()
-        
+        stopTimer()  // Stop the timer while skipping
+        isPaused = false  // Clear paused state since we're rescheduling
+
         let newTime = max(currentTime - 10, 0)
         let startFrame = AVAudioFramePosition(newTime * sampleRate)
         let frameCount = AVAudioFrameCount(audioLengthSamples - startFrame)
-        
-        playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
-            Task { @MainActor in
-                self?.handlePlaybackFinished()
-            }
-        }
-        
-        if wasPlaying {
-            playerNode.play()
-        }
+
+        // Schedule segment with session tracking
+        scheduleSegmentWithCompletion(file, startingFrame: startFrame, frameCount: frameCount)
+
+        segmentStartFrame = startFrame  // Track offset for timer
         currentTime = newTime
+
+        if wasPlaying {
+            ensureEngineStarted()
+            guard !hasError else { return }
+            playerNode.play()
+            isPlaying = true  // Restore playing state
+            startTimer()      // Restart the timer
+        } else {
+            // If we weren't playing, restore paused state so next play will resume
+            isPaused = true
+        }
     }
-    
-    private func handlePlaybackFinished() {
+
+    private func handlePlaybackFinished(sessionID: Int) {
+        // Only handle completion if this matches the current playback session
+        // This prevents stale completion handlers from old seeks/plays from interfering
+        guard sessionID == playbackSessionID else { return }
+
         isPlaying = false
         currentTime = duration
         stopTimer()
         statusMessage = "Playback finished"
     }
-    
+
     // MARK: - Private Methods
+
+    /// Helper to schedule full file playback with session-tracked completion handler
+    private func scheduleFileWithCompletion(_ file: AVAudioFile) {
+        playbackSessionID += 1
+        let currentSessionID = playbackSessionID
+
+        playerNode.scheduleFile(file, at: nil) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.handlePlaybackFinished(sessionID: currentSessionID)
+            }
+        }
+    }
+
+    /// Helper to schedule audio segment with session-tracked completion handler
+    private func scheduleSegmentWithCompletion(_ file: AVAudioFile, startingFrame: AVAudioFramePosition, frameCount: AVAudioFrameCount) {
+        playbackSessionID += 1
+        let currentSessionID = playbackSessionID
+
+        playerNode.scheduleSegment(file, startingFrame: startingFrame, frameCount: frameCount, at: nil) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.handlePlaybackFinished(sessionID: currentSessionID)
+            }
+        }
+    }
     
     private var timerTickCount = 0
 
@@ -300,13 +359,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             guard let self else { return }
 
             // Use Timer.publish as an AsyncSequence for modern Swift concurrency
-            for await _ in Timer.publish(every: 0.1, on: .main, in: .common).values {
+            for await _ in Timer.publish(every: 0.1, on: .main, in: .common).autoconnect().values {
                 guard !Task.isCancelled else { break }
 
                 // Update playback time
                 if let nodeTime = self.playerNode.lastRenderTime,
                    let playerTime = self.playerNode.playerTime(forNodeTime: nodeTime) {
-                    let currentFrame = Double(playerTime.sampleTime)
+                    // Add segment offset since playerTime is relative to segment start
+                    let currentFrame = Double(self.segmentStartFrame + playerTime.sampleTime)
                     let newTime = currentFrame / self.sampleRate
                     if abs(newTime - self.currentTime) > 0.05 { // Only update if significant change
                         self.currentTime = min(newTime, self.duration)
