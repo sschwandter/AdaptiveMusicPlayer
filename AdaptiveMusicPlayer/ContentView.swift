@@ -4,8 +4,8 @@ import AVFoundation
 struct ContentView: View {
     @State private var player = AudioPlayer()
     @State private var showingFilePicker = false
-    @State private var isDraggingSlider = false
-    @State private var sliderValue: Double = 0
+    @State private var sliderPosition: Double = 0
+    @State private var isEditingSlider = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -65,26 +65,20 @@ struct ContentView: View {
             // Progress bar
             if player.currentFileName != nil {
                 VStack(spacing: 5) {
-                    Slider(
-                        value: Binding(
-                            get: { isDraggingSlider ? sliderValue : player.currentTime },
-                            set: { sliderValue = $0 }
-                        ),
-                        in: 0...max(player.duration, 1)
-                    ) { isEditing in
-                        if isEditing {
-                            // Start scrubbing: capture current position
-                            sliderValue = player.currentTime
-                            isDraggingSlider = true
-                        } else {
-                            // End scrubbing: seek to final position
-                            player.seek(to: sliderValue)
-                            isDraggingSlider = false
+                    Slider(value: $sliderPosition, in: 0...max(player.duration, 1)) { isEditing in
+                        isEditingSlider = isEditing
+                        if !isEditing {
+                            player.seek(to: sliderPosition)
                         }
                     }
-                    
+                    .onChange(of: player.currentTime) { oldValue, newValue in
+                        if !isEditingSlider {
+                            sliderPosition = newValue
+                        }
+                    }
+
                     HStack {
-                        Text(timeString(isDraggingSlider ? sliderValue : player.currentTime))
+                        Text(timeString(sliderPosition))
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .monospacedDigit()
