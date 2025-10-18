@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @State private var player = AudioPlayer()
