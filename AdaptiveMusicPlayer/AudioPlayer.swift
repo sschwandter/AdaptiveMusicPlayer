@@ -54,15 +54,18 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - File Loading
 
     func loadFile(url: URL) async {
+        // Set loading state IMMEDIATELY for instant UI feedback
+        stop()
+        updateStatus(.loading)
+
         // Cancel any existing load operation
         loadingTask?.cancel()
 
         loadingTask = Task {
-            guard !Task.isCancelled else { return }
-
-            // Stop playback before loading
-            stop()
-            updateStatus(.loading)
+            guard !Task.isCancelled else {
+                updateStatus(.loadingCancelled)
+                return
+            }
 
             do {
                 let audioInfo = try await engine.loadFile(from: url)
