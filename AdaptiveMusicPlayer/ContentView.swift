@@ -227,6 +227,10 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
+                    // Set loading state IMMEDIATELY (synchronous, no Task overhead)
+                    player.setLoadingState()
+
+                    // Then start async loading
                     Task {
                         await player.loadFile(url: url)
                     }

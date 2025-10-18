@@ -18,6 +18,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var statusMessage: String = ""
     var hasError: Bool = false
+    private var currentStatus: StatusEvent = .stopped
 
     // MARK: - Domain State (exposed to UI)
 
@@ -31,7 +32,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var currentFileName: String? { engine.state.audioInfo?.fileName }
     var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double = 0
-    var isLoading: Bool { engine.state.isLoading }
+
+    var isLoading: Bool {
+        if case .loading = currentStatus { return true }
+        return false
+    }
+
     var isPlaying: Bool { engine.state.isPlaying }
 
     // MARK: - Dependencies
@@ -53,10 +59,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - File Loading
 
-    func loadFile(url: URL) async {
-        // Set loading state IMMEDIATELY for instant UI feedback
+    /// Set loading state immediately (synchronous)
+    /// Called from UI before async file loading begins
+    func setLoadingState() {
         stop()
         updateStatus(.loading)
+    }
+
+    func loadFile(url: URL) async {
+        // Loading state already set by caller (setLoadingState())
 
         // Cancel any existing load operation
         loadingTask?.cancel()
@@ -193,6 +204,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     /// Update presentation state based on domain state
     private func updateStatus(_ event: StatusEvent) {
+        currentStatus = event
+
         switch event {
         case .loading:
             statusMessage = "Loading file..."
