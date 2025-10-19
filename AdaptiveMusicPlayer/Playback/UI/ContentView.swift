@@ -185,27 +185,7 @@ struct ContentView: View {
         }
         .padding()
         .frame(minWidth: 500, minHeight: 400)
-        .onKeyDown(key: .space) {
-            if canPerformPlaybackAction {
-                player.togglePlayPause()
-            }
-        }
-        .onKeyDown(key: .leftArrow) {
-            if canPerformPlaybackAction {
-                player.skipBackward()
-            }
-        }
-        .onKeyDown(key: .rightArrow) {
-            if canPerformPlaybackAction {
-                player.skipForward()
-            }
-        }
-        .onKeyDown(key: KeyEquivalent("."), modifiers: .command) {
-            if player.isPlaying {
-                player.stop()
-            }
-        }
-        .onKeyDown(key: KeyEquivalent("o"), modifiers: .command) {
+        .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
             showingFilePicker = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
@@ -272,17 +252,6 @@ struct ContentView: View {
     // MARK: - Private Methods
     private func timeString(_ time: Double) -> String {
         TimeFormatter.format(time)
-    }
-}
-
-// MARK: - View Extensions
-extension View {
-    func onKeyDown(key: KeyEquivalent, modifiers: EventModifiers = [], action: @escaping () -> Void) -> some View {
-        background(
-            Button("", action: action)
-                .keyboardShortcut(key, modifiers: modifiers)
-                .hidden()
-        )
     }
 }
 
