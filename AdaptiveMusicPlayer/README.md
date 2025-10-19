@@ -5,9 +5,9 @@ A high-quality audio player for macOS that automatically adapts the system's sam
 ## Features
 
 ### 🎵 Core Functionality
-- **Bit-perfect audio playback** using AVAudioEngine
-- **Automatic sample rate switching** to match audio files
-- **Real-time sample rate monitoring** with visual feedback
+- **Bit-perfect audio playback** using AVAudioPlayer with automatic sample rate switching
+- **Automatic sample rate switching** to match audio files via Core Audio
+- **Real-time sample rate monitoring** with visual feedback (green = matched, orange = resampling)
 - **Comprehensive playback controls** (play, pause, stop, skip forward/backward)
 - **Precise seeking** with interactive progress bar
 - **Volume control** with percentage display
@@ -21,12 +21,12 @@ A high-quality audio player for macOS that automatically adapts the system's sam
 - **Drag-enabled progress bar** for smooth seeking
 
 ### 🔧 Technical Features
-- **Audio session management** with proper interruption handling
-- **Background/foreground handling** for phone calls and system alerts
-- **Audio route change detection** (headphone disconnect, etc.)
-- **Memory management** with proper cleanup
-- **Thread safety** with MainActor usage
-- **Comprehensive error states** and recovery
+- **Domain-driven architecture** with clear separation of concerns
+- **Protocol-oriented design** with dependency injection
+- **Swift 6 strict concurrency** with @MainActor and proper isolation
+- **Delegate-based progress tracking** for efficient playback monitoring
+- **Memory management** with proper cleanup and task cancellation
+- **Comprehensive error states** with typed domain errors
 
 ## System Requirements
 
@@ -69,29 +69,69 @@ Common sample rates supported:
 
 ## Architecture
 
-### AudioPlayer Class
-The core `AudioPlayer` class handles:
-- Audio file loading and management
-- AVAudioEngine configuration
-- Sample rate detection and switching
-- Playback state management
-- Timer-based progress tracking
-- Audio session and interruption handling
+The app follows a **Domain Model + ViewModel** pattern with clear layered architecture:
 
-### ContentView
-The SwiftUI interface provides:
-- Reactive UI updates
+### Domain Layer (Business Logic)
+**PlaybackState** - Explicit state machine with business rules:
+- States: `.idle`, `.loading`, `.ready`, `.playing`, `.paused`, `.finished`, `.error`
+- State queries: `canPlay`, `canPause`, `canSeek`
+- Enforces valid state transitions
+
+**AudioInfo** - Domain data with business rules:
+- File metadata (name, duration, sample rate)
+- Business logic: `clampSeekTime()`, `skipForward()`, `skipBackward()`
+
+**PlaybackError** - Typed domain errors:
+- `.notReady`, `.noFileLoaded`, `.loadingCancelled`, `.loadFailed(String)`
+
+### Business Logic Layer
+**AudioPlaybackEngine** - Core playback logic (`@MainActor`):
+- Manages state transitions
+- Enforces business rules (can't play when not ready, etc.)
+- Returns domain results, throws domain errors
+- No presentation concerns
+
+### Infrastructure Layer
+**AudioSessionManager** - Creates complete audio sessions:
+- Coordinates file loading, player creation, hardware configuration
+- Returns `AudioSession` with ready-to-play AVAudioPlayer
+
+**AudioFileLoader** - Security-scoped file loading:
+- Handles sandbox permissions
+- Loads files asynchronously with cancellation support
+
+**SampleRateManager** - Core Audio hardware control:
+- Detects file sample rates
+- Switches hardware sample rate via Core Audio APIs
+- Queries supported sample rates
+
+**PlaybackProgressTracker** - Efficient progress monitoring:
+- Timer-based progress updates (100ms intervals)
+- AVAudioPlayerDelegate for finish detection (no polling)
+- Periodic callbacks for hardware sample rate display
+
+### Presentation Layer
+**AudioPlayer (ViewModel)** - Presentation logic (`@MainActor`, `@Observable`):
+- Owns `AudioPlaybackEngine`
+- Translates domain state → UI properties
+- Centralizes status messages in `updateStatus()`
+- Derives `isLoading` from presentation state
+- Coordinates between domain and view
+
+**ContentView** - SwiftUI interface:
+- Reactive UI updates via Observation framework
 - Keyboard shortcut handling
 - File selection interface
 - Real-time status display
-- Accessible controls with tooltips
 
 ### Key Design Patterns
-- **MVVM architecture** with ObservableObject
-- **Async/await** for file operations
-- **MainActor** for thread safety
-- **Combine publishers** for reactive updates
-- **Error handling** with proper user feedback
+- **Domain Model + ViewModel** - Clear separation of "what can happen" (domain) vs "how to show it" (presentation)
+- **Protocol-oriented design** - All dependencies injectable via protocols
+- **Swift 6 strict concurrency** - `@MainActor` for UI, `nonisolated` for background work
+- **Async/await** for all asynchronous operations
+- **Observation framework** - Modern reactive UI (not ObservableObject/Combine)
+- **Delegate pattern** - Efficient playback finish detection
+- **Error handling** - Typed domain errors with user-friendly presentation
 
 ## Error Handling
 
@@ -130,18 +170,18 @@ No external dependencies required - uses only system frameworks.
 ## Performance Considerations
 
 ### Memory Management
-- Proper cleanup of timers and observers
-- Weak references to prevent retain cycles
-- Efficient audio buffer management
+- Proper Task cancellation for async operations
+- Weak references in closures to prevent retain cycles
+- Security-scoped resource cleanup
 
 ### CPU Usage
-- Optimized timer intervals (100ms updates)
-- Minimal UI updates during playback
-- Efficient audio processing with AVAudioEngine
+- Optimized timer intervals (100ms for progress, 2s for hardware monitoring)
+- Delegate pattern for finish detection (eliminates polling overhead)
+- Minimal UI updates via Observation framework
 
 ### Audio Quality
-- Direct AVAudioEngine usage for minimal latency
-- Hardware sample rate matching for bit-perfect playback
+- AVAudioPlayer with hardware sample rate matching for bit-perfect playback
+- Core Audio APIs for direct hardware control
 - No unnecessary audio processing or effects
 
 ## Troubleshooting
