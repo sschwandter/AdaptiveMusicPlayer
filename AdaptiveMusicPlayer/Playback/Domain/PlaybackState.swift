@@ -105,6 +105,7 @@ enum PlaybackError: LocalizedError, Equatable {
     case notPlaying
     case loadingCancelled
     case loadFailed(String)
+    case sampleRateSyncFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -120,6 +121,8 @@ enum PlaybackError: LocalizedError, Equatable {
             return "Loading cancelled"
         case .loadFailed(let message):
             return "Error loading file: \(message)"
+        case .sampleRateSyncFailed(let message):
+            return "Failed to set sample rate: \(message)"
         }
     }
 }

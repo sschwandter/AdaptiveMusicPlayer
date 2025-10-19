@@ -45,15 +45,29 @@ struct ContentView: View {
                             .font(.system(.body, design: .monospaced))
                             .fontWeight(.semibold)
                     }
-                    
-                    VStack(alignment: .leading) {
-                        Text("Hardware Sample Rate:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(player.hardwareSampleRate > 0 ? "\(Int(player.hardwareSampleRate)) Hz" : "—")
-                            .font(.system(.body, design: .monospaced))
-                            .fontWeight(.semibold)
-                            .foregroundColor(sampleRateColor)
+
+                    HStack(spacing: 4) {
+                        VStack(alignment: .leading) {
+                            Text("Hardware Sample Rate:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(player.hardwareSampleRate > 0 ? "\(Int(player.hardwareSampleRate)) Hz" : "—")
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.semibold)
+                                .foregroundColor(sampleRateColor)
+                        }
+
+                        // Sync button when mismatched
+                        if player.hasSampleRateMismatch {
+                            Button(action: { player.synchronizeSampleRates() }) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Set hardware to \(Int(player.fileSampleRate)) Hz for bit-perfect playback")
+                            .disabled(player.isLoading)
+                        }
                     }
                 }
             }

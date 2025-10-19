@@ -1,31 +1,37 @@
 import Foundation
 import AVFoundation
 
-/// Core business logic for audio playback
-/// Manages state transitions and enforces business rules
+/// Playback engine coordinator
+/// Orchestrates use cases and manages playback state
 @MainActor
 final class AudioPlaybackEngine {
-
-    // MARK: - Constants
-
-    private enum Constants {
-        static let skipInterval: Double = 10  // seconds
-    }
 
     // MARK: - Properties
 
     private(set) var state: PlaybackState = .idle
     private var player: AVAudioPlayer?
-    private let sessionManager: AudioSessionManaging
+
+    // MARK: - Dependencies
+
+    private let loadFileUseCase: LoadFileUseCaseProtocol
+    private let playbackControlUseCase: PlaybackControlUseCaseProtocol
+    private let seekingUseCase: SeekingUseCaseProtocol
+    private let syncSampleRateUseCase: SyncSampleRateUseCaseProtocol
     private let sampleRateManager: SampleRateManaging
 
     // MARK: - Initialization
 
     init(
-        sessionManager: AudioSessionManaging = AudioSessionManager(),
+        loadFileUseCase: LoadFileUseCaseProtocol = LoadFileUseCase(),
+        playbackControlUseCase: PlaybackControlUseCaseProtocol = PlaybackControlUseCase(),
+        seekingUseCase: SeekingUseCaseProtocol = SeekingUseCase(),
+        syncSampleRateUseCase: SyncSampleRateUseCaseProtocol = SyncSampleRateUseCase(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
-        self.sessionManager = sessionManager
+        self.loadFileUseCase = loadFileUseCase
+        self.playbackControlUseCase = playbackControlUseCase
+        self.seekingUseCase = seekingUseCase
+        self.syncSampleRateUseCase = syncSampleRateUseCase
         self.sampleRateManager = sampleRateManager
     }
 
@@ -36,7 +42,8 @@ final class AudioPlaybackEngine {
         state = .loading
 
         do {
-            let session = try await sessionManager.createSession(from: url)
+            let session = try await loadFileUseCase.execute(from: url)
+
             guard !Task.isCancelled else {
                 state = .idle
                 throw PlaybackError.loadingCancelled
@@ -56,6 +63,9 @@ final class AudioPlaybackEngine {
         } catch is CancellationError {
             state = .idle
             throw PlaybackError.loadingCancelled
+        } catch let error as PlaybackError {
+            state = .error(error)
+            throw error
         } catch {
             let playbackError = PlaybackError.loadFailed(error.localizedDescription)
             state = .error(playbackError)
@@ -67,39 +77,27 @@ final class AudioPlaybackEngine {
 
     /// Start or resume playback
     func play() throws {
-        guard state.canPlay else {
-            throw state.isPlaying ? PlaybackError.alreadyPlaying : PlaybackError.notReady
-        }
-
-        guard let player = player, let audioInfo = state.audioInfo else {
+        guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
-        player.play()
-        state = .playing(audioInfo)
+        state = try playbackControlUseCase.play(player: player, state: state)
     }
 
     /// Pause playback
     func pause() throws {
-        guard state.canPause else {
-            throw PlaybackError.notPlaying
-        }
-
-        guard let player = player, let audioInfo = state.audioInfo else {
+        guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
-        player.pause()
-        state = .paused(audioInfo)
+        state = try playbackControlUseCase.pause(player: player, state: state)
     }
 
     /// Stop playback and reset to beginning
     func stop() {
-        guard let audioInfo = state.audioInfo else { return }
+        guard let player = player else { return }
 
-        player?.stop()
-        player?.currentTime = 0
-        state = .ready(audioInfo)
+        state = playbackControlUseCase.stop(player: player, state: state)
     }
 
     /// Mark playback as finished
@@ -114,41 +112,41 @@ final class AudioPlaybackEngine {
     /// - Parameter time: Target time in seconds
     /// - Returns: Actual time seeked to (clamped to valid range)
     func seek(to time: Double) throws -> Double {
-        guard state.canSeek else {
-            throw PlaybackError.notReady
-        }
-
-        guard let player = player, let audioInfo = state.audioInfo else {
+        guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
-        let clampedTime = audioInfo.clampSeekTime(time)
-        player.currentTime = clampedTime
-        return clampedTime
+        return try seekingUseCase.seek(to: time, player: player, state: state)
     }
 
     /// Skip forward by the configured interval
     /// - Parameter currentTime: Current playback time
     /// - Returns: New time after skipping
     func skipForward(from currentTime: Double) throws -> Double {
-        guard let audioInfo = state.audioInfo else {
+        guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
-        let newTime = audioInfo.skipForward(from: currentTime, by: Constants.skipInterval)
-        return try seek(to: newTime)
+        return try seekingUseCase.skipForward(from: currentTime, player: player, state: state)
     }
 
     /// Skip backward by the configured interval
     /// - Parameter currentTime: Current playback time
     /// - Returns: New time after skipping
     func skipBackward(from currentTime: Double) throws -> Double {
-        guard let audioInfo = state.audioInfo else {
+        guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
-        let newTime = audioInfo.skipBackward(from: currentTime, by: Constants.skipInterval)
-        return try seek(to: newTime)
+        return try seekingUseCase.skipBackward(from: currentTime, player: player, state: state)
+    }
+
+    // MARK: - Sample Rate Management
+
+    /// Synchronize hardware sample rate to match current audio file
+    /// Sets hardware to match file's native sample rate for bit-perfect playback
+    func synchronizeSampleRates() throws {
+        try syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
     }
 
     // MARK: - Volume Control

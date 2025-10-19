@@ -49,18 +49,47 @@ The app follows a **Domain Model + ViewModel** pattern with clear layered archit
 - Value type ensuring immutability
 
 **PlaybackError** (`PlaybackState.swift`) - Typed domain errors:
-- `.notReady`, `.noFileLoaded`, `.alreadyPlaying`, `.notPlaying`, `.loadingCancelled`, `.loadFailed(String)`
+- `.notReady`, `.noFileLoaded`, `.alreadyPlaying`, `.notPlaying`, `.loadingCancelled`, `.loadFailed(String)`, `.sampleRateSyncFailed(String)`
 - Conforms to `LocalizedError` for user-friendly messages
 
-### Business Logic Layer
+### Use Cases Layer
 
-**AudioPlaybackEngine** (`AudioPlaybackEngine.swift`) - Core playback logic (`@MainActor`):
-- Manages `PlaybackState` transitions
-- Enforces business rules (can't play when not ready, etc.)
-- Returns domain results (`AudioInfo`), throws domain errors (`PlaybackError`)
-- Delegates to infrastructure layer for file loading and sample rate management
-- Owns `AVAudioPlayer` instance
-- No presentation concerns - doesn't know about UI
+Use cases represent explicit user goals and actions. Each is a first-class code entity:
+
+**LoadFileUseCase** (`LoadFileUseCase.swift`) - Load and prepare audio file:
+- User goal: "I want to open an audio file for playback"
+- Coordinates file loading, player creation, sample rate detection
+- Returns `AudioSession` with ready player and metadata
+- Protocol: `LoadFileUseCaseProtocol`
+
+**PlaybackControlUseCase** (`PlaybackControlUseCase.swift`) - Control playback state:
+- User goal: "I want to play, pause, or stop the audio"
+- Validates state transitions via `PlaybackState` business rules
+- Updates AVAudioPlayer and returns new state
+- Protocol: `PlaybackControlUseCaseProtocol`
+
+**SeekingUseCase** (`SeekingUseCase.swift`) - Navigate within track:
+- User goal: "I want to jump to a different position"
+- Handles seek, skip forward, skip backward operations
+- Clamps time to valid range via `AudioInfo` business rules
+- Skip interval: 10 seconds
+- Protocol: `SeekingUseCaseProtocol`
+
+**SyncSampleRateUseCase** (`SyncSampleRateUseCase.swift`) - Fix sample rate mismatch:
+- User goal: "I want bit-perfect playback without resampling"
+- Sets hardware sample rate to match audio file's native rate
+- Enables one-click fix for sample rate mismatches
+- Protocol: `SyncSampleRateUseCaseProtocol`
+
+### Business Logic Layer (Coordination)
+
+**AudioPlaybackEngine** (`AudioPlaybackEngine.swift`) - Playback coordinator (`@MainActor`):
+- Orchestrates use cases to fulfill higher-level operations
+- Manages `PlaybackState` and `AVAudioPlayer` lifecycle
+- Provides unified API for presentation layer
+- Injects use case dependencies (protocol-oriented)
+- Handles state transitions and error propagation
+- No direct business logic - delegates to use cases
 
 ### Infrastructure Layer
 
@@ -93,9 +122,11 @@ The app follows a **Domain Model + ViewModel** pattern with clear layered archit
 
 **AudioPlayer** (`AudioPlayer.swift`) - Presentation logic (`@MainActor`, `@Observable`):
 - ViewModel that owns `AudioPlaybackEngine`
-- Translates domain state → UI properties (`statusMessage`, `hasError`, `isLoading`)
+- Translates domain state → UI properties (`statusMessage`, `hasError`, `isLoading`, `hasSampleRateMismatch`)
 - Centralizes status messages in `updateStatus()` method
 - Derives `isLoading` from `currentStatus: StatusEvent` (single source of truth)
+- Provides `synchronizeSampleRates()` for UI-triggered sample rate fixes
+- Shows mismatch warnings in playing status ("hardware resampling from X Hz")
 - Coordinates between domain and view
 - Uses modern Observation framework (not ObservableObject/Combine)
 - Conforms to `@unchecked Sendable` for Swift 6 concurrency safety
@@ -108,6 +139,7 @@ The app follows a **Domain Model + ViewModel** pattern with clear layered archit
 - File selection via `fileImporter`
 - Calls `setLoadingState()` synchronously before async file loading for instant UI feedback
 - Real-time status display with color-coded sample rate matching
+- Sample rate sync button appears when mismatch detected (inline icon next to hardware rate)
 
 **AdaptiveMusicPlayerApp** (`AdaptiveMusicPlayerApp.swift`)
 - App entry point with window configuration
@@ -200,8 +232,13 @@ AdaptiveMusicPlayer/
 ├── Playback/
 │   ├── Domain/
 │   │   └── PlaybackState.swift              # Domain model (states, data, errors)
+│   ├── UseCases/
+│   │   ├── LoadFileUseCase.swift            # Use case: Load audio file
+│   │   ├── PlaybackControlUseCase.swift     # Use case: Play/pause/stop
+│   │   ├── SeekingUseCase.swift             # Use case: Seek and skip
+│   │   └── SyncSampleRateUseCase.swift      # Use case: Fix sample rate mismatch
 │   ├── Engine/
-│   │   └── AudioPlaybackEngine.swift        # Core business logic
+│   │   └── AudioPlaybackEngine.swift        # Coordinator (orchestrates use cases)
 │   ├── Services/
 │   │   ├── AudioSessionManager.swift        # Infrastructure: session creation
 │   │   ├── AudioFileLoader.swift            # Infrastructure: file loading
@@ -244,13 +281,26 @@ AdaptiveMusicPlayerUITests/
 
 ## Common Modification Patterns
 
+**Adding new use cases**
+1. Identify the user goal (e.g., "I want to create a playlist")
+2. Create new file in `Playback/UseCases/` (e.g., `CreatePlaylistUseCase.swift`)
+3. Define protocol (e.g., `CreatePlaylistUseCaseProtocol`)
+4. Implement use case class with `execute()` method
+5. Inject dependencies via initializer (services, managers)
+6. Add use case to `AudioPlaybackEngine` as dependency
+7. Create coordinator method in `AudioPlaybackEngine` that delegates to use case
+8. Add presentation method in `AudioPlayer` if UI-triggered
+9. Add UI controls in `ContentView`
+
 **Adding new playback controls**
-1. Add business logic to `AudioPlaybackEngine` if state changes required
-2. Add domain logic to `PlaybackState` or `AudioInfo` if business rules needed
-3. Add presentation logic to `AudioPlayer` (must be `@MainActor`)
-4. Add UI button/control in `ContentView`
-5. Add keyboard shortcut in `AdaptiveMusicPlayerApp` CommandGroup
-6. Add NotificationCenter observer in `ContentView` if global command
+1. Determine if it's a new use case or modification of existing one
+2. If new use case, follow "Adding new use cases" pattern above
+3. If extending existing, add method to appropriate use case
+4. Add coordinator method in `AudioPlaybackEngine`
+5. Add presentation logic to `AudioPlayer` (must be `@MainActor`)
+6. Add UI button/control in `ContentView`
+7. Add keyboard shortcut in `AdaptiveMusicPlayerApp` CommandGroup
+8. Add NotificationCenter observer in `ContentView` if global command
 
 **Adding new domain states**
 1. Add case to `PlaybackState` enum

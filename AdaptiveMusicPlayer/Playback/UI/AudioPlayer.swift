@@ -40,6 +40,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var isPlaying: Bool { engine.state.isPlaying }
 
+    var hasSampleRateMismatch: Bool {
+        guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
+        return fileSampleRate != hardwareSampleRate
+    }
+
     // MARK: - Dependencies
 
     private let engine: AudioPlaybackEngine
@@ -172,6 +177,25 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
+    // MARK: - Sample Rate Management
+
+    func synchronizeSampleRates() {
+        do {
+            try engine.synchronizeSampleRates()
+
+            // Wait for hardware to switch, then refresh
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                updateHardwareSampleRate()
+                updateStatus(.sampleRateSynchronized)
+            }
+        } catch let error as PlaybackError {
+            updateStatus(.error(error))
+        } catch {
+            updateStatus(.error(.sampleRateSyncFailed(error.localizedDescription)))
+        }
+    }
+
     // MARK: - Progress Tracking
 
     private func startProgressTracking() {
@@ -216,7 +240,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             hasError = false
 
         case .playing:
-            statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
+            if hasSampleRateMismatch {
+                statusMessage = "Playing at \(Int(fileSampleRate)) Hz (hardware resampling from \(Int(hardwareSampleRate)) Hz)"
+            } else {
+                statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
+            }
             hasError = false
 
         case .paused:
@@ -233,6 +261,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         case .loadingCancelled:
             statusMessage = "Loading cancelled"
+            hasError = false
+
+        case .sampleRateSynchronized:
+            statusMessage = "Hardware sample rate set to \(Int(fileSampleRate)) Hz"
             hasError = false
 
         case .error(let error):
@@ -253,5 +285,6 @@ private enum StatusEvent {
     case stopped
     case finished
     case loadingCancelled
+    case sampleRateSynchronized
     case error(PlaybackError)
 }
