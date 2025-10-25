@@ -2,8 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Represents a complete audio playback session
-@MainActor
-struct AudioSession {
+struct AudioSession: Sendable {
     let player: AVAudioPlayer
     let fileName: String
     let sampleRate: Double
@@ -16,7 +15,6 @@ protocol AudioSessionManaging: Sendable {
     /// - Parameter url: The file URL to load
     /// - Returns: Complete audio session ready for playback
     /// - Throws: Error if session cannot be created
-    @MainActor
     func createSession(from url: URL) async throws -> AudioSession
 }
 
@@ -46,7 +44,6 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Public Methods
 
-    @MainActor
     func createSession(from url: URL) async throws -> AudioSession {
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)

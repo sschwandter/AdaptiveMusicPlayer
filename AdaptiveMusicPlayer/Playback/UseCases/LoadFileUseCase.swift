@@ -12,7 +12,6 @@ protocol LoadFileUseCaseProtocol: Sendable {
 
 /// Use case for loading audio files
 /// Coordinates file access, player creation, and sample rate detection
-@MainActor
 final class LoadFileUseCase: LoadFileUseCaseProtocol {
 
     private let sessionManager: AudioSessionManaging
