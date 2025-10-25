@@ -2,8 +2,9 @@ import Foundation
 import AVFoundation
 
 /// Represents a complete audio playback session
-struct AudioSession: @unchecked Sendable {
-    nonisolated(unsafe) let player: AVAudioPlayer
+@MainActor
+struct AudioSession {
+    let player: AVAudioPlayer
     let fileName: String
     let sampleRate: Double
     let duration: Double
@@ -15,6 +16,7 @@ protocol AudioSessionManaging: Sendable {
     /// - Parameter url: The file URL to load
     /// - Returns: Complete audio session ready for playback
     /// - Throws: Error if session cannot be created
+    @MainActor
     func createSession(from url: URL) async throws -> AudioSession
 }
 
@@ -34,7 +36,7 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Initialization
 
-    nonisolated init(
+    init(
         fileLoader: AudioFileLoading = SecurityScopedFileLoader(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
@@ -44,7 +46,8 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Public Methods
 
-    nonisolated func createSession(from url: URL) async throws -> AudioSession {
+    @MainActor
+    func createSession(from url: URL) async throws -> AudioSession {
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)
         guard !Task.isCancelled else { throw CancellationError() }

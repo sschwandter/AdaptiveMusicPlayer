@@ -268,7 +268,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             hasError = false
 
         case .error(let error):
-            statusMessage = error.localizedDescription ?? "An error occurred"
+            statusMessage = error.localizedDescription
             hasError = true
         }
     }
