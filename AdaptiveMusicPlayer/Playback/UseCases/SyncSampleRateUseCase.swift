@@ -7,18 +7,19 @@ protocol SyncSampleRateUseCaseProtocol: Sendable {
     ///   - state: Current playback state (must have audioInfo)
     ///   - sampleRateManager: Manager for hardware sample rate control
     /// - Throws: PlaybackError if no file is loaded or sync fails
-    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) throws
+    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws
 }
 
 /// Use case for fixing sample rate mismatches
 /// Sets hardware sample rate to match the audio file's native rate for bit-perfect playback
 final class SyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
 
-    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) throws {
+    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {
         guard let audioInfo = state.audioInfo else {
             throw PlaybackError.noFileLoaded
         }
 
+        // Core Audio operations now run on background thread naturally via async
         try sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }

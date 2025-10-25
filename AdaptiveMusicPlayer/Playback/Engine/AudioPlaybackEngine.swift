@@ -145,8 +145,9 @@ final class AudioPlaybackEngine {
 
     /// Synchronize hardware sample rate to match current audio file
     /// Sets hardware to match file's native sample rate for bit-perfect playback
-    func synchronizeSampleRates() throws {
-        try syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
+    /// Runs Core Audio operations on background thread to avoid blocking UI
+    func synchronizeSampleRates() async throws {
+        try await syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
     }
 
     // MARK: - Volume Control

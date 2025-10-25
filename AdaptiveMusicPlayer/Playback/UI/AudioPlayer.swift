@@ -179,16 +179,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - Sample Rate Management
 
-    func synchronizeSampleRates() {
+    func synchronizeSampleRates() async {
         do {
-            try engine.synchronizeSampleRates()
+            // Core Audio operations run on background thread via async
+            try await engine.synchronizeSampleRates()
 
-            // Wait for hardware to switch, then refresh
-            Task {
-                try? await Task.sleep(for: .milliseconds(500))
-                updateHardwareSampleRate()
-                updateStatus(.sampleRateSynchronized)
-            }
+            // Wait for hardware to stabilize, then refresh (still needed for hardware settling)
+            try? await Task.sleep(for: .milliseconds(500))
+
+            // Back on MainActor after await - safe to update UI
+            updateHardwareSampleRate()
+            updateStatus(.sampleRateSynchronized)
         } catch let error as PlaybackError {
             updateStatus(.error(error))
         } catch {

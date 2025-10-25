@@ -59,7 +59,11 @@ struct ContentView: View {
 
                         // Sync button when mismatched
                         if player.hasSampleRateMismatch {
-                            Button(action: { player.synchronizeSampleRates() }) {
+                            Button(action: {
+                                Task {
+                                    await player.synchronizeSampleRates()
+                                }
+                            }) {
                                 Image(systemName: "arrow.triangle.2.circlepath")
                                     .font(.system(size: 16))
                                     .foregroundColor(.orange)
