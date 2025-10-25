@@ -228,9 +228,13 @@ struct ContentView: View {
                     // Set loading state IMMEDIATELY (synchronous, no Task overhead)
                     player.setLoadingState()
 
-                    // Then start async loading
-                    Task {
-                        await player.loadFile(url: url)
+                    // Defer to next run loop to ensure file picker dismisses immediately
+                    // This prevents blocking on network shares during URL security-scoped access
+                    DispatchQueue.main.async {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(50))
+                            await player.loadFile(url: url)
+                        }
                     }
                 }
             case .failure(let error):
