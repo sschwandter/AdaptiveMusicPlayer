@@ -22,17 +22,21 @@ final class AudioPlaybackEngine {
     // MARK: - Initialization
 
     init(
-        loadFileUseCase: LoadFileUseCaseProtocol = LoadFileUseCase(),
+        loadFileUseCase: LoadFileUseCaseProtocol? = nil,
         playbackControlUseCase: PlaybackControlUseCaseProtocol = PlaybackControlUseCase(),
         seekingUseCase: SeekingUseCaseProtocol = SeekingUseCase(),
         syncSampleRateUseCase: SyncSampleRateUseCaseProtocol = SyncSampleRateUseCase(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
-        self.loadFileUseCase = loadFileUseCase
+        self.sampleRateManager = sampleRateManager
+        // Share the same sampleRateManager with the load file use case
+        // to avoid duplicate CoreAudioSampleRateManager instances
+        self.loadFileUseCase = loadFileUseCase ?? LoadFileUseCase(
+            sessionManager: AudioSessionManager(sampleRateManager: sampleRateManager)
+        )
         self.playbackControlUseCase = playbackControlUseCase
         self.seekingUseCase = seekingUseCase
         self.syncSampleRateUseCase = syncSampleRateUseCase
-        self.sampleRateManager = sampleRateManager
     }
 
     // MARK: - File Loading

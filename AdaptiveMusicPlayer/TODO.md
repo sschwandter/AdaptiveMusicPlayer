@@ -16,7 +16,7 @@
 
 - [ ] **Combine usage despite project convention** — `PlaybackProgressTracker` imports Combine and uses `Timer.publish().autoconnect().values`. The CLAUDE.md states to avoid Combine and prefer async/await. Replace with a `while !Task.isCancelled` loop using `Task.sleep`. (`PlaybackProgressTracker.swift:3,65`)
 
-- [ ] **Duplicate `SampleRateManager` instances** — `AudioPlaybackEngine` and `AudioSessionManager` each create their own `CoreAudioSampleRateManager`. Not a bug today since neither caches state, but a maintenance risk. Consider sharing a single instance via dependency injection. (`AudioPlaybackEngine.swift:29`, `AudioSessionManager.swift:39`)
+- [x] **Duplicate `SampleRateManager` instances** — Fixed. `AudioPlaybackEngine` now shares its `sampleRateManager` with `AudioSessionManager` via constructor injection.
 
 ### Low Priority
 
