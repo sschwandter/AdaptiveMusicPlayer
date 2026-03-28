@@ -2,6 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    private enum LayoutMetrics {
+        static let width: CGFloat = 520
+        static let minimumHeight: CGFloat = 700
+    }
+
     private enum ImportTarget {
         case file
         case folder
@@ -26,9 +31,11 @@ struct ContentView: View {
                     statusBanner
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(24)
         }
-        .frame(width: 520)
+        .frame(width: LayoutMetrics.width)
+        .frame(minHeight: LayoutMetrics.minimumHeight, alignment: .top)
         .focusedSceneValue(\.playbackCommandActions, playbackCommandActions)
         .fileImporter(
             isPresented: $showingImporter,
