@@ -47,12 +47,12 @@ final class AudioPlaybackEngine {
             player.stop()
             player.currentTime = 0
         }
-        state = .loading
+        state = .loading(state.audioInfo)
     }
 
     /// Load an audio file and prepare for playback
     func loadFile(from url: URL) async throws -> AudioInfo {
-        state = .loading
+        state = .loading(state.audioInfo)
 
         do {
             let session = try await loadFileUseCase.execute(from: url)

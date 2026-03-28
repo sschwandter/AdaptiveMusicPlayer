@@ -5,7 +5,7 @@ import Foundation
 /// Represents the domain state of audio playback
 enum PlaybackState: Equatable {
     case idle
-    case loading
+    case loading(AudioInfo?)
     case ready(AudioInfo)
     case playing(AudioInfo)
     case paused(AudioInfo)
@@ -14,38 +14,40 @@ enum PlaybackState: Equatable {
 
     // MARK: - State Queries
 
-    var isPlaying: Bool {
+    nonisolated var isPlaying: Bool {
         if case .playing = self { return true }
         return false
     }
 
-    var isPaused: Bool {
+    nonisolated var isPaused: Bool {
         if case .paused = self { return true }
         return false
     }
 
-    var isLoading: Bool {
+    nonisolated var isLoading: Bool {
         if case .loading = self { return true }
         return false
     }
 
-    var hasError: Bool {
+    nonisolated var hasError: Bool {
         if case .error = self { return true }
         return false
     }
 
-    var audioInfo: AudioInfo? {
+    nonisolated var audioInfo: AudioInfo? {
         switch self {
+        case .loading(let info):
+            return info
         case .ready(let info), .playing(let info), .paused(let info), .finished(let info):
             return info
-        case .idle, .loading, .error:
+        case .idle, .error:
             return nil
         }
     }
 
     // MARK: - State Transitions
 
-    var canPlay: Bool {
+    nonisolated var canPlay: Bool {
         switch self {
         case .ready, .paused, .finished:
             return true
@@ -54,12 +56,12 @@ enum PlaybackState: Equatable {
         }
     }
 
-    var canPause: Bool {
+    nonisolated var canPause: Bool {
         if case .playing = self { return true }
         return false
     }
 
-    var canSeek: Bool {
+    nonisolated var canSeek: Bool {
         switch self {
         case .ready, .playing, .paused, .finished:
             return true
@@ -73,24 +75,24 @@ enum PlaybackState: Equatable {
 
 /// Audio file information with business rules
 struct AudioInfo: Equatable {
-    let fileName: String
-    let duration: Double
-    let sampleRate: Double
+    nonisolated let fileName: String
+    nonisolated let duration: Double
+    nonisolated let sampleRate: Double
 
     // MARK: - Business Rules
 
     /// Clamp seek time to valid range [0, duration]
-    func clampSeekTime(_ time: Double) -> Double {
+    nonisolated func clampSeekTime(_ time: Double) -> Double {
         max(0, min(time, duration))
     }
 
     /// Calculate valid skip forward time
-    func skipForward(from currentTime: Double, by interval: Double) -> Double {
+    nonisolated func skipForward(from currentTime: Double, by interval: Double) -> Double {
         clampSeekTime(currentTime + interval)
     }
 
     /// Calculate valid skip backward time
-    func skipBackward(from currentTime: Double, by interval: Double) -> Double {
+    nonisolated func skipBackward(from currentTime: Double, by interval: Double) -> Double {
         clampSeekTime(currentTime - interval)
     }
 }
