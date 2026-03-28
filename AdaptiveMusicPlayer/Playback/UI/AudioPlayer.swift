@@ -74,6 +74,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         updateStatus(.loading)
     }
 
+    /// Report a file selection error from the file picker
+    func reportFileSelectionError(_ message: String) {
+        updateStatus(.error(.loadFailed(message)))
+    }
+
     func loadFile(url: URL) async {
         // Loading state already set by caller (setLoadingState())
 

@@ -238,8 +238,7 @@ struct ContentView: View {
                     }
                 }
             case .failure(let error):
-                player.statusMessage = "Error selecting file: \(error.localizedDescription)"
-                player.hasError = true
+                player.reportFileSelectionError(error.localizedDescription)
             }
         }
     }

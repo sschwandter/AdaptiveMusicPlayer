@@ -14,7 +14,7 @@
 
 - [x] **Protocol `Sendable` vs `@MainActor` mismatch** — Fixed. Removed `@MainActor` from `PlaybackControlUseCase` and `SeekingUseCase` (stateless, no isolation needed).
 
-- [ ] **Combine usage despite project convention** — `PlaybackProgressTracker` imports Combine and uses `Timer.publish().autoconnect().values`. The CLAUDE.md states to avoid Combine and prefer async/await. Replace with a `while !Task.isCancelled` loop using `Task.sleep`. (`PlaybackProgressTracker.swift:3,65`)
+- [x] **Combine usage despite project convention** — Won't fix. The single `Timer.publish(...).values` usage is a lightweight bridge to AsyncSequence, not a heavy Combine dependency. RunLoop-based timing is more consistent for UI progress updates than `Task.sleep`.
 
 - [x] **Duplicate `SampleRateManager` instances** — Fixed. `AudioPlaybackEngine` now shares its `sampleRateManager` with `AudioSessionManager` via constructor injection.
 
@@ -22,7 +22,7 @@
 
 - [ ] **Stop button disabled when paused** — `disabled(!player.isPlaying)` prevents stopping from a paused state, which is a common user expectation. Consider `disabled(player.currentFileName == nil)`. (`ContentView.swift:156`)
 
-- [ ] **File picker error bypasses `updateStatus()`** — The `.failure` case in the `fileImporter` result sets `statusMessage` and `hasError` directly, breaking the single-source-of-truth pattern. Route through `AudioPlayer`'s error handling instead. (`ContentView.swift:241-242`)
+- [x] **File picker error bypasses `updateStatus()`** — Fixed. Added `reportFileSelectionError()` on AudioPlayer so ContentView routes errors through `updateStatus()`.
 
 - [ ] **`getSupportedSampleRates` ignores range maximums** — `AudioValueRange` has `mMinimum` and `mMaximum`. For discrete rates they're equal, but range-reporting devices could be handled incorrectly. Consider handling the range case. (`SampleRateManager.swift:141`)
 
