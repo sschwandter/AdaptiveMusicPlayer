@@ -55,6 +55,38 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             .joined(separator: ", ")
     }
 
+    var sampleRateBadgeTitle: String {
+        guard fileSampleRate > 0 else { return "No File" }
+        guard hardwareSampleRate > 0 else { return "Unknown" }
+        if !hasSampleRateMismatch { return "Matched" }
+        if !deviceSupportsFileSampleRate { return "Unsupported" }
+        return "Resampling"
+    }
+
+    var sampleRateRouteDescription: String {
+        let fileRate = fileSampleRate > 0 ? Self.formatSampleRate(fileSampleRate) : "—"
+        let hardwareRate = hardwareSampleRate > 0 ? Self.formatSampleRate(hardwareSampleRate) : "—"
+        return "\(fileRate) -> \(hardwareRate)"
+    }
+
+    var compactSampleRateExplanation: String? {
+        guard fileSampleRate > 0 else { return nil }
+        guard hardwareSampleRate > 0 else {
+            return "Could not read the current hardware sample rate."
+        }
+        guard hasSampleRateMismatch else { return nil }
+
+        if !deviceSupportsFileSampleRate {
+            return "\(hardwareDeviceDisplayName) does not advertise \(Self.formatSampleRate(fileSampleRate))."
+        }
+
+        return "\(hardwareDeviceDisplayName) supports \(Self.formatSampleRate(fileSampleRate)), but has not switched yet."
+    }
+
+    var showsSupportedRatesHint: Bool {
+        fileSampleRate > 0 && (hasSampleRateMismatch || supportedHardwareSampleRates.isEmpty)
+    }
+
     var sampleRateStatusDetail: String {
         guard fileSampleRate > 0 else {
             return "Load a file to compare its sample rate with the active output device."
@@ -76,6 +108,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
 
         return "\(deviceName) supports \(Self.formatSampleRate(fileSampleRate)), but the hardware is still at \(Self.formatSampleRate(hardwareSampleRate)). Playback will be resampled until the device switches."
+    }
+
+    private var deviceSupportsFileSampleRate: Bool {
+        !supportedHardwareSampleRates.isEmpty &&
+        Self.sampleRate(fileSampleRate, isWithin: supportedHardwareSampleRates)
     }
 
     // MARK: - Dependencies

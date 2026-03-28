@@ -108,61 +108,58 @@ struct ContentView: View {
             }
             .font(.caption)
             
-            // Sample rate display
-            HStack(spacing: 16) {
-                LabeledContent("File") {
-                    Text(player.fileSampleRate > 0 ? "\(Int(player.fileSampleRate)) Hz" : "—")
-                        .monospacedDigit()
-                }
-                
-                Spacer()
-                
-                LabeledContent("Hardware") {
-                    HStack(spacing: 4) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(sampleRateColor)
-                        
-                        Text(player.hardwareSampleRate > 0 ? "\(Int(player.hardwareSampleRate)) Hz" : "—")
-                            .monospacedDigit()
-                        
-                        if player.hasSampleRateMismatch {
-                            Button(action: {
-                                Task {
-                                    await player.synchronizeSampleRates()
-                                }
-                            }) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.caption)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 12) {
+                    Text(player.sampleRateBadgeTitle)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(badgeBackgroundColor)
+                        .foregroundStyle(badgeForegroundColor)
+                        .clipShape(Capsule())
+
+                    Spacer()
+
+                    if player.hasSampleRateMismatch {
+                        Button(action: {
+                            Task {
+                                await player.synchronizeSampleRates()
                             }
-                            .buttonStyle(.borderless)
-                            .help("Set hardware to \(Int(player.fileSampleRate)) Hz for bit-perfect playback")
-                            .disabled(player.isLoading)
+                        }) {
+                            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                                .labelStyle(.titleAndIcon)
                         }
+                        .buttonStyle(.borderless)
+                        .help("Set hardware to \(Int(player.fileSampleRate)) Hz for bit-perfect playback")
+                        .disabled(player.isLoading)
                     }
                 }
-            }
-            .font(.callout)
 
-            VStack(alignment: .leading, spacing: 6) {
-                LabeledContent("Output Device") {
+                LabeledContent("Rate") {
+                    Text(player.sampleRateRouteDescription)
+                        .monospacedDigit()
+                }
+
+                LabeledContent("Output") {
                     Text(player.hardwareDeviceDisplayName)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
 
-                LabeledContent("Supported Rates") {
-                    Text(player.supportedHardwareSampleRatesDescription)
-                        .multilineTextAlignment(.trailing)
+                if player.showsSupportedRatesHint {
+                    LabeledContent("Supported") {
+                        Text(player.supportedHardwareSampleRatesDescription)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
 
-                LabeledContent("Sync Status") {
-                    Text(player.sampleRateStatusDetail)
-                        .multilineTextAlignment(.trailing)
+                if let explanation = player.compactSampleRateExplanation {
+                    Text(explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            .font(.callout)
             
             // Status message
             if !player.statusMessage.isEmpty {
@@ -238,11 +235,30 @@ struct ContentView: View {
         )
     }
 
-    private var sampleRateColor: Color {
-        guard player.fileSampleRate > 0 && player.hardwareSampleRate > 0 else {
+    private var badgeBackgroundColor: Color {
+        switch player.sampleRateBadgeTitle {
+        case "Matched":
+            return .green.opacity(0.16)
+        case "Resampling":
+            return .orange.opacity(0.18)
+        case "Unsupported":
+            return .red.opacity(0.14)
+        default:
+            return .secondary.opacity(0.14)
+        }
+    }
+
+    private var badgeForegroundColor: Color {
+        switch player.sampleRateBadgeTitle {
+        case "Matched":
+            return .green
+        case "Resampling":
+            return .orange
+        case "Unsupported":
+            return .red
+        default:
             return .secondary
         }
-        return player.hasSampleRateMismatch ? .orange : .green
     }
     
     // MARK: - Private Methods
