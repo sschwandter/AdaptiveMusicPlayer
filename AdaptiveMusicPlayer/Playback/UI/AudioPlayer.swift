@@ -30,10 +30,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
     var currentFileName: String? { engine.state.audioInfo?.fileName }
-    var playlistTrackPosition: String? { playlist?.positionDescription }
-    var hasPlaylist: Bool { playlist?.trackCount ?? 0 > 1 }
-    var canPlayPreviousTrack: Bool { playlist?.canMoveToPreviousTrack ?? false }
-    var canPlayNextTrack: Bool { playlist?.canMoveToNextTrack ?? false }
+    var playlistTrackPosition: String? { playlistSession?.positionDescription }
+    var hasPlaylist: Bool { playlistSession?.trackCount ?? 0 > 1 }
+    var canPlayPreviousTrack: Bool { playlistSession?.canMoveToPreviousTrack ?? false }
+    var canPlayNextTrack: Bool { playlistSession?.canMoveToNextTrack ?? false }
     var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double = 0
     var hardwareDeviceName: String = ""
@@ -127,8 +127,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let folderScanner: AudioPlaylistFolderScanning
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
-    private var playlist: PlaybackPlaylist?
-    private var activeScopedFolderURL: URL?
+    private var playlistSession: PlaylistSession?
+    private var playlistScanWarningSummary: String?
 
     // MARK: - Initialization
 
@@ -163,8 +163,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// Starts a file load and enters loading state immediately.
     /// A short delay can be requested to let the file importer dismiss first.
     func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
-        stopAccessingActiveScopedFolder()
-        playlist = PlaybackPlaylist(tracks: [url])
+        playlistScanWarningSummary = nil
+        playlistSession = PlaylistSession.singleTrack(url)
         loadPlaylistTrack(at: 0, importerDismissalDelay: importerDismissalDelay)
     }
 
@@ -180,13 +180,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     generation: generation
                 )
 
-                self.stopAccessingActiveScopedFolder()
-                guard url.startAccessingSecurityScopedResource() else {
+                guard let folderAccess = ScopedFolderAccess(folderURL: url) else {
                     throw PlaybackError.loadFailed("Cannot access folder")
                 }
-                self.activeScopedFolderURL = url
 
-                let tracks = try await Task.detached(priority: .userInitiated) {
+                let scanResult = try await Task.detached(priority: .userInitiated) {
                     try self.folderScanner.scan(folderURL: url)
                 }.value
 
@@ -196,24 +194,26 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     return
                 }
 
-                guard let playlist = PlaybackPlaylist(tracks: tracks) else {
+                guard let playlistSession = PlaylistSession.folderPlaylist(
+                    tracks: scanResult.files,
+                    folderAccess: folderAccess
+                ) else {
                     self.showError(.loadFailed("No playable audio files were found in the selected folder."))
                     return
                 }
 
-                self.playlist = playlist
-                self.loadPlaylistTrack(at: playlist.currentIndex)
+                self.playlistScanWarningSummary = scanResult.warningSummary
+                self.playlistSession = playlistSession
+                self.loadPlaylistTrack(at: playlistSession.currentIndex)
+                await self.loadingTask?.value
             } catch is CancellationError {
                 guard generation == self.loadGeneration else { return }
-                self.stopAccessingActiveScopedFolder()
                 self.setStatusMessage("Loading cancelled")
             } catch let error as PlaybackError {
                 guard generation == self.loadGeneration else { return }
-                self.stopAccessingActiveScopedFolder()
                 self.showError(error)
             } catch {
                 guard generation == self.loadGeneration else { return }
-                self.stopAccessingActiveScopedFolder()
                 self.showError(.loadFailed(error.localizedDescription))
             }
         }
@@ -383,11 +383,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
-    private func stopAccessingActiveScopedFolder() {
-        activeScopedFolderURL?.stopAccessingSecurityScopedResource()
-        activeScopedFolderURL = nil
-    }
-
     private func beginLoading(with message: String) {
         engine.beginLoading()
         progressTracker.stopTracking()
@@ -403,12 +398,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         importerDismissalDelay: Duration = .zero,
         autoplayOnSuccess: Bool = false
     ) {
-        guard let nextPlaylist = playlist?.playlistByMovingToTrack(at: index) else { return }
-        playlist = nextPlaylist
+        guard let nextPlaylistSession = playlistSession?.movingToTrack(at: index) else { return }
+        playlistSession = nextPlaylistSession
 
-        let trackURL = nextPlaylist.currentTrackURL
-        let loadingMessage = nextPlaylist.trackCount > 1
-            ? "Loading track \(nextPlaylist.positionDescription)..."
+        let trackURL = nextPlaylistSession.currentTrackURL
+        let loadingMessage = nextPlaylistSession.trackCount > 1
+            ? "Loading track \(nextPlaylistSession.positionDescription)..."
             : "Loading file..."
         beginLoading(with: loadingMessage)
 
@@ -465,40 +460,42 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     @discardableResult
     private func moveToAdjacentTrack(next: Bool, autoplay: Bool = false) -> Bool {
-        guard let playlist else { return false }
+        guard let playlistSession else { return false }
 
-        let nextPlaylist = next
-            ? playlist.playlistByMovingToNextTrack()
-            : playlist.playlistByMovingToPreviousTrack()
+        let nextPlaylistSession = next
+            ? playlistSession.movingToNextTrack()
+            : playlistSession.movingToPreviousTrack()
 
-        guard let nextPlaylist else { return false }
+        guard let nextPlaylistSession else { return false }
 
-        self.playlist = nextPlaylist
-        loadPlaylistTrack(at: nextPlaylist.currentIndex, autoplayOnSuccess: autoplay)
+        self.playlistSession = nextPlaylistSession
+        loadPlaylistTrack(at: nextPlaylistSession.currentIndex, autoplayOnSuccess: autoplay)
         return true
     }
 
     private func showReadyStatus(for audioInfo: AudioInfo) {
-        let prefix = playlist?.trackCount ?? 0 > 1
-            ? "Track \(playlist?.positionDescription ?? "") ready"
+        let prefix = playlistSession?.trackCount ?? 0 > 1
+            ? "Track \(playlistSession?.positionDescription ?? "") ready"
             : "Ready to play"
+        let warningSuffix = playlistScanWarningSuffix
 
         if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
+            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)\(warningSuffix)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
+            setStatusMessage("\(prefix) at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)\(warningSuffix)")
         }
     }
 
     private func showPlayingStatus() {
-        let prefix = playlist?.trackCount ?? 0 > 1
-            ? "Playing track \(playlist?.positionDescription ?? "")"
+        let prefix = playlistSession?.trackCount ?? 0 > 1
+            ? "Playing track \(playlistSession?.positionDescription ?? "")"
             : "Playing"
+        let warningSuffix = playlistScanWarningSuffix
 
         if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
+            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)\(warningSuffix)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
+            setStatusMessage("\(prefix) at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)\(warningSuffix)")
         }
     }
 
@@ -510,6 +507,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func setStatusMessage(_ message: String) {
         statusMessage = message
         hasError = false
+    }
+
+    private var playlistScanWarningSuffix: String {
+        guard let playlistScanWarningSummary else { return "" }
+        return " \(playlistScanWarningSummary)"
     }
 
     private static func formatSampleRate(_ sampleRate: Double) -> String {

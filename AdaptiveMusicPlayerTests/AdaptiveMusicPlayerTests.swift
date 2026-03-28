@@ -4,7 +4,7 @@ import CoreAudio
 import Foundation
 @testable import AdaptiveMusicPlayer
 
-@Suite("AudioPlayer Tests")
+@Suite("AudioPlayer Tests", .serialized)
 @MainActor
 struct AudioPlayerTests {
     
@@ -112,6 +112,33 @@ struct AudioPlayerTests {
         #expect(!player.statusMessage.isEmpty)
         #expect(!player.sampleRateStatusDetail.isEmpty)
     }
+
+}
+
+@Suite("AudioPlayer Folder Loading Tests", .serialized)
+@MainActor
+struct AudioPlayerFolderLoadingTests {
+
+    @Test("Loading a folder builds a playable playlist from discovered files")
+    func loadFolderBuildsPlaylist() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let fileURL = rootFolder.appending(path: "album/track.wav")
+        try TemporaryFolder.writeWaveFile(at: fileURL)
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "track.wav")
+        #expect(player.playlistTrackPosition == "1 of 1")
+        #expect(player.hasError == false)
+    }
 }
 
 @Suite("TimeFormatter Tests")
@@ -212,6 +239,29 @@ struct PlaybackPlaylistTests {
     @Test("Playlist rejects empty track lists")
     func rejectsEmptyPlaylists() {
         #expect(PlaybackPlaylist(tracks: []) == nil)
+    }
+}
+
+@Suite("PlaylistSession Tests")
+struct PlaylistSessionTests {
+
+    @Test("Playlist session moves between tracks while preserving playlist metadata")
+    func sessionNavigationPreservesPlaylistContext() throws {
+        let tracks = [
+            URL(fileURLWithPath: "/tmp/a.wav"),
+            URL(fileURLWithPath: "/tmp/b.wav")
+        ]
+        let playlist = try #require(PlaybackPlaylist(tracks: tracks))
+        let session = PlaylistSession(playlist: playlist)
+
+        #expect(session.currentTrackURL == tracks[0])
+        #expect(session.positionDescription == "1 of 2")
+        #expect(session.canMoveToNextTrack)
+
+        let nextSession = try #require(session.movingToNextTrack())
+        #expect(nextSession.currentTrackURL == tracks[1])
+        #expect(nextSession.positionDescription == "2 of 2")
+        #expect(nextSession.canMoveToPreviousTrack)
     }
 }
 
@@ -325,9 +375,10 @@ struct AudioPlaylistFolderScannerTests {
 
         let scanner = AudioPlaylistFolderScanner()
 
-        let files = try scanner.scan(folderURL: rootFolder)
+        let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(files == [deepPlayable, nestedPlayable, topLevelPlayable])
+        #expect(result.files == [deepPlayable, nestedPlayable, topLevelPlayable])
+        #expect(result.warnings.isEmpty)
     }
 
     @Test("Rejects file URLs instead of folders")
@@ -360,9 +411,34 @@ struct AudioPlaylistFolderScannerTests {
             audioFileClassifier: classifier
         )
 
-        let files = try scanner.scan(folderURL: rootFolder)
+        let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(files == [expectedAudio, alsoPlayable])
+        #expect(result.files == [expectedAudio, alsoPlayable])
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test("Reports skipped paths when directory enumeration encounters errors")
+    func reportsEnumerationWarnings() throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let playable = rootFolder.appending(path: "track.wav")
+        let warning = AudioPlaylistFolderScanWarning(
+            path: rootFolder.appending(path: "restricted").path,
+            message: "Permission denied"
+        )
+        let enumerator = StubDirectoryTreeEnumerator(urls: [playable], warnings: [warning])
+        let classifier = StubPlayableAudioFileClassifier(playableURLs: [playable])
+        let scanner = AudioPlaylistFolderScanner(
+            directoryEnumerator: enumerator,
+            audioFileClassifier: classifier
+        )
+
+        let result = try scanner.scan(folderURL: rootFolder)
+
+        #expect(result.files == [playable])
+        #expect(result.warnings == [warning])
+        #expect(result.warningSummary == "Skipped 1 unreadable item while scanning the folder.")
     }
 }
 
@@ -425,9 +501,10 @@ private extension Data {
 
 private struct StubDirectoryTreeEnumerator: DirectoryTreeEnumerating {
     let urls: [URL]
+    var warnings: [AudioPlaylistFolderScanWarning] = []
 
-    func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL] {
-        urls
+    func recursivelyEnumerateFiles(in folderURL: URL) throws -> DirectoryTreeEnumerationResult {
+        DirectoryTreeEnumerationResult(urls: urls, warnings: warnings)
     }
 }
 
@@ -438,6 +515,7 @@ private struct StubPlayableAudioFileClassifier: PlayableAudioFileClassifying {
         playableURLs.contains(url)
     }
 }
+
 
 private enum TemporaryFolder {
     static func make() throws -> URL {
@@ -458,7 +536,56 @@ private enum TemporaryFolder {
         try contents.write(to: url)
     }
 
+    static func writeWaveFile(at url: URL) throws {
+        try writeFile(at: url, contents: WaveData.make())
+    }
+
     static func remove(_ url: URL) throws {
         try FileManager.default.removeItem(at: url)
+    }
+}
+
+private final class StubAudioHardwareObserver: AudioHardwareObserving {
+    nonisolated func startObserving(onChange: @escaping @Sendable () -> Void) {}
+    nonisolated func stopObserving() {}
+}
+
+private struct StubSampleRateManager: SampleRateManaging {
+    nonisolated func getCurrentSampleRate() -> Double? { 44_100 }
+    nonisolated func getCurrentOutputDeviceName() -> String? { "Test Device" }
+    nonisolated func setSampleRate(_ rate: Double) throws {}
+    nonisolated func getSupportedSampleRates() -> [Double] { [44_100] }
+    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
+        AudioDeviceInfo(name: "Test Device", currentSampleRate: 44_100, supportedSampleRates: [44_100])
+    }
+}
+
+private enum WaveData {
+    static func make() -> Data {
+        let sampleRate: UInt32 = 44_100
+        let bitsPerSample: UInt16 = 16
+        let channels: UInt16 = 1
+        let frameCount: UInt32 = 44
+        let bytesPerSample = UInt32(bitsPerSample / 8)
+        let dataSize = frameCount * UInt32(channels) * bytesPerSample
+        let byteRate = sampleRate * UInt32(channels) * bytesPerSample
+        let blockAlign = channels * bitsPerSample / 8
+
+        var data = Data()
+        data.append("RIFF".data(using: .ascii)!)
+        data.appendLE(UInt32(36 + dataSize))
+        data.append("WAVE".data(using: .ascii)!)
+        data.append("fmt ".data(using: .ascii)!)
+        data.appendLE(UInt32(16))
+        data.appendLE(UInt16(1))
+        data.appendLE(channels)
+        data.appendLE(sampleRate)
+        data.appendLE(byteRate)
+        data.appendLE(blockAlign)
+        data.appendLE(bitsPerSample)
+        data.append("data".data(using: .ascii)!)
+        data.appendLE(dataSize)
+        data.append(Data(repeating: 0, count: Int(dataSize)))
+        return data
     }
 }
