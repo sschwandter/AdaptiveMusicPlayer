@@ -51,8 +51,8 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         let deviceID = try getDefaultAudioDevice()
 
         // Check if sample rate is supported
-        let supportedRates = getSupportedSampleRates(deviceID: deviceID)
-        guard supportedRates.contains(rate) else {
+        let supportedRanges = getSupportedSampleRateRanges(deviceID: deviceID)
+        guard Self.sampleRate(rate, isSupportedBy: supportedRanges) else {
             throw NSError(domain: "SampleRateManager", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Sample rate \(Int(rate)) Hz not supported by device"
             ])
@@ -86,10 +86,30 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         guard let deviceID = try? getDefaultAudioDevice() else {
             return []
         }
-        return getSupportedSampleRates(deviceID: deviceID)
+        return getSupportedSampleRateRanges(deviceID: deviceID).flatMap(Self.expandSupportedRates(from:))
     }
 
     // MARK: - Private Methods
+
+    nonisolated static func sampleRate(_ rate: Double, isSupportedBy ranges: [AudioValueRange]) -> Bool {
+        ranges.contains { range in
+            rate >= range.mMinimum && rate <= range.mMaximum
+        }
+    }
+
+    nonisolated static func expandSupportedRates(from range: AudioValueRange) -> [Double] {
+        guard range.mMaximum >= range.mMinimum else { return [] }
+        guard range.mMinimum != range.mMaximum else { return [range.mMinimum] }
+
+        let commonRates = [44_100, 48_000, 88_200, 96_000, 176_400, 192_000].map(Double.init)
+        let inRangeCommonRates = commonRates.filter { sampleRate($0, isSupportedBy: [range]) }
+
+        if !inRangeCommonRates.isEmpty {
+            return inRangeCommonRates
+        }
+
+        return [range.mMinimum, range.mMaximum]
+    }
 
     nonisolated private func getDefaultAudioDevice() throws -> AudioDeviceID {
         var deviceID = AudioDeviceID(0)
@@ -119,7 +139,7 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         return deviceID
     }
 
-    nonisolated private func getSupportedSampleRates(deviceID: AudioDeviceID) -> [Double] {
+    nonisolated private func getSupportedSampleRateRanges(deviceID: AudioDeviceID) -> [AudioValueRange] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyAvailableNominalSampleRates,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -138,6 +158,6 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
             return []
         }
 
-        return ranges.map { $0.mMinimum }
+        return ranges
     }
 }

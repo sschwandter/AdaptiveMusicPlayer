@@ -91,7 +91,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Stop")
-                    .disabled(!player.isPlaying)
+                    .disabled(player.currentFileName == nil || player.isLoading)
                 }
             }
             
@@ -174,7 +174,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .stopPlayback)) { _ in
-            if player.isPlaying {
+            if canPerformPlaybackAction {
                 player.stop()
             }
         }
@@ -204,11 +204,18 @@ struct ContentView: View {
                     // Set loading state IMMEDIATELY (synchronous, no Task overhead)
                     player.setLoadingState()
 
-                    // Defer to next run loop to ensure file picker dismisses immediately
-                    // This prevents blocking on network shares during URL security-scoped access
+                    // Defer the actual load until after the importer has dismissed.
+                    // On some network-backed files this avoids the picker appearing frozen
+                    // while security-scoped access and file reads begin.
                     DispatchQueue.main.async {
                         Task {
-                            try? await Task.sleep(for: .milliseconds(50))
+                            do {
+                                try await Task.sleep(for: .milliseconds(50))
+                            } catch is CancellationError {
+                                return
+                            } catch {
+                                return
+                            }
                             await player.loadFile(url: url)
                         }
                     }
