@@ -2,8 +2,8 @@ import Foundation
 import AVFoundation
 import Observation
 
-/// ViewModel for audio playback
-/// Translates domain logic to presentation state
+/// Observable playback view model used by SwiftUI
+/// Wraps the engine and maintains additional UI-facing status state
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
@@ -261,7 +261,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
     }
 
-    /// Update presentation state based on domain state
+    /// Update user-facing status derived from engine state and local UI events
     private func updateStatus(_ event: StatusEvent) {
         currentStatus = event
 

@@ -1,8 +1,8 @@
 import Foundation
 import AVFoundation
 
-/// Playback engine coordinator
-/// Orchestrates use cases and manages playback state
+/// Stateful playback coordinator around AVAudioPlayer
+/// Owns playback state and delegates smaller operations to use cases
 @MainActor
 final class AudioPlaybackEngine {
 
@@ -175,8 +175,8 @@ final class AudioPlaybackEngine {
         }.value
     }
 
-    /// Get the underlying AVAudioPlayer for progress tracking
-    /// Note: This is a temporary bridge until progress tracking is refactored
+    /// Expose the active player to the progress tracker
+    /// This keeps progress tracking separate, but still couples the engine to AVAudioPlayer.
     func getPlayer() -> AVAudioPlayer? {
         player
     }
