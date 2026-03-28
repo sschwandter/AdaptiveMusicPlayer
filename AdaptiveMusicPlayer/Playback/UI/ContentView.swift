@@ -237,7 +237,7 @@ struct ContentView: View {
         guard player.fileSampleRate > 0 && player.hardwareSampleRate > 0 else {
             return .secondary
         }
-        return player.fileSampleRate == player.hardwareSampleRate ? .green : .orange
+        return player.hasSampleRateMismatch ? .orange : .green
     }
     
     // MARK: - Private Methods
