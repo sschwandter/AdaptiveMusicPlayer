@@ -101,7 +101,8 @@ struct AudioPlayerTests {
 
         // Test loading a non-existent file
         let invalidURL = URL(fileURLWithPath: "/nonexistent/file.mp3")
-        await player.loadFile(url: invalidURL)
+        player.loadFile(url: invalidURL)
+        await player.waitForCurrentLoad()
 
         // Should have error state
         #expect(player.hasError == true)

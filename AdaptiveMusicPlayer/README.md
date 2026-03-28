@@ -12,16 +12,16 @@ Adaptive Music Player is a macOS audio player focused on sample-rate-aware playb
 
 ## Current Structure
 
-The project is organized by feature area under `Playback/`, with a lightweight app shell under `App/`.
+The project is organized by feature area under `Playback/`, with a small app shell under `App/`.
 
 ### App Layer
 
 - `AdaptiveMusicPlayerApp.swift`
   Creates the main `WindowGroup` and installs app commands.
 - `PlaybackCommands.swift`
-  Defines menu items and keyboard shortcuts.
-- `PlaybackNotifications.swift`
-  Uses `NotificationCenter` names to route commands from the app layer into the main view.
+  Defines menu items and keyboard shortcuts and dispatches them to the focused player scene.
+- `PlaybackCommandActions.swift`
+  Defines the focused-value bridge used to expose window-local playback actions from `ContentView` to the app command layer.
 
 ### Playback Domain
 
@@ -33,7 +33,7 @@ The project is organized by feature area under `Playback/`, with a lightweight a
 - `AudioPlaybackEngine.swift`
   Owns the underlying `AVAudioPlayer`, coordinates use cases, and is the main stateful playback coordinator.
 - `AudioPlayer.swift`
-  Acts as the `@Observable` view model used by SwiftUI. It translates engine state into UI-facing properties and user-facing status messages.
+  Acts as the `@Observable` view model used by SwiftUI. It exposes UI-facing playback state, status/error text, and owns asynchronous file-load orchestration for the view.
 
 ### Services
 
@@ -58,7 +58,7 @@ These files hold smaller units of playback behavior, but the codebase is not a s
 ### UI
 
 - `ContentView.swift`
-  Main player interface.
+  Main player interface. It binds to `AudioPlayer`, presents the file importer, and publishes focused command actions for the active window.
 
 ### Utilities
 
@@ -67,9 +67,15 @@ These files hold smaller units of playback behavior, but the codebase is not a s
 
 ## Command Flow
 
-Keyboard shortcuts and menu commands are defined at the app layer and currently routed to `ContentView` through `NotificationCenter`. `ContentView` forwards those actions to `AudioPlayer`, which then drives `AudioPlaybackEngine`.
+Keyboard shortcuts and menu commands are defined at the app layer and routed through SwiftUI focused values. The active `ContentView` publishes a `PlaybackCommandActions` value, `PlaybackCommands` reads that focused value, and the selected action calls into `AudioPlayer`, which then drives `AudioPlaybackEngine`.
 
-This works for the current app, but it is worth knowing that command routing is global rather than window-scoped.
+This keeps command routing window-scoped instead of broadcasting process-wide actions.
+
+## File Loading Flow
+
+`ContentView` does not manipulate loading state directly anymore. It asks `AudioPlayer` to load the selected file, and the view model immediately moves into loading state, optionally waits a short time for the file importer to dismiss, and then performs the asynchronous load through the engine.
+
+That means the UI-facing contract for file loading now lives in one place instead of being split across the view and view model.
 
 ## Sample Rate Behavior
 
@@ -113,6 +119,10 @@ xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-
 ```
 
 UI tests exist, but command-line execution may depend on the local environment and permissions available to the test runner.
+
+## Repository Notes
+
+- `README.md` and `TODO.md` live in this folder for project-local documentation, but they are excluded from the app target and are not intended to ship inside the `.app` bundle.
 
 ## Requirements
 

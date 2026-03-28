@@ -64,22 +64,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - File Loading
 
-    /// Set loading state immediately (synchronous)
-    /// Called from UI before async file loading begins
-    func setLoadingState() {
+    /// Starts a file load and enters loading state immediately.
+    /// A short delay can be requested to let the file importer dismiss first.
+    func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
         engine.beginLoading()
         progressTracker.stopTracking()
         currentTime = 0
         setStatusMessage("Loading file...")
-    }
-
-    /// Report a file selection error from the file picker
-    func reportFileSelectionError(_ message: String) {
-        showError(.loadFailed(message))
-    }
-
-    func loadFile(url: URL) async {
-        // Loading state already set by caller (setLoadingState())
 
         // Cancel any existing load operation
         loadingTask?.cancel()
@@ -87,6 +78,20 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let generation = loadGeneration
 
         loadingTask = Task {
+            if importerDismissalDelay > .zero {
+                do {
+                    try await Task.sleep(for: importerDismissalDelay)
+                } catch is CancellationError {
+                    guard generation == self.loadGeneration else { return }
+                    setStatusMessage("Loading cancelled")
+                    return
+                } catch {
+                    guard generation == self.loadGeneration else { return }
+                    setStatusMessage("Loading cancelled")
+                    return
+                }
+            }
+
             guard !Task.isCancelled else {
                 guard generation == self.loadGeneration else { return }
                 setStatusMessage("Loading cancelled")
@@ -117,7 +122,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 showError(.loadFailed(error.localizedDescription))
             }
         }
+    }
 
+    /// Report a file selection error from the file picker
+    func reportFileSelectionError(_ message: String) {
+        showError(.loadFailed(message))
+    }
+
+    func waitForCurrentLoad() async {
         await loadingTask?.value
     }
 

@@ -179,24 +179,9 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    // Set loading state IMMEDIATELY (synchronous, no Task overhead)
-                    player.setLoadingState()
-
-                    // Defer the actual load until after the importer has dismissed.
-                    // On some network-backed files this avoids the picker appearing frozen
-                    // while security-scoped access and file reads begin.
-                    DispatchQueue.main.async {
-                        Task {
-                            do {
-                                try await Task.sleep(for: .milliseconds(50))
-                            } catch is CancellationError {
-                                return
-                            } catch {
-                                return
-                            }
-                            await player.loadFile(url: url)
-                        }
-                    }
+                    // Defer the load slightly so the importer can dismiss before
+                    // security-scoped access and file reads start.
+                    player.loadFile(url: url, importerDismissalDelay: .milliseconds(50))
                 }
             case .failure(let error):
                 player.reportFileSelectionError(error.localizedDescription)
