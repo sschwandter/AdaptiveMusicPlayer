@@ -40,6 +40,8 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
     private var progressUpdateTask: Task<Void, Never>?
     private var timerTickCount = 0
     private var onPlaybackFinished: (() -> Void)?
+    private weak var trackedPlayer: AVAudioPlayer?
+    private var trackedPlayerID: ObjectIdentifier?
 
     // MARK: - Public Methods
 
@@ -58,6 +60,8 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         self.onPlaybackFinished = onPlaybackFinished
 
         // Set ourselves as the player's delegate for finish detection
+        trackedPlayer = player
+        trackedPlayerID = ObjectIdentifier(player)
         player.delegate = self
 
         progressUpdateTask = Task { @MainActor in
@@ -84,13 +88,19 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         progressUpdateTask = nil
         timerTickCount = 0
         onPlaybackFinished = nil
+        trackedPlayer?.delegate = nil
+        trackedPlayer = nil
+        trackedPlayerID = nil
     }
 
     // MARK: - AVAudioPlayerDelegate
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let finishedPlayerID = ObjectIdentifier(player)
+
         // Delegate is called on arbitrary thread, dispatch to main actor
         Task { @MainActor in
+            guard flag, finishedPlayerID == trackedPlayerID else { return }
             onPlaybackFinished?()
         }
     }

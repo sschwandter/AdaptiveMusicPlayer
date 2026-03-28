@@ -12,6 +12,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private enum Constants {
         static let progressUpdateInterval: TimeInterval = 0.1  // seconds
+        static let sampleRateTolerance: Double = 1.0  // Hz
     }
 
     // MARK: - Presentation State
@@ -42,7 +43,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var hasSampleRateMismatch: Bool {
         guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
-        return fileSampleRate != hardwareSampleRate
+        return abs(fileSampleRate - hardwareSampleRate) > Constants.sampleRateTolerance
     }
 
     // MARK: - Dependencies
@@ -203,7 +204,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             try await engine.synchronizeSampleRates()
 
             // Wait for hardware to stabilize, then refresh (still needed for hardware settling)
-            try? await Task.sleep(for: .milliseconds(500))
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
 
             // Back on MainActor after await - safe to update UI
             await updateHardwareSampleRate()

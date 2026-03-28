@@ -123,6 +123,37 @@ struct TimeFormatterTests {
     }
 }
 
+@Suite("PlaybackControlUseCase Tests")
+@MainActor
+struct PlaybackControlUseCaseTests {
+
+    @Test("Playing a finished track rewinds before restarting")
+    func playFinishedTrackRewindsToStart() throws {
+        let useCase = PlaybackControlUseCase()
+        let player = try StubAudioPlayer()
+        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+
+        player.currentTime = 0.75
+        let newState = try useCase.play(player: player, state: .finished(audioInfo))
+
+        #expect(newState == .playing(audioInfo))
+        #expect(player.playCallCount == 1)
+        #expect(player.currentTime == 0)
+    }
+
+    @Test("State does not advance when AVAudioPlayer fails to start")
+    func playFailureDoesNotAdvanceState() throws {
+        let useCase = PlaybackControlUseCase()
+        let player = try StubAudioPlayer(playResult: false)
+        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+
+        #expect(throws: PlaybackError.playbackStartFailed) {
+            try useCase.play(player: player, state: .ready(audioInfo))
+        }
+        #expect(player.playCallCount == 1)
+    }
+}
+
 @Suite("SampleRateManager Tests")
 struct SampleRateManagerTests {
 
@@ -148,5 +179,119 @@ struct SampleRateManagerTests {
             CoreAudioSampleRateManager.expandSupportedRates(from: ranged)
             == [44_100, 48_000, 88_200, 96_000, 176_400, 192_000]
         )
+    }
+}
+
+@Suite("PlaybackProgressTracker Tests")
+@MainActor
+struct PlaybackProgressTrackerTests {
+
+    @Test("Ignoring finish callbacks from a previously tracked player")
+    func ignoresStaleFinishCallbacks() async throws {
+        let tracker = PlaybackProgressTracker()
+        let stalePlayer = try StubAudioPlayer()
+        let activePlayer = try StubAudioPlayer()
+        var finishCount = 0
+
+        tracker.startTracking(
+            player: stalePlayer,
+            duration: 1,
+            updateInterval: 1,
+            onProgressUpdate: { _ in },
+            onPlaybackFinished: { finishCount += 1 },
+            onPeriodicUpdate: {}
+        )
+
+        tracker.startTracking(
+            player: activePlayer,
+            duration: 1,
+            updateInterval: 1,
+            onProgressUpdate: { _ in },
+            onPlaybackFinished: { finishCount += 1 },
+            onPeriodicUpdate: {}
+        )
+
+        tracker.audioPlayerDidFinishPlaying(stalePlayer, successfully: true)
+        try await Task.sleep(for: .milliseconds(10))
+
+        #expect(finishCount == 0)
+    }
+
+    @Test("Ignoring unsuccessful finish callbacks")
+    func ignoresUnsuccessfulFinishCallbacks() async throws {
+        let tracker = PlaybackProgressTracker()
+        let player = try StubAudioPlayer()
+        var finishCount = 0
+
+        tracker.startTracking(
+            player: player,
+            duration: 1,
+            updateInterval: 1,
+            onProgressUpdate: { _ in },
+            onPlaybackFinished: { finishCount += 1 },
+            onPeriodicUpdate: {}
+        )
+
+        tracker.audioPlayerDidFinishPlaying(player, successfully: false)
+        try await Task.sleep(for: .milliseconds(10))
+
+        #expect(finishCount == 0)
+    }
+}
+
+private final class StubAudioPlayer: AVAudioPlayer {
+    var playResult: Bool
+    var playCallCount = 0
+
+    init(playResult: Bool = true) throws {
+        self.playResult = playResult
+        try super.init(data: Self.makeWaveData(), fileTypeHint: "wav")
+    }
+
+    override func play() -> Bool {
+        playCallCount += 1
+        return playResult
+    }
+
+    override func stop() {
+        super.stop()
+        currentTime = 0
+    }
+
+    private static func makeWaveData() -> Data {
+        let sampleRate: UInt32 = 44_100
+        let bitsPerSample: UInt16 = 16
+        let channels: UInt16 = 1
+        let frameCount: UInt32 = 44
+        let bytesPerSample = UInt32(bitsPerSample / 8)
+        let dataSize = frameCount * UInt32(channels) * bytesPerSample
+        let byteRate = sampleRate * UInt32(channels) * bytesPerSample
+        let blockAlign = channels * bitsPerSample / 8
+
+        var data = Data()
+        data.append("RIFF".data(using: .ascii)!)
+        data.appendLE(UInt32(36 + dataSize))
+        data.append("WAVE".data(using: .ascii)!)
+        data.append("fmt ".data(using: .ascii)!)
+        data.appendLE(UInt32(16))
+        data.appendLE(UInt16(1))
+        data.appendLE(channels)
+        data.appendLE(sampleRate)
+        data.appendLE(byteRate)
+        data.appendLE(blockAlign)
+        data.appendLE(bitsPerSample)
+        data.append("data".data(using: .ascii)!)
+        data.appendLE(dataSize)
+        data.append(Data(repeating: 0, count: Int(dataSize)))
+        return data
+    }
+}
+
+private extension Data {
+    mutating func appendLE<T: FixedWidthInteger>(_ value: T) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { bytes in
+            append(bytes.bindMemory(to: UInt8.self))
+        }
     }
 }

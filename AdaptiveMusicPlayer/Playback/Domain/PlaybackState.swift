@@ -103,6 +103,7 @@ enum PlaybackError: LocalizedError, Equatable {
     case noFileLoaded
     case alreadyPlaying
     case notPlaying
+    case playbackStartFailed
     case loadingCancelled
     case loadFailed(String)
     case sampleRateSyncFailed(String)
@@ -117,6 +118,8 @@ enum PlaybackError: LocalizedError, Equatable {
             return "Audio is already playing"
         case .notPlaying:
             return "Audio is not playing"
+        case .playbackStartFailed:
+            return "Failed to start audio playback"
         case .loadingCancelled:
             return "Loading cancelled"
         case .loadFailed(let message):

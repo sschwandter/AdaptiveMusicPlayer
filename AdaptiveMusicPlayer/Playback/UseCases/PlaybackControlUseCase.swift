@@ -41,7 +41,14 @@ final class PlaybackControlUseCase: PlaybackControlUseCaseProtocol {
             throw PlaybackError.noFileLoaded
         }
 
-        player.play()
+        if case .finished = state {
+            player.currentTime = 0
+        }
+
+        guard player.play() else {
+            throw PlaybackError.playbackStartFailed
+        }
+
         return .playing(audioInfo)
     }
 
