@@ -7,7 +7,7 @@ struct AdaptiveMusicPlayerApp: App {
             ContentView()
         }
         .windowResizability(.contentSize)
-        .windowStyle(.titleBar)
+        .windowStyle(.automatic)
         .commands {
             PlaybackCommands()
         }

@@ -8,56 +8,124 @@ struct ContentView: View {
     @State private var isEditingSlider = false
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            Text("Adaptive Music Player")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
+        VStack(spacing: 16) {
+            // File name and loading indicator
+            HStack {
+                if let fileName = player.currentFileName {
+                    Text(fileName)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text("No file loaded")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                if player.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
             
-            // Current file info
-            VStack(spacing: 10) {
-                HStack {
-                    if let fileName = player.currentFileName {
-                        Text(fileName)
-                            .font(.headline)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    } else {
-                        Text("No file loaded")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
+            // Progress slider — always visible
+            VStack(spacing: 4) {
+                Slider(value: $sliderPosition, in: 0...max(player.duration, 1)) { isEditing in
+                    isEditingSlider = isEditing
+                    if !isEditing {
+                        player.seek(to: sliderPosition)
                     }
-                    
-                    if player.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .padding(.leading, 8)
+                }
+                .onChange(of: player.currentTime) { oldValue, newValue in
+                    if !isEditingSlider {
+                        sliderPosition = newValue
                     }
                 }
                 
-                HStack(spacing: 20) {
-                    VStack(alignment: .leading) {
-                        Text("File Sample Rate:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(player.fileSampleRate > 0 ? "\(Int(player.fileSampleRate)) Hz" : "—")
-                            .font(.system(.body, design: .monospaced))
-                            .fontWeight(.semibold)
+                HStack {
+                    Text(timeString(sliderPosition))
+                        .contentTransition(.numericText())
+                    Spacer()
+                    Text(timeString(player.duration))
+                        .contentTransition(.numericText())
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            }
+            .disabled(player.currentFileName == nil || player.isLoading)
+            .opacity(player.currentFileName == nil ? 0.4 : (player.isLoading ? 0.6 : 1.0))
+            
+            // Transport controls with Liquid Glass
+            GlassEffectContainer {
+                HStack(spacing: 12) {
+                    Button(action: { player.skipBackward() }) {
+                        Image(systemName: "backward.fill")
+                            .frame(width: 20, height: 20)
                     }
-
+                    .buttonStyle(.glass)
+                    .help("Skip Backward 10s")
+                    .disabled(player.currentFileName == nil || player.isLoading)
+                    
+                    Button(action: { player.togglePlayPause() }) {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
+                    .disabled(player.currentFileName == nil || player.isLoading)
+                    
+                    Button(action: { player.skipForward() }) {
+                        Image(systemName: "forward.fill")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.glass)
+                    .help("Skip Forward 10s")
+                    .disabled(player.currentFileName == nil || player.isLoading)
+                    
+                    Button(action: { player.stop() }) {
+                        Image(systemName: "stop.fill")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.glass)
+                    .help("Stop")
+                    .disabled(!player.isPlaying)
+                }
+            }
+            
+            // Volume
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Slider(value: $player.volume, in: 0...1)
+                    .disabled(player.isLoading)
+                Image(systemName: "speaker.wave.3.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+            }
+            .font(.caption)
+            
+            // Sample rate display
+            HStack(spacing: 16) {
+                LabeledContent("File") {
+                    Text(player.fileSampleRate > 0 ? "\(Int(player.fileSampleRate)) Hz" : "—")
+                        .monospacedDigit()
+                }
+                
+                Spacer()
+                
+                LabeledContent("Hardware") {
                     HStack(spacing: 4) {
-                        VStack(alignment: .leading) {
-                            Text("Hardware Sample Rate:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(player.hardwareSampleRate > 0 ? "\(Int(player.hardwareSampleRate)) Hz" : "—")
-                                .font(.system(.body, design: .monospaced))
-                                .fontWeight(.semibold)
-                                .foregroundColor(sampleRateColor)
-                        }
-
-                        // Sync button when mismatched
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(sampleRateColor)
+                        
+                        Text(player.hardwareSampleRate > 0 ? "\(Int(player.hardwareSampleRate)) Hz" : "—")
+                            .monospacedDigit()
+                        
                         if player.hasSampleRateMismatch {
                             Button(action: {
                                 Task {
@@ -65,130 +133,38 @@ struct ContentView: View {
                                 }
                             }) {
                                 Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.orange)
+                                    .font(.caption)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.borderless)
                             .help("Set hardware to \(Int(player.fileSampleRate)) Hz for bit-perfect playback")
                             .disabled(player.isLoading)
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(10)
+            .font(.callout)
             
-            // Progress bar
-            if player.currentFileName != nil {
-                VStack(spacing: 5) {
-                    Slider(value: $sliderPosition, in: 0...max(player.duration, 1)) { isEditing in
-                        isEditingSlider = isEditing
-                        if !isEditing {
-                            player.seek(to: sliderPosition)
-                        }
-                    }
-                    .onChange(of: player.currentTime) { oldValue, newValue in
-                        if !isEditingSlider {
-                            sliderPosition = newValue
-                        }
-                    }
-
-                    HStack {
-                        Text(timeString(sliderPosition))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                        Spacer()
-                        Text(timeString(player.duration))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                .disabled(player.isLoading)
-                .opacity(player.isLoading ? 0.6 : 1.0)
-            }
-            
-            // Playback controls
-            HStack(spacing: 30) {
-                Button(action: { showingFilePicker = true }) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 30))
-                        .foregroundColor(.accentColor)
-                }
-                .buttonStyle(.plain)
-                .help("Open Audio File (⌘O)")
-                .disabled(player.isLoading)
-                
-                Button(action: { player.skipBackward() }) {
-                    Image(systemName: "backward.fill")
-                        .font(.system(size: 30))
-                }
-                .buttonStyle(.plain)
-                .help("Skip Backward 10s (←)")
-                .disabled(player.currentFileName == nil || player.isLoading)
-                
-                Button(action: { player.togglePlayPause() }) {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(.accentColor)
-                }
-                .buttonStyle(.plain)
-                .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
-                .disabled(player.currentFileName == nil || player.isLoading)
-                
-                Button(action: { player.skipForward() }) {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 30))
-                }
-                .buttonStyle(.plain)
-                .help("Skip Forward 10s (→)")
-                .disabled(player.currentFileName == nil || player.isLoading)
-                
-                Button(action: { player.stop() }) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 30))
-                }
-                .buttonStyle(.plain)
-                .help("Stop (⌘.)")
-                .disabled(!player.isPlaying)
-            }
-            .padding()
-            .opacity(player.isLoading ? 0.6 : 1.0)
-            
-            // Volume control
-            HStack {
-                Image(systemName: "speaker.fill")
-                    .foregroundColor(.secondary)
-                Slider(value: $player.volume, in: 0...1)
-                    .disabled(player.isLoading)
-                Image(systemName: "speaker.wave.3.fill")
-                    .foregroundColor(.secondary)
-                
-                Text("\(Int(player.volume * 100))%")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(width: 35, alignment: .trailing)
-                    .monospacedDigit()
-            }
-            .padding(.horizontal)
-            .opacity(player.isLoading ? 0.6 : 1.0)
-            
-            // Status messages
+            // Status message
             if !player.statusMessage.isEmpty {
                 Text(player.statusMessage)
-                    .font(.caption)
-                    .foregroundColor(player.hasError ? .red : .blue)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .font(.footnote)
+                    .foregroundStyle(player.hasError ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
-            Spacer()
         }
         .padding()
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(width: 480)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showingFilePicker = true }) {
+                    Label("Open File", systemImage: "folder")
+                }
+                .help("Open Audio File (⌘O)")
+                .disabled(player.isLoading)
+            }
+            
+
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
             showingFilePicker = true
         }

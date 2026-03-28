@@ -207,7 +207,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
             // Back on MainActor after await - safe to update UI
             await updateHardwareSampleRate()
-            updateStatus(.sampleRateSynchronized)
+
+            // Verify the switch actually took effect
+            if hasSampleRateMismatch {
+                updateStatus(.error(.sampleRateSyncFailed(
+                    "Hardware stayed at \(Int(hardwareSampleRate)) Hz")))
+            } else {
+                updateStatus(.sampleRateSynchronized)
+            }
         } catch let error as PlaybackError {
             updateStatus(.error(error))
         } catch {
@@ -257,12 +264,16 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             hasError = false
 
         case .ready(let audioInfo):
-            statusMessage = "Ready to play at \(Int(audioInfo.sampleRate)) Hz"
+            if hasSampleRateMismatch {
+                statusMessage = "Ready — output at \(Int(hardwareSampleRate)) Hz (file is \(Int(audioInfo.sampleRate)) Hz)"
+            } else {
+                statusMessage = "Ready to play at \(Int(audioInfo.sampleRate)) Hz"
+            }
             hasError = false
 
         case .playing:
             if hasSampleRateMismatch {
-                statusMessage = "Playing at \(Int(fileSampleRate)) Hz (hardware resampling from \(Int(hardwareSampleRate)) Hz)"
+                statusMessage = "Playing at \(Int(hardwareSampleRate)) Hz (resampled from \(Int(fileSampleRate)) Hz)"
             } else {
                 statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
             }
