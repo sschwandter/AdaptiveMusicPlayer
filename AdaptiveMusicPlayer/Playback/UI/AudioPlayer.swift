@@ -119,6 +119,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
+    private let hardwareObserver: AudioHardwareObserving
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
 
@@ -126,13 +127,26 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     init(
         engine: AudioPlaybackEngine = AudioPlaybackEngine(),
-        progressTracker: PlaybackProgressTracking = PlaybackProgressTracker()
+        progressTracker: PlaybackProgressTracking = PlaybackProgressTracker(),
+        hardwareObserver: AudioHardwareObserving = CoreAudioHardwareObserver()
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
+        self.hardwareObserver = hardwareObserver
+
+        hardwareObserver.startObserving { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.refreshHardwareInfo()
+            }
+        }
+
         Task {
             await refreshHardwareInfo()
         }
+    }
+
+    deinit {
+        hardwareObserver.stopObserving()
     }
 
     // MARK: - File Loading
