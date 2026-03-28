@@ -19,7 +19,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var statusMessage: String = ""
     var hasError: Bool = false
-    private var currentStatus: StatusEvent = .stopped
 
     // MARK: - Domain State (exposed to UI)
 
@@ -34,10 +33,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double = 0
 
-    var isLoading: Bool {
-        if case .loading = currentStatus { return true }
-        return false
-    }
+    var isLoading: Bool { engine.state.isLoading }
 
     var isPlaying: Bool { engine.state.isPlaying }
 
@@ -71,13 +67,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// Set loading state immediately (synchronous)
     /// Called from UI before async file loading begins
     func setLoadingState() {
-        stop()
-        updateStatus(.loading)
+        engine.beginLoading()
+        progressTracker.stopTracking()
+        currentTime = 0
+        setStatusMessage("Loading file...")
     }
 
     /// Report a file selection error from the file picker
     func reportFileSelectionError(_ message: String) {
-        updateStatus(.error(.loadFailed(message)))
+        showError(.loadFailed(message))
     }
 
     func loadFile(url: URL) async {
@@ -91,7 +89,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         loadingTask = Task {
             guard !Task.isCancelled else {
                 guard generation == self.loadGeneration else { return }
-                updateStatus(.loadingCancelled)
+                setStatusMessage("Loading cancelled")
                 return
             }
 
@@ -102,21 +100,21 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 guard generation == self.loadGeneration else { return }
 
                 guard !Task.isCancelled else {
-                    updateStatus(.loadingCancelled)
+                    setStatusMessage("Loading cancelled")
                     return
                 }
 
                 currentTime = 0
                 engine.setVolume(volume)
                 await updateHardwareSampleRate()
-                updateStatus(.ready(audioInfo))
+                showReadyStatus(for: audioInfo)
 
             } catch let error as PlaybackError {
                 guard generation == self.loadGeneration else { return }
-                updateStatus(.error(error))
+                showError(error)
             } catch {
                 guard generation == self.loadGeneration else { return }
-                updateStatus(.error(.loadFailed(error.localizedDescription)))
+                showError(.loadFailed(error.localizedDescription))
             }
         }
 
@@ -140,11 +138,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             Task {
                 await updateHardwareSampleRate()
             }
-            updateStatus(.playing)
+            showPlayingStatus()
         } catch let error as PlaybackError {
-            updateStatus(.error(error))
+            showError(error)
         } catch {
-            updateStatus(.error(.notReady))
+            showError(.notReady)
         }
     }
 
@@ -152,11 +150,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         do {
             try engine.pause()
             progressTracker.stopTracking()
-            updateStatus(.paused)
+            setStatusMessage("Paused")
         } catch let error as PlaybackError {
-            updateStatus(.error(error))
+            showError(error)
         } catch {
-            updateStatus(.error(.notPlaying))
+            showError(.notPlaying)
         }
     }
 
@@ -164,7 +162,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         engine.stop()
         progressTracker.stopTracking()
         currentTime = 0
-        updateStatus(.stopped)
+        setStatusMessage("Stopped")
     }
 
     // MARK: - Seeking
@@ -217,15 +215,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
             // Verify the switch actually took effect
             if hasSampleRateMismatch {
-                updateStatus(.error(.sampleRateSyncFailed(
-                    "Hardware stayed at \(Int(hardwareSampleRate)) Hz")))
+                showError(.sampleRateSyncFailed(
+                    "Hardware stayed at \(Int(hardwareSampleRate)) Hz"))
             } else {
-                updateStatus(.sampleRateSynchronized)
+                setStatusMessage("Hardware sample rate set to \(Int(fileSampleRate)) Hz")
             }
         } catch let error as PlaybackError {
-            updateStatus(.error(error))
+            showError(error)
         } catch {
-            updateStatus(.error(.sampleRateSyncFailed(error.localizedDescription)))
+            showError(.sampleRateSyncFailed(error.localizedDescription))
         }
     }
 
@@ -245,7 +243,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 guard let self else { return }
                 self.engine.markFinished()
                 self.currentTime = self.duration
-                self.updateStatus(.finished)
+                self.setStatusMessage("Playback finished")
             },
             onPeriodicUpdate: { [weak self] in
                 Task {
@@ -261,69 +259,29 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
     }
 
-    /// Update user-facing status derived from engine state and local UI events
-    private func updateStatus(_ event: StatusEvent) {
-        currentStatus = event
-
-        switch event {
-        case .loading:
-            statusMessage = "Loading file..."
-            hasError = false
-
-        case .ready(let audioInfo):
-            if hasSampleRateMismatch {
-                statusMessage = "Ready — output at \(Int(hardwareSampleRate)) Hz (file is \(Int(audioInfo.sampleRate)) Hz)"
-            } else {
-                statusMessage = "Ready to play at \(Int(audioInfo.sampleRate)) Hz"
-            }
-            hasError = false
-
-        case .playing:
-            if hasSampleRateMismatch {
-                statusMessage = "Playing at \(Int(hardwareSampleRate)) Hz (resampled from \(Int(fileSampleRate)) Hz)"
-            } else {
-                statusMessage = "Playing at \(Int(fileSampleRate)) Hz"
-            }
-            hasError = false
-
-        case .paused:
-            statusMessage = "Paused"
-            hasError = false
-
-        case .stopped:
-            statusMessage = "Stopped"
-            hasError = false
-
-        case .finished:
-            statusMessage = "Playback finished"
-            hasError = false
-
-        case .loadingCancelled:
-            statusMessage = "Loading cancelled"
-            hasError = false
-
-        case .sampleRateSynchronized:
-            statusMessage = "Hardware sample rate set to \(Int(fileSampleRate)) Hz"
-            hasError = false
-
-        case .error(let error):
-            statusMessage = error.localizedDescription
-            hasError = true
+    private func showReadyStatus(for audioInfo: AudioInfo) {
+        if hasSampleRateMismatch {
+            setStatusMessage("Ready — output at \(Int(hardwareSampleRate)) Hz (file is \(Int(audioInfo.sampleRate)) Hz)")
+        } else {
+            setStatusMessage("Ready to play at \(Int(audioInfo.sampleRate)) Hz")
         }
     }
-}
 
-// MARK: - Status Events
+    private func showPlayingStatus() {
+        if hasSampleRateMismatch {
+            setStatusMessage("Playing at \(Int(hardwareSampleRate)) Hz (resampled from \(Int(fileSampleRate)) Hz)")
+        } else {
+            setStatusMessage("Playing at \(Int(fileSampleRate)) Hz")
+        }
+    }
 
-/// Events that trigger status message updates
-private enum StatusEvent {
-    case loading
-    case ready(AudioInfo)
-    case playing
-    case paused
-    case stopped
-    case finished
-    case loadingCancelled
-    case sampleRateSynchronized
-    case error(PlaybackError)
+    private func showError(_ error: PlaybackError) {
+        statusMessage = error.localizedDescription
+        hasError = true
+    }
+
+    private func setStatusMessage(_ message: String) {
+        statusMessage = message
+        hasError = false
+    }
 }

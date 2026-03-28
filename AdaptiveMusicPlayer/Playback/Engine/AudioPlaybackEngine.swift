@@ -41,6 +41,15 @@ final class AudioPlaybackEngine {
 
     // MARK: - File Loading
 
+    /// Move the engine into a loading state before async file work begins.
+    func beginLoading() {
+        if let player {
+            player.stop()
+            player.currentTime = 0
+        }
+        state = .loading
+    }
+
     /// Load an audio file and prepare for playback
     func loadFile(from url: URL) async throws -> AudioInfo {
         state = .loading
