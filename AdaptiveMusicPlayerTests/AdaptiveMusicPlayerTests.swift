@@ -139,6 +139,31 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.playlistTrackPosition == "1 of 1")
         #expect(player.hasError == false)
     }
+
+    @Test("Moving to the next playlist track starts playback automatically")
+    func nextTrackAutoplays() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/01-first.wav"))
+        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/02-second.wav"))
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        player.playNextTrack()
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "02-second.wav")
+        #expect(player.playlistTrackPosition == "2 of 2")
+        #expect(player.isPlaying == true)
+        #expect(player.hasError == false)
+    }
 }
 
 @Suite("TimeFormatter Tests")

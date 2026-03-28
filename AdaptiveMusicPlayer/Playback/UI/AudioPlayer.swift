@@ -229,11 +229,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func playNextTrack() {
-        moveToAdjacentTrack(next: true)
+        moveToAdjacentTrack(next: true, autoplay: true)
     }
 
     func playPreviousTrack() {
-        moveToAdjacentTrack(next: false)
+        moveToAdjacentTrack(next: false, autoplay: true)
     }
 
     // MARK: - Playback Control
