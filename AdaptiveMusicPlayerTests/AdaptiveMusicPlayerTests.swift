@@ -1,6 +1,7 @@
 import Testing
 import AVFoundation
 import CoreAudio
+import Foundation
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlayer Tests")
@@ -127,6 +128,27 @@ struct TimeFormatterTests {
     }
 }
 
+@Suite("SecurityScopedFileLoader Tests")
+struct SecurityScopedFileLoaderTests {
+
+    @Test("Loads regular file URLs even when no direct scoped access is granted")
+    func loadsUnscopedReadableFile() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let fileURL = rootFolder.appending(path: "track.wav")
+        let contents = Data("audio".utf8)
+        try TemporaryFolder.writeFile(at: fileURL, contents: contents)
+
+        let loader = SecurityScopedFileLoader()
+        let loadedFile = try await loader.load(url: fileURL)
+
+        #expect(loadedFile.data == contents)
+        #expect(loadedFile.fileName == "track.wav")
+        #expect(loadedFile.fileExtension == "wav")
+    }
+}
+
 @Suite("PlaybackControlUseCase Tests")
 @MainActor
 struct PlaybackControlUseCaseTests {
@@ -155,6 +177,41 @@ struct PlaybackControlUseCaseTests {
             try useCase.play(player: player, state: .ready(audioInfo))
         }
         #expect(player.playCallCount == 1)
+    }
+}
+
+@Suite("PlaybackPlaylist Tests")
+struct PlaybackPlaylistTests {
+
+    @Test("Playlist tracks move forward and backward safely")
+    func playlistNavigation() throws {
+        let tracks = [
+            URL(fileURLWithPath: "/tmp/a.wav"),
+            URL(fileURLWithPath: "/tmp/b.wav"),
+            URL(fileURLWithPath: "/tmp/c.wav")
+        ]
+
+        let firstPlaylist = try #require(PlaybackPlaylist(tracks: tracks))
+        #expect(firstPlaylist.currentTrackURL == tracks[0])
+        #expect(firstPlaylist.canMoveToPreviousTrack == false)
+        #expect(firstPlaylist.canMoveToNextTrack == true)
+        #expect(firstPlaylist.positionDescription == "1 of 3")
+
+        let secondPlaylist = try #require(firstPlaylist.playlistByMovingToNextTrack())
+        #expect(secondPlaylist.currentTrackURL == tracks[1])
+        #expect(secondPlaylist.canMoveToPreviousTrack == true)
+        #expect(secondPlaylist.canMoveToNextTrack == true)
+
+        let thirdPlaylist = try #require(secondPlaylist.playlistByMovingToNextTrack())
+        #expect(thirdPlaylist.currentTrackURL == tracks[2])
+        #expect(thirdPlaylist.canMoveToNextTrack == false)
+        #expect(thirdPlaylist.playlistByMovingToNextTrack() == nil)
+        #expect(try #require(thirdPlaylist.playlistByMovingToPreviousTrack()).currentTrackURL == tracks[1])
+    }
+
+    @Test("Playlist rejects empty track lists")
+    func rejectsEmptyPlaylists() {
+        #expect(PlaybackPlaylist(tracks: []) == nil)
     }
 }
 
@@ -243,6 +300,72 @@ struct PlaybackProgressTrackerTests {
     }
 }
 
+@Suite("AudioPlaylistFolderScanner Tests")
+struct AudioPlaylistFolderScannerTests {
+
+    @Test("Recursively scans folders, keeps playable files, and sorts by full path")
+    func scansRecursivelyAndSortsByPath() throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        try TemporaryFolder.createSubfolder(named: "z-last", in: rootFolder)
+        try TemporaryFolder.createSubfolder(named: "a-first/deeper", in: rootFolder)
+
+        let topLevelPlayable = rootFolder.appending(path: "middle.wav")
+        let nestedPlayable = rootFolder.appending(path: "a-first/song.mp3")
+        let deepPlayable = rootFolder.appending(path: "a-first/deeper/intro.aiff")
+        let ignoredText = rootFolder.appending(path: "notes.txt")
+        let hiddenPlayable = rootFolder.appending(path: ".hidden.mp3")
+
+        try TemporaryFolder.writeFile(at: topLevelPlayable)
+        try TemporaryFolder.writeFile(at: nestedPlayable)
+        try TemporaryFolder.writeFile(at: deepPlayable)
+        try TemporaryFolder.writeFile(at: ignoredText)
+        try TemporaryFolder.writeFile(at: hiddenPlayable)
+
+        let scanner = AudioPlaylistFolderScanner()
+
+        let files = try scanner.scan(folderURL: rootFolder)
+
+        #expect(files == [deepPlayable, nestedPlayable, topLevelPlayable])
+    }
+
+    @Test("Rejects file URLs instead of folders")
+    func rejectsNonDirectoryURLs() throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let fileURL = rootFolder.appending(path: "track.wav")
+        try TemporaryFolder.writeFile(at: fileURL)
+
+        let scanner = AudioPlaylistFolderScanner()
+
+        #expect(throws: AudioPlaylistFolderScannerError.notADirectory(fileURL)) {
+            try scanner.scan(folderURL: fileURL)
+        }
+    }
+
+    @Test("Separates recursion from filtering so selection logic stays unit testable")
+    func supportsInjectedEnumerationAndFiltering() throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let expectedAudio = rootFolder.appending(path: "disc-1/keep-me.wav")
+        let alsoPlayable = rootFolder.appending(path: "disc-2/another-song.mp3")
+        let ignoredText = rootFolder.appending(path: "disc-1/readme.txt")
+        let enumerator = StubDirectoryTreeEnumerator(urls: [ignoredText, alsoPlayable, expectedAudio])
+        let classifier = StubPlayableAudioFileClassifier(playableURLs: [alsoPlayable, expectedAudio])
+        let scanner = AudioPlaylistFolderScanner(
+            directoryEnumerator: enumerator,
+            audioFileClassifier: classifier
+        )
+
+        let files = try scanner.scan(folderURL: rootFolder)
+
+        #expect(files == [expectedAudio, alsoPlayable])
+    }
+}
+
 private final class StubAudioPlayer: AVAudioPlayer {
     var playResult: Bool
     var playCallCount = 0
@@ -297,5 +420,45 @@ private extension Data {
         Swift.withUnsafeBytes(of: &littleEndian) { bytes in
             append(bytes.bindMemory(to: UInt8.self))
         }
+    }
+}
+
+private struct StubDirectoryTreeEnumerator: DirectoryTreeEnumerating {
+    let urls: [URL]
+
+    func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL] {
+        urls
+    }
+}
+
+private struct StubPlayableAudioFileClassifier: PlayableAudioFileClassifying {
+    let playableURLs: Set<URL>
+
+    func isPlayableFile(at url: URL) -> Bool {
+        playableURLs.contains(url)
+    }
+}
+
+private enum TemporaryFolder {
+    static func make() throws -> URL {
+        let baseURL = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+        return baseURL
+    }
+
+    static func createSubfolder(named relativePath: String, in rootFolder: URL) throws {
+        let folderURL = rootFolder.appending(path: relativePath, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+    }
+
+    static func writeFile(at url: URL, contents: Data = Data("test".utf8)) throws {
+        let parentURL = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: true)
+        try contents.write(to: url)
+    }
+
+    static func remove(_ url: URL) throws {
+        try FileManager.default.removeItem(at: url)
     }
 }

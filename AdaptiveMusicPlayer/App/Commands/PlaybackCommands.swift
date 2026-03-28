@@ -12,6 +12,12 @@ struct PlaybackCommands: Commands {
             }
             .keyboardShortcut("o", modifiers: .command)
             .disabled(actions == nil)
+
+            Button("Open Folder...") {
+                actions?.openFolderPicker()
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
+            .disabled(actions == nil)
         }
 
         CommandGroup(replacing: .textEditing) {
@@ -40,6 +46,20 @@ struct PlaybackCommands: Commands {
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(actions?.canControlPlayback != true)
+
+            Divider()
+
+            Button("Previous Track") {
+                actions?.playPreviousTrack()
+            }
+            .keyboardShortcut(.leftArrow, modifiers: .command)
+            .disabled(actions?.canNavigatePlaylist != true)
+
+            Button("Next Track") {
+                actions?.playNextTrack()
+            }
+            .keyboardShortcut(.rightArrow, modifiers: .command)
+            .disabled(actions?.canNavigatePlaylist != true)
         }
     }
 }

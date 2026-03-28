@@ -2,8 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    private enum ImportTarget {
+        case file
+        case folder
+    }
+
     @State private var player = AudioPlayer()
-    @State private var showingFilePicker = false
+    @State private var activeImportTarget: ImportTarget?
+    @State private var showingImporter = false
     @State private var sliderPosition: Double = 0
     @State private var isEditingSlider = false
 
@@ -25,20 +31,14 @@ struct ContentView: View {
         .frame(width: 520)
         .focusedSceneValue(\.playbackCommandActions, playbackCommandActions)
         .fileImporter(
-            isPresented: $showingFilePicker,
-            allowedContentTypes: [
-                .audio,
-                .mp3,
-                .wav,
-                .aiff
-            ],
+            isPresented: $showingImporter,
+            allowedContentTypes: allowedImportContentTypes,
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    // Let the picker dismiss before file access begins.
-                    player.loadFile(url: url, importerDismissalDelay: .milliseconds(50))
+                    handleImportedURL(url)
                 }
             case .failure(let error):
                 player.reportFileSelectionError(error.localizedDescription)
@@ -93,34 +93,43 @@ struct ContentView: View {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             } else {
-                                Text("Choose an audio file to begin")
+                                Text("Choose an audio file or folder to begin")
                                     .foregroundStyle(.white.opacity(0.9))
                             }
                         }
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
 
-                        Button(action: { showingFilePicker = true }) {
-                            Image(systemName: "waveform.badge.plus")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.96))
-                                .frame(width: 36, height: 36)
-                                .background(.white.opacity(0.08))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        HStack(spacing: 8) {
+                            libraryButton(
+                                systemImage: "waveform.badge.plus",
+                                action: { presentImporter(for: .file) },
+                                help: player.currentFileName == nil
+                                    ? "Open Audio File (⌘O)"
+                                    : "Choose Another Audio File (⌘O)"
+                            )
+
+                            libraryButton(
+                                systemImage: "folder.badge.plus",
+                                action: { presentImporter(for: .folder) },
+                                help: "Open Folder (⇧⌘O)"
+                            )
                         }
-                        .buttonStyle(.plain)
-                        .help(player.currentFileName == nil ? "Open Audio File (⌘O)" : "Choose Another Audio File (⌘O)")
 
                         Spacer(minLength: 0)
                     }
 
-                    Text(player.currentFileName == nil ? "" : player.sampleRateStatusDetail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let playlistTrackPosition = player.playlistTrackPosition {
+                            Label("Track \(playlistTrackPosition)", systemImage: "music.note.list")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.78))
+                        }
+
+                        Text(player.currentFileName == nil ? "" : player.sampleRateStatusDetail)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
 
                 Spacer()
@@ -177,8 +186,16 @@ struct ContentView: View {
         HStack(spacing: 16) {
             GlassEffectContainer {
                 HStack(spacing: 12) {
+                    Button(action: { player.playPreviousTrack() }) {
+                        Image(systemName: "backward.end.fill")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.glass)
+                    .help("Previous Track (⌘←)")
+                    .disabled(!player.canPlayPreviousTrack || player.isLoading)
+
                     Button(action: { player.skipBackward() }) {
-                        Image(systemName: "backward.fill")
+                        Image(systemName: "gobackward.10")
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.glass)
@@ -194,12 +211,20 @@ struct ContentView: View {
                     .disabled(player.currentFileName == nil || player.isLoading)
 
                     Button(action: { player.skipForward() }) {
-                        Image(systemName: "forward.fill")
+                        Image(systemName: "goforward.10")
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.glass)
                     .help("Skip Forward 10s")
                     .disabled(player.currentFileName == nil || player.isLoading)
+
+                    Button(action: { player.playNextTrack() }) {
+                        Image(systemName: "forward.end.fill")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.glass)
+                    .help("Next Track (⌘→)")
+                    .disabled(!player.canPlayNextTrack || player.isLoading)
 
                     Button(action: { player.stop() }) {
                         Image(systemName: "stop.fill")
@@ -354,7 +379,8 @@ struct ContentView: View {
 
     private var playbackCommandActions: PlaybackCommandActions {
         PlaybackCommandActions(
-            openFilePicker: { showingFilePicker = true },
+            openFilePicker: { presentImporter(for: .file) },
+            openFolderPicker: { presentImporter(for: .folder) },
             togglePlayPause: {
                 guard canPerformPlaybackAction else { return }
                 player.togglePlayPause()
@@ -371,7 +397,16 @@ struct ContentView: View {
                 guard canPerformPlaybackAction else { return }
                 player.skipBackward()
             },
-            canControlPlayback: canPerformPlaybackAction
+            playNextTrack: {
+                guard player.canPlayNextTrack && !player.isLoading else { return }
+                player.playNextTrack()
+            },
+            playPreviousTrack: {
+                guard player.canPlayPreviousTrack && !player.isLoading else { return }
+                player.playPreviousTrack()
+            },
+            canControlPlayback: canPerformPlaybackAction,
+            canNavigatePlaylist: !player.isLoading && (player.canPlayNextTrack || player.canPlayPreviousTrack)
         )
     }
 
@@ -441,6 +476,52 @@ struct ContentView: View {
 
     private func timeString(_ time: Double) -> String {
         TimeFormatter.format(time)
+    }
+
+    private func libraryButton(systemImage: String, action: @escaping () -> Void, help: String) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.96))
+                .frame(width: 36, height: 36)
+                .background(.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private var allowedImportContentTypes: [UTType] {
+        switch activeImportTarget {
+        case .folder:
+            return [.folder]
+        case .file, .none:
+            return [
+                .audio,
+                .mp3,
+                .wav,
+                .aiff
+            ]
+        }
+    }
+
+    private func presentImporter(for target: ImportTarget) {
+        activeImportTarget = target
+        showingImporter = true
+    }
+
+    private func handleImportedURL(_ url: URL) {
+        // Let the picker dismiss before file access begins.
+        switch activeImportTarget {
+        case .folder:
+            player.loadFolder(url: url, importerDismissalDelay: .milliseconds(50))
+        case .file, .none:
+            player.loadFile(url: url, importerDismissalDelay: .milliseconds(50))
+        }
     }
 }
 

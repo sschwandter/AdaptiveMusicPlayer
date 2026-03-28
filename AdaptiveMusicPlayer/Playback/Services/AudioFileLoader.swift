@@ -2,9 +2,9 @@ import Foundation
 
 /// Loaded audio file data
 struct LoadedAudioFile {
-    let data: Data
-    let fileName: String
-    let fileExtension: String
+    nonisolated let data: Data
+    nonisolated let fileName: String
+    nonisolated let fileExtension: String
 }
 
 /// Protocol for loading audio files
@@ -25,14 +25,25 @@ final class SecurityScopedFileLoader: AudioFileLoading {
             throw CancellationError()
         }
 
-        // Access security-scoped resource
-        guard url.startAccessingSecurityScopedResource() else {
-            throw LoaderError.cannotAccessFile
+        // Directly selected files can grant security-scoped access themselves, while
+        // playlist entries discovered under an already-open scoped folder may not.
+        let didAccessScopedResource = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessScopedResource {
+                url.stopAccessingSecurityScopedResource()
+            }
         }
-        defer { url.stopAccessingSecurityScopedResource() }
 
         // Load file data into memory
-        let data = try Data(contentsOf: url)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            if !didAccessScopedResource {
+                throw LoaderError.cannotAccessFile
+            }
+            throw error
+        }
 
         // Check cancellation after expensive operation
         guard !Task.isCancelled else {
