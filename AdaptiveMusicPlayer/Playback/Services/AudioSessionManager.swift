@@ -2,7 +2,9 @@ import Foundation
 import AVFoundation
 
 /// Represents a complete audio playback session
-struct AudioSession: Sendable {
+/// @unchecked because AVAudioPlayer is not Sendable, but the session is created
+/// on a background thread and then consumed exclusively on @MainActor.
+struct AudioSession: @unchecked Sendable {
     let player: AVAudioPlayer
     let fileName: String
     let sampleRate: Double

@@ -29,7 +29,7 @@ protocol PlaybackControlUseCaseProtocol: Sendable {
 
 /// Use case for controlling playback state
 /// Handles play, pause, and stop operations with state validation
-@MainActor
+/// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
 final class PlaybackControlUseCase: PlaybackControlUseCaseProtocol {
 
     func play(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState {

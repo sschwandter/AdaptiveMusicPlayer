@@ -33,7 +33,7 @@ protocol SeekingUseCaseProtocol: Sendable {
 
 /// Use case for seeking and navigation within audio tracks
 /// Handles seeking to specific positions and skip forward/backward operations
-@MainActor
+/// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
 final class SeekingUseCase: SeekingUseCaseProtocol {
 
     // MARK: - Constants

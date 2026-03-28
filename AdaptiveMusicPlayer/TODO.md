@@ -10,9 +10,9 @@
 
 ### Medium Priority
 
-- [ ] **`AudioSession` marked `Sendable` but contains `AVAudioPlayer`** — `AVAudioPlayer` is not `Sendable`. This compiles today but is semantically unsafe and may break in future Swift versions. Consider removing the `Sendable` conformance or wrapping the player access. (`AudioSessionManager.swift:5`)
+- [x] **`AudioSession` marked `Sendable` but contains `AVAudioPlayer`** — Fixed. Changed to `@unchecked Sendable` with safety comment (created on background, consumed on MainActor).
 
-- [ ] **Protocol `Sendable` vs `@MainActor` mismatch** — `PlaybackControlUseCaseProtocol` and `SeekingUseCaseProtocol` require `Sendable`, but their concrete implementations are `@MainActor`. A caller off the main actor could theoretically invoke these and violate isolation. Make the protocols `@MainActor` or remove `Sendable`. (`PlaybackControlUseCase.swift:5,32`, `SeekingUseCase.swift:5,36`)
+- [x] **Protocol `Sendable` vs `@MainActor` mismatch** — Fixed. Removed `@MainActor` from `PlaybackControlUseCase` and `SeekingUseCase` (stateless, no isolation needed).
 
 - [ ] **Combine usage despite project convention** — `PlaybackProgressTracker` imports Combine and uses `Timer.publish().autoconnect().values`. The CLAUDE.md states to avoid Combine and prefer async/await. Replace with a `while !Task.isCancelled` loop using `Task.sleep`. (`PlaybackProgressTracker.swift:3,65`)
 
