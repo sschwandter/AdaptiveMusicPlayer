@@ -138,6 +138,7 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.currentFileName == "track.wav")
         #expect(player.playlistTrackPosition == "1 of 1")
         #expect(player.hasError == false)
+        #expect(player.isLoading == false)
     }
 
     @Test("Moving to the next playlist track starts playback automatically")
@@ -163,6 +164,31 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.playlistTrackPosition == "2 of 2")
         #expect(player.isPlaying == true)
         #expect(player.hasError == false)
+    }
+
+    @Test("Selecting a playlist track updates the current track")
+    func selectPlaylistTrackMovesToChosenEntry() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/01-first.wav"))
+        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/02-second.wav"))
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        player.selectPlaylistTrack(at: 1)
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "02-second.wav")
+        #expect(player.playlistTrackPosition == "2 of 2")
+        #expect(player.playlistTracks.count == 2)
+        #expect(player.playlistTracks.last?.isCurrent == true)
     }
 }
 
@@ -415,8 +441,7 @@ struct AudioPlaylistFolderScannerTests {
 
         let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(result.files == [deepPlayable, nestedPlayable, topLevelPlayable])
-        #expect(result.warnings.isEmpty)
+        #expect(result == [deepPlayable, nestedPlayable, topLevelPlayable])
     }
 
     @Test("Rejects file URLs instead of folders")
@@ -451,32 +476,7 @@ struct AudioPlaylistFolderScannerTests {
 
         let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(result.files == [expectedAudio, alsoPlayable])
-        #expect(result.warnings.isEmpty)
-    }
-
-    @Test("Reports skipped paths when directory enumeration encounters errors")
-    func reportsEnumerationWarnings() throws {
-        let rootFolder = try TemporaryFolder.make()
-        defer { try? TemporaryFolder.remove(rootFolder) }
-
-        let playable = rootFolder.appending(path: "track.wav")
-        let warning = AudioPlaylistFolderScanWarning(
-            path: rootFolder.appending(path: "restricted").path,
-            message: "Permission denied"
-        )
-        let enumerator = StubDirectoryTreeEnumerator(urls: [playable], warnings: [warning])
-        let classifier = StubPlayableAudioFileClassifier(playableURLs: [playable])
-        let scanner = AudioPlaylistFolderScanner(
-            directoryEnumerator: enumerator,
-            audioFileClassifier: classifier
-        )
-
-        let result = try scanner.scan(folderURL: rootFolder)
-
-        #expect(result.files == [playable])
-        #expect(result.warnings == [warning])
-        #expect(result.warningSummary == "Skipped 1 unreadable item while scanning the folder.")
+        #expect(result == [expectedAudio, alsoPlayable])
     }
 }
 
@@ -539,10 +539,9 @@ private extension Data {
 
 private struct StubDirectoryTreeEnumerator: DirectoryTreeEnumerating {
     let urls: [URL]
-    var warnings: [AudioPlaylistFolderScanWarning] = []
 
-    func recursivelyEnumerateFiles(in folderURL: URL) throws -> DirectoryTreeEnumerationResult {
-        DirectoryTreeEnumerationResult(urls: urls, warnings: warnings)
+    func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL] {
+        urls
     }
 }
 

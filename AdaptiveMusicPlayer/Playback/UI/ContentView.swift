@@ -25,11 +25,7 @@ struct ContentView: View {
             VStack(spacing: 18) {
                 headerCard
                 transportSection
-                diagnosticsCard
-
-                if !player.statusMessage.isEmpty {
-                    statusBanner
-                }
+                playlistBrowserCard
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(24)
@@ -42,10 +38,14 @@ struct ContentView: View {
             allowedContentTypes: allowedImportContentTypes,
             allowsMultipleSelection: false
         ) { result in
+            let importTarget = activeImportTarget
+            showingImporter = false
+            activeImportTarget = nil
+
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    handleImportedURL(url)
+                    handleImportedURL(url, target: importTarget)
                 }
             case .failure(let error):
                 player.reportFileSelectionError(error.localizedDescription)
@@ -131,11 +131,6 @@ struct ContentView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.white.opacity(0.78))
                         }
-
-                        Text(player.currentFileName == nil ? "" : player.sampleRateStatusDetail)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
                     }
                 }
 
@@ -147,14 +142,15 @@ struct ContentView: View {
                             .controlSize(.small)
                     }
 
-                    Label(player.isPlaying ? "Live" : "Idle", systemImage: player.isPlaying ? "waveform.circle.fill" : "pause.circle")
+                    Label(activityIndicatorTitle, systemImage: activityIndicatorIconName)
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
-                        .background(.white.opacity(player.isPlaying ? 0.16 : 0.10))
+                        .background(activityIndicatorBackgroundColor)
                         .clipShape(Capsule())
+                        .help(activityIndicatorHelpText)
                 }
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(activityIndicatorForegroundColor)
             }
 
             VStack(spacing: 10) {
@@ -261,111 +257,36 @@ struct ContentView: View {
         }
     }
 
-    private var diagnosticsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Playback Path")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+    private var playlistBrowserCard: some View {
+        Group {
+            if player.hasPlaylist && player.currentFileName != nil {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label("Playlist", systemImage: "music.note.list")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
 
-                
-                }
+                        Spacer()
 
-                Spacer()
-
-                Text(player.sampleRateBadgeTitle)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(badgeBackgroundColor)
-                    .foregroundStyle(badgeForegroundColor)
-                    .clipShape(Capsule())
-
-                if player.hasSampleRateMismatch {
-                    Button(action: {
-                        Task {
-                            await player.synchronizeSampleRates()
+                        if let playlistTrackPosition = player.playlistTrackPosition {
+                            Text(playlistTrackPosition)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
                         }
-                    }) {
-                        Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                            .labelStyle(.titleAndIcon)
                     }
-                    .buttonStyle(.borderless)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.white.opacity(0.08))
-                    .clipShape(Capsule())
-                    .help("Set hardware to \(Int(player.fileSampleRate)) Hz for bit-perfect playback")
-                    .disabled(player.isLoading)
+
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(player.playlistTracks) { track in
+                                playlistTrackRow(track)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 180)
                 }
-            }
-
-            HStack(spacing: 12) {
-                InfoTile(
-                    title: "Rate",
-                    value: player.sampleRateRouteDescription,
-                    systemImage: "waveform.path.ecg",
-                    emphasized: true
-                )
-
-                InfoTile(
-                    title: "Output",
-                    value: player.hardwareDeviceDisplayName,
-                    systemImage: "airplayaudio"
-                )
-            }
-
-            if player.showsSupportedRatesHint {
-                InfoTile(
-                    title: "Supported",
-                    value: player.supportedHardwareSampleRatesDescription,
-                    systemImage: "slider.horizontal.3"
-                )
-            }
-
-            if let explanation = player.compactSampleRateExplanation {
-                Label(explanation, systemImage: "info.circle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+                .padding(20)
+                .background(cardBackground)
             }
         }
-        .font(.callout)
-        .padding(20)
-        .background(cardBackground)
-    }
-
-    private var statusBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: statusIconName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(statusForegroundColor)
-                .frame(width: 28, height: 28)
-                .background(statusForegroundColor.opacity(0.14))
-                .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(player.hasError ? "Attention" : "Status")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(player.statusMessage)
-                    .font(.footnote)
-                    .foregroundStyle(player.hasError ? Color.primary : Color.primary.opacity(0.92))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(statusBackgroundColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(statusForegroundColor.opacity(0.2), lineWidth: 1)
-        )
     }
 
     private var cardBackground: some View {
@@ -417,66 +338,52 @@ struct ContentView: View {
         )
     }
 
-    private var badgeBackgroundColor: Color {
-        switch player.sampleRateBadgeTitle {
-        case "Matched":
-            return .green.opacity(0.18)
-        case "Resampling":
-            return .orange.opacity(0.22)
-        case "Unsupported":
-            return .red.opacity(0.18)
-        default:
-            return .white.opacity(0.10)
-        }
-    }
-
-    private var badgeForegroundColor: Color {
-        switch player.sampleRateBadgeTitle {
-        case "Matched":
-            return .green
-        case "Resampling":
-            return .orange
-        case "Unsupported":
-            return .red
-        default:
-            return .white.opacity(0.72)
-        }
-    }
-
-    private var statusForegroundColor: Color {
+    private var activityIndicatorForegroundColor: Color {
         if player.hasError {
             return .red
         }
 
-        switch player.statusMessage {
-        case let message where message.contains("Playing"):
+        if player.isPlaying {
             return .green
-        case let message where message.contains("Loading"):
-            return .orange
-        default:
-            return .cyan
         }
+
+        return .white.opacity(0.92)
     }
 
-    private var statusBackgroundColor: Color {
-        player.hasError ? .red.opacity(0.12) : .white.opacity(0.08)
+    private var activityIndicatorBackgroundColor: Color {
+        if player.hasError {
+            return .red.opacity(0.16)
+        }
+
+        return .white.opacity(player.isPlaying ? 0.16 : 0.10)
     }
 
-    private var statusIconName: String {
+    private var activityIndicatorIconName: String {
         if player.hasError {
             return "exclamationmark.triangle.fill"
         }
 
-        switch player.statusMessage {
-        case let message where message.contains("Playing"):
+        if player.isPlaying {
             return "waveform.circle.fill"
-        case let message where message.contains("Loading"):
-            return "arrow.clockwise.circle.fill"
-        case let message where message.contains("Stopped"):
-            return "stop.circle.fill"
-        default:
-            return "info.circle.fill"
         }
+
+        return "pause.circle"
+    }
+
+    private var activityIndicatorTitle: String {
+        if player.hasError {
+            return "Error"
+        }
+
+        return player.isPlaying ? "Live" : "Idle"
+    }
+
+    private var activityIndicatorHelpText: String {
+        if player.hasError, !player.statusMessage.isEmpty {
+            return player.statusMessage
+        }
+
+        return player.isPlaying ? "Playback in progress" : "Playback is idle"
     }
 
     // MARK: - Private Methods
@@ -521,42 +428,56 @@ struct ContentView: View {
         showingImporter = true
     }
 
-    private func handleImportedURL(_ url: URL) {
+    private func handleImportedURL(_ url: URL, target: ImportTarget?) {
         // Let the picker dismiss before file access begins.
-        switch activeImportTarget {
+        switch target {
         case .folder:
             player.loadFolder(url: url, importerDismissalDelay: .milliseconds(50))
         case .file, .none:
             player.loadFile(url: url, importerDismissalDelay: .milliseconds(50))
         }
     }
-}
 
-private struct InfoTile: View {
-    let title: String
-    let value: String
-    let systemImage: String
-    var emphasized: Bool = false
+    private func playlistTrackRow(_ track: AudioPlayer.PlaylistTrackRow) -> some View {
+        Button(action: { player.selectPlaylistTrack(at: track.index) }) {
+            HStack(spacing: 12) {
+                Text("\(track.index + 1)")
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(track.isCurrent ? .white : .secondary)
+                    .frame(width: 24, alignment: .trailing)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(track.title)
+                        .font(.callout.weight(track.isCurrent ? .semibold : .medium))
+                        .lineLimit(1)
 
-            Text(value)
-                .font(emphasized ? .system(.body, design: .monospaced, weight: .semibold) : .body)
-                .lineLimit(title == "Output" ? 1 : nil)
-                .truncationMode(.tail)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(track.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if track.isCurrent {
+                    Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "music.note")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.cyan)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(track.isCurrent ? .white.opacity(0.12) : .white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(track.isCurrent ? .cyan.opacity(0.25) : .white.opacity(0.06), lineWidth: 1)
+            )
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.white.opacity(0.05))
-        )
+        .buttonStyle(.plain)
     }
 }
 

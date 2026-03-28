@@ -7,6 +7,16 @@ import Observation
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
+    struct PlaylistTrackRow: Identifiable, Equatable {
+        let url: URL
+        let index: Int
+        let isCurrent: Bool
+
+        var id: URL { url }
+        var title: String { url.lastPathComponent }
+        var subtitle: String { url.deletingLastPathComponent().lastPathComponent }
+    }
+
 
     // MARK: - Constants
 
@@ -19,29 +29,52 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var statusMessage: String = ""
     var hasError: Bool = false
+    private var engineStateRevision: Int = 0
 
     // MARK: - Domain State (exposed to UI)
 
     var currentTime: Double = 0
-    var duration: Double { engine.state.audioInfo?.duration ?? 0 }
+    var duration: Double {
+        _ = engineStateRevision
+        return engine.state.audioInfo?.duration ?? 0
+    }
     var volume: Double = 1 {
         didSet {
             engine.setVolume(volume)
         }
     }
-    var currentFileName: String? { engine.state.audioInfo?.fileName }
+    var currentFileName: String? {
+        _ = engineStateRevision
+        return engine.state.audioInfo?.fileName
+    }
     var playlistTrackPosition: String? { playlistSession?.positionDescription }
+    var playlistTracks: [PlaylistTrackRow] {
+        guard let playlistSession else { return [] }
+
+        return playlistSession.playlist.tracks.enumerated().map { index, url in
+            PlaylistTrackRow(url: url, index: index, isCurrent: index == playlistSession.currentIndex)
+        }
+    }
     var hasPlaylist: Bool { playlistSession?.trackCount ?? 0 > 1 }
     var canPlayPreviousTrack: Bool { playlistSession?.canMoveToPreviousTrack ?? false }
     var canPlayNextTrack: Bool { playlistSession?.canMoveToNextTrack ?? false }
-    var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
+    var fileSampleRate: Double {
+        _ = engineStateRevision
+        return engine.state.audioInfo?.sampleRate ?? 0
+    }
     var hardwareSampleRate: Double = 0
     var hardwareDeviceName: String = ""
     var supportedHardwareSampleRates: [Double] = []
 
-    var isLoading: Bool { engine.state.isLoading }
+    var isLoading: Bool {
+        _ = engineStateRevision
+        return engine.state.isLoading
+    }
 
-    var isPlaying: Bool { engine.state.isPlaying }
+    var isPlaying: Bool {
+        _ = engineStateRevision
+        return engine.state.isPlaying
+    }
 
     var hasSampleRateMismatch: Bool {
         guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
@@ -128,7 +161,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
     private var playlistSession: PlaylistSession?
-    private var playlistScanWarningSummary: String?
 
     // MARK: - Initialization
 
@@ -163,7 +195,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// Starts a file load and enters loading state immediately.
     /// A short delay can be requested to let the file importer dismiss first.
     func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
-        playlistScanWarningSummary = nil
         playlistSession = PlaylistSession.singleTrack(url)
         loadPlaylistTrack(at: 0, importerDismissalDelay: importerDismissalDelay)
     }
@@ -184,7 +215,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     throw PlaybackError.loadFailed("Cannot access folder")
                 }
 
-                let scanResult = try await Task.detached(priority: .userInitiated) {
+                let tracks = try await Task.detached(priority: .userInitiated) {
                     try self.folderScanner.scan(folderURL: url)
                 }.value
 
@@ -195,17 +226,26 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 }
 
                 guard let playlistSession = PlaylistSession.folderPlaylist(
-                    tracks: scanResult.files,
+                    tracks: tracks,
                     folderAccess: folderAccess
                 ) else {
                     self.showError(.loadFailed("No playable audio files were found in the selected folder."))
                     return
                 }
 
-                self.playlistScanWarningSummary = scanResult.warningSummary
                 self.playlistSession = playlistSession
-                self.loadPlaylistTrack(at: playlistSession.currentIndex)
-                await self.loadingTask?.value
+                let loadingMessage = playlistSession.trackCount > 1
+                    ? "Loading track \(playlistSession.positionDescription)..."
+                    : "Loading file..."
+                self.beginLoading(
+                    with: loadingMessage,
+                    cancelCurrentLoad: false,
+                    advanceGeneration: false
+                )
+                try await self.finishLoadingTrack(
+                    from: playlistSession.currentTrackURL,
+                    generation: generation
+                )
             } catch is CancellationError {
                 guard generation == self.loadGeneration else { return }
                 self.setStatusMessage("Loading cancelled")
@@ -236,6 +276,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         moveToAdjacentTrack(next: false, autoplay: true)
     }
 
+    func selectPlaylistTrack(at index: Int) {
+        let shouldAutoplay = isPlaying
+        guard let playlistSession, playlistSession.currentIndex != index else { return }
+        loadPlaylistTrack(at: index, autoplayOnSuccess: shouldAutoplay)
+    }
+
     // MARK: - Playback Control
 
     func togglePlayPause() {
@@ -249,6 +295,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func play() {
         do {
             try engine.play()
+            invalidateEngineState()
             startProgressTracking()
             Task {
                 await refreshHardwareInfo()
@@ -264,6 +311,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func pause() {
         do {
             try engine.pause()
+            invalidateEngineState()
             progressTracker.stopTracking()
             setStatusMessage("Paused")
         } catch let error as PlaybackError {
@@ -275,6 +323,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     func stop() {
         engine.stop()
+        invalidateEngineState()
         progressTracker.stopTracking()
         currentTime = 0
         setStatusMessage("Stopped")
@@ -357,6 +406,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 guard let self else { return }
                 if !self.moveToAdjacentTrack(next: true, autoplay: true) {
                     self.engine.markFinished()
+                    self.invalidateEngineState()
                     self.currentTime = self.duration
                     self.setStatusMessage("Playback finished")
                 }
@@ -383,14 +433,23 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
-    private func beginLoading(with message: String) {
+    private func beginLoading(
+        with message: String,
+        cancelCurrentLoad: Bool = true,
+        advanceGeneration: Bool = true
+    ) {
         engine.beginLoading()
+        invalidateEngineState()
         progressTracker.stopTracking()
         currentTime = 0
         setStatusMessage(message)
 
-        loadingTask?.cancel()
-        loadGeneration += 1
+        if cancelCurrentLoad {
+            loadingTask?.cancel()
+        }
+        if advanceGeneration {
+            loadGeneration += 1
+        }
     }
 
     private func loadPlaylistTrack(
@@ -415,23 +474,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     importerDismissalDelay,
                     generation: generation
                 )
-
-                let audioInfo = try await self.engine.loadFile(from: trackURL)
-
-                guard generation == self.loadGeneration else { return }
-                guard !Task.isCancelled else {
-                    self.setStatusMessage("Loading cancelled")
-                    return
-                }
-
-                self.currentTime = 0
-                self.engine.setVolume(self.volume)
-                await self.refreshHardwareInfo()
-                self.showReadyStatus(for: audioInfo)
-
-                if autoplayOnSuccess {
-                    self.play()
-                }
+                try await self.finishLoadingTrack(
+                    from: trackURL,
+                    generation: generation,
+                    autoplayOnSuccess: autoplayOnSuccess
+                )
             } catch is CancellationError {
                 guard generation == self.loadGeneration else { return }
                 self.setStatusMessage("Loading cancelled")
@@ -458,6 +505,30 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
+    private func finishLoadingTrack(
+        from trackURL: URL,
+        generation: Int,
+        autoplayOnSuccess: Bool = false
+    ) async throws {
+        let audioInfo = try await engine.loadFile(from: trackURL)
+        invalidateEngineState()
+
+        guard generation == loadGeneration else { return }
+        guard !Task.isCancelled else {
+            setStatusMessage("Loading cancelled")
+            return
+        }
+
+        currentTime = 0
+        engine.setVolume(volume)
+        await refreshHardwareInfo()
+        showReadyStatus(for: audioInfo)
+
+        if autoplayOnSuccess {
+            play()
+        }
+    }
+
     @discardableResult
     private func moveToAdjacentTrack(next: Bool, autoplay: Bool = false) -> Bool {
         guard let playlistSession else { return false }
@@ -477,12 +548,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let prefix = playlistSession?.trackCount ?? 0 > 1
             ? "Track \(playlistSession?.positionDescription ?? "") ready"
             : "Ready to play"
-        let warningSuffix = playlistScanWarningSuffix
 
         if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)\(warningSuffix)")
+            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)\(warningSuffix)")
+            setStatusMessage("\(prefix) at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
@@ -490,16 +560,16 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let prefix = playlistSession?.trackCount ?? 0 > 1
             ? "Playing track \(playlistSession?.positionDescription ?? "")"
             : "Playing"
-        let warningSuffix = playlistScanWarningSuffix
 
         if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)\(warningSuffix)")
+            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)\(warningSuffix)")
+            setStatusMessage("\(prefix) at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
     private func showError(_ error: PlaybackError) {
+        invalidateEngineState()
         statusMessage = error.localizedDescription
         hasError = true
     }
@@ -509,9 +579,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         hasError = false
     }
 
-    private var playlistScanWarningSuffix: String {
-        guard let playlistScanWarningSummary else { return "" }
-        return " \(playlistScanWarningSummary)"
+    private func invalidateEngineState() {
+        engineStateRevision &+= 1
     }
 
     private static func formatSampleRate(_ sampleRate: Double) -> String {
