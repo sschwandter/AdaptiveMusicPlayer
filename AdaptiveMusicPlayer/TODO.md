@@ -6,7 +6,7 @@
 
 - [x] **Core Audio blocks main thread** — Fixed. `getCurrentHardwareSampleRate()` now uses `Task.detached` to run Core Audio reads off the main thread. `setSampleRate()` calls were already safe in Swift 6 (nonisolated async hop); fixed misleading comments.
 
-- [ ] **File loading race condition** — `AudioPlayer.loadFile()` cancels the previous `loadingTask` then creates a new one, but cancellation is cooperative. The old task's error handler could run after the new task succeeds, overwriting good state with an error. Add a generation counter or task identity check so stale completions are discarded. (`AudioPlayer.swift:78-106`)
+- [x] **File loading race condition** — Fixed. Added `loadGeneration` counter so stale task completions from cancelled loads are silently discarded.
 
 ### Medium Priority
 

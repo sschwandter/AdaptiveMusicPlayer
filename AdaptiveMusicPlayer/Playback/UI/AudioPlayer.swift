@@ -50,6 +50,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
     private var loadingTask: Task<Void, Never>?
+    private var loadGeneration: Int = 0
 
     // MARK: - Initialization
 
@@ -78,15 +79,21 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         // Cancel any existing load operation
         loadingTask?.cancel()
+        loadGeneration += 1
+        let generation = loadGeneration
 
         loadingTask = Task {
             guard !Task.isCancelled else {
+                guard generation == self.loadGeneration else { return }
                 updateStatus(.loadingCancelled)
                 return
             }
 
             do {
                 let audioInfo = try await engine.loadFile(from: url)
+
+                // Discard result if a newer load has started
+                guard generation == self.loadGeneration else { return }
 
                 guard !Task.isCancelled else {
                     updateStatus(.loadingCancelled)
@@ -99,8 +106,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 updateStatus(.ready(audioInfo))
 
             } catch let error as PlaybackError {
+                guard generation == self.loadGeneration else { return }
                 updateStatus(.error(error))
             } catch {
+                guard generation == self.loadGeneration else { return }
                 updateStatus(.error(.loadFailed(error.localizedDescription)))
             }
         }
