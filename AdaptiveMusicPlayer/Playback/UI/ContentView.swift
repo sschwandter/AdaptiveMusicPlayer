@@ -4,7 +4,9 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     private enum LayoutMetrics {
         static let width: CGFloat = 520
-        static let minimumHeight: CGFloat = 700
+        static let verticalPadding: CGFloat = 24
+        static let playlistCardPadding: CGFloat = 20
+        static let playlistMaxHeight: CGFloat = 280
     }
 
     private enum ImportTarget {
@@ -21,17 +23,9 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             backgroundView
-
-            VStack(spacing: 18) {
-                headerCard
-                transportSection
-                playlistBrowserCard
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(24)
+            contentStack
         }
         .frame(width: LayoutMetrics.width)
-        .frame(minHeight: LayoutMetrics.minimumHeight, alignment: .top)
         .focusedSceneValue(\.playbackCommandActions, playbackCommandActions)
         .fileImporter(
             isPresented: $showingImporter,
@@ -51,6 +45,15 @@ struct ContentView: View {
                 player.reportFileSelectionError(error.localizedDescription)
             }
         }
+    }
+
+    private var contentStack: some View {
+        VStack(spacing: 18) {
+            headerCard
+            transportSection
+            playlistBrowserCard
+        }
+        .padding(LayoutMetrics.verticalPadding)
     }
 
     private var backgroundView: some View {
@@ -275,15 +278,18 @@ struct ContentView: View {
                     }
 
                     ScrollView {
-                        LazyVStack(spacing: 8) {
+                        VStack(spacing: 8) {
                             ForEach(player.playlistTracks) { track in
                                 playlistTrackRow(track)
                             }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxHeight: 180)
+                    .frame(minHeight: 250)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicators(.automatic)
                 }
-                .padding(20)
+                .padding(LayoutMetrics.playlistCardPadding)
                 .background(cardBackground)
             }
         }
