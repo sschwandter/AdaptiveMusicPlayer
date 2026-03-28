@@ -59,7 +59,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
-        updateHardwareSampleRate()
+        Task {
+            await updateHardwareSampleRate()
+        }
     }
 
     // MARK: - File Loading
@@ -93,7 +95,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
                 currentTime = 0
                 engine.setVolume(volume)
-                updateHardwareSampleRate()
+                await updateHardwareSampleRate()
                 updateStatus(.ready(audioInfo))
 
             } catch let error as PlaybackError {
@@ -120,7 +122,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         do {
             try engine.play()
             startProgressTracking()
-            updateHardwareSampleRate()
+            Task {
+                await updateHardwareSampleRate()
+            }
             updateStatus(.playing)
         } catch let error as PlaybackError {
             updateStatus(.error(error))
@@ -188,7 +192,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             try? await Task.sleep(for: .milliseconds(500))
 
             // Back on MainActor after await - safe to update UI
-            updateHardwareSampleRate()
+            await updateHardwareSampleRate()
             updateStatus(.sampleRateSynchronized)
         } catch let error as PlaybackError {
             updateStatus(.error(error))
@@ -216,15 +220,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 self.updateStatus(.finished)
             },
             onPeriodicUpdate: { [weak self] in
-                self?.updateHardwareSampleRate()
+                Task {
+                    await self?.updateHardwareSampleRate()
+                }
             }
         )
     }
 
     // MARK: - Private Methods
 
-    private func updateHardwareSampleRate() {
-        hardwareSampleRate = engine.getCurrentHardwareSampleRate()
+    private func updateHardwareSampleRate() async {
+        hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
     }
 
     /// Update presentation state based on domain state

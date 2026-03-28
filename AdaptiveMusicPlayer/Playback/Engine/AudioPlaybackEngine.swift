@@ -145,7 +145,8 @@ final class AudioPlaybackEngine {
 
     /// Synchronize hardware sample rate to match current audio file
     /// Sets hardware to match file's native sample rate for bit-perfect playback
-    /// Runs Core Audio operations on background thread to avoid blocking UI
+    /// Core Audio operations run off the main thread because SyncSampleRateUseCase.execute()
+    /// is nonisolated async, which hops to the cooperative thread pool in Swift 6.
     func synchronizeSampleRates() async throws {
         try await syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
     }
@@ -162,8 +163,12 @@ final class AudioPlaybackEngine {
     // MARK: - Hardware Info
 
     /// Get current hardware sample rate
-    func getCurrentHardwareSampleRate() -> Double {
-        sampleRateManager.getCurrentSampleRate() ?? 0
+    /// Uses Task.detached to run Core Audio query off the main thread
+    func getCurrentHardwareSampleRate() async -> Double {
+        let manager = sampleRateManager
+        return await Task.detached {
+            manager.getCurrentSampleRate() ?? 0
+        }.value
     }
 
     /// Get the underlying AVAudioPlayer for progress tracking

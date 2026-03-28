@@ -16,6 +16,8 @@ struct AudioPlayerTests {
         #expect(player.volume == 1.0)
         #expect(player.currentFileName == nil)
         #expect(player.fileSampleRate == 0)
+        // Hardware sample rate is fetched asynchronously off the main thread
+        try await Task.sleep(for: .milliseconds(100))
         #expect(player.hardwareSampleRate > 0) // Should get system default
         #expect(player.statusMessage == "")
         #expect(player.hasError == false)

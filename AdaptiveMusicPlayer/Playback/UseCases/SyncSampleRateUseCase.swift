@@ -19,7 +19,9 @@ final class SyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
             throw PlaybackError.noFileLoaded
         }
 
-        // Core Audio operations now run on background thread naturally via async
+        // In Swift 6, this nonisolated async method hops off MainActor to the cooperative
+        // thread pool when called from a @MainActor context, so setSampleRate() runs
+        // off the main thread without explicit Task.detached.
         try sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }
