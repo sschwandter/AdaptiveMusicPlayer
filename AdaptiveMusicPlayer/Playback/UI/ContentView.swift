@@ -6,7 +6,9 @@ struct ContentView: View {
         static let width: CGFloat = 520
         static let verticalPadding: CGFloat = 24
         static let playlistCardPadding: CGFloat = 20
-        static let playlistMaxHeight: CGFloat = 280
+        static let playlistTrackSpacing: CGFloat = 8
+        static let playlistRowMinHeight: CGFloat = 56
+        static let playlistMaxVisibleRowCount: Int = 5
     }
 
     private enum ImportTarget {
@@ -278,14 +280,14 @@ struct ContentView: View {
                     }
 
                     ScrollView {
-                        VStack(spacing: 8) {
+                        VStack(spacing: LayoutMetrics.playlistTrackSpacing) {
                             ForEach(player.playlistTracks) { track in
                                 playlistTrackRow(track)
                             }
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .frame(minHeight: 250)
+                    .frame(minHeight: playlistMinimumHeight)
                     .scrollBounceBehavior(.basedOnSize)
                     .scrollIndicators(.automatic)
                 }
@@ -293,6 +295,17 @@ struct ContentView: View {
                 .background(cardBackground)
             }
         }
+    }
+
+    private var playlistMinimumHeight: CGFloat {
+        let visibleTrackCount = min(
+            max(player.playlistTracks.count, 1),
+            LayoutMetrics.playlistMaxVisibleRowCount
+        )
+        let spacingCount = max(visibleTrackCount - 1, 0)
+
+        return CGFloat(visibleTrackCount) * LayoutMetrics.playlistRowMinHeight
+            + CGFloat(spacingCount) * LayoutMetrics.playlistTrackSpacing
     }
 
     private var cardBackground: some View {
@@ -474,6 +487,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: LayoutMetrics.playlistRowMinHeight)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(track.isCurrent ? .white.opacity(0.12) : .white.opacity(0.05))
