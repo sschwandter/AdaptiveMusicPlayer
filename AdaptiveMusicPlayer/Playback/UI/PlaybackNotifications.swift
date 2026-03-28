@@ -1,12 +1,22 @@
-import Foundation
+import SwiftUI
 
-/// Notification names for playback events
-/// Used to route app-level commands into ContentView.
-/// These notifications are currently process-wide rather than window-scoped.
-extension Notification.Name {
-    static let openFilePicker = Notification.Name("openFilePicker")
-    static let togglePlayPause = Notification.Name("togglePlayPause")
-    static let stopPlayback = Notification.Name("stopPlayback")
-    static let skipForward = Notification.Name("skipForward")
-    static let skipBackward = Notification.Name("skipBackward")
+/// Window-scoped command actions for the focused player scene.
+struct PlaybackCommandActions {
+    let openFilePicker: () -> Void
+    let togglePlayPause: () -> Void
+    let stopPlayback: () -> Void
+    let skipForward: () -> Void
+    let skipBackward: () -> Void
+    let canControlPlayback: Bool
+}
+
+private struct PlaybackCommandActionsKey: FocusedValueKey {
+    typealias Value = PlaybackCommandActions
+}
+
+extension FocusedValues {
+    var playbackCommandActions: PlaybackCommandActions? {
+        get { self[PlaybackCommandActionsKey.self] }
+        set { self[PlaybackCommandActionsKey.self] = newValue }
+    }
 }

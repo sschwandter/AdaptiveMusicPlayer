@@ -165,29 +165,7 @@ struct ContentView: View {
             
 
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
-            showingFilePicker = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .togglePlayPause)) { _ in
-            if canPerformPlaybackAction {
-                player.togglePlayPause()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .stopPlayback)) { _ in
-            if canPerformPlaybackAction {
-                player.stop()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .skipForward)) { _ in
-            if canPerformPlaybackAction {
-                player.skipForward()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .skipBackward)) { _ in
-            if canPerformPlaybackAction {
-                player.skipBackward()
-            }
-        }
+        .focusedSceneValue(\.playbackCommandActions, playbackCommandActions)
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [
@@ -230,6 +208,29 @@ struct ContentView: View {
 
     private var canPerformPlaybackAction: Bool {
         player.currentFileName != nil && !player.isLoading
+    }
+
+    private var playbackCommandActions: PlaybackCommandActions {
+        PlaybackCommandActions(
+            openFilePicker: { showingFilePicker = true },
+            togglePlayPause: {
+                guard canPerformPlaybackAction else { return }
+                player.togglePlayPause()
+            },
+            stopPlayback: {
+                guard canPerformPlaybackAction else { return }
+                player.stop()
+            },
+            skipForward: {
+                guard canPerformPlaybackAction else { return }
+                player.skipForward()
+            },
+            skipBackward: {
+                guard canPerformPlaybackAction else { return }
+                player.skipBackward()
+            },
+            canControlPlayback: canPerformPlaybackAction
+        )
     }
 
     private var sampleRateColor: Color {

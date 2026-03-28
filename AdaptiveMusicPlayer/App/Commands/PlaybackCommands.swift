@@ -1,38 +1,45 @@
 import SwiftUI
 
 /// Menu commands for playback control
-/// Provides keyboard shortcuts and menu items for audio playback operations
+/// Provides keyboard shortcuts and menu items for the focused player window
 struct PlaybackCommands: Commands {
+    @FocusedValue(\.playbackCommandActions) private var actions
+
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("Open Audio File...") {
-                NotificationCenter.default.post(name: .openFilePicker, object: nil)
+                actions?.openFilePicker()
             }
             .keyboardShortcut("o", modifiers: .command)
+            .disabled(actions == nil)
         }
 
         CommandGroup(replacing: .textEditing) {
             Button("Play/Pause") {
-                NotificationCenter.default.post(name: .togglePlayPause, object: nil)
+                actions?.togglePlayPause()
             }
             .keyboardShortcut(.space, modifiers: [])
+            .disabled(actions?.canControlPlayback != true)
 
             Button("Stop") {
-                NotificationCenter.default.post(name: .stopPlayback, object: nil)
+                actions?.stopPlayback()
             }
             .keyboardShortcut(".", modifiers: .command)
+            .disabled(actions?.canControlPlayback != true)
 
             Divider()
 
             Button("Skip Backward") {
-                NotificationCenter.default.post(name: .skipBackward, object: nil)
+                actions?.skipBackward()
             }
             .keyboardShortcut(.leftArrow, modifiers: [])
+            .disabled(actions?.canControlPlayback != true)
 
             Button("Skip Forward") {
-                NotificationCenter.default.post(name: .skipForward, object: nil)
+                actions?.skipForward()
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
+            .disabled(actions?.canControlPlayback != true)
         }
     }
 }
