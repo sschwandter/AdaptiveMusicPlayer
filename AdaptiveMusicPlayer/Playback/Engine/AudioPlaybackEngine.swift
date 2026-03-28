@@ -184,6 +184,14 @@ final class AudioPlaybackEngine {
         }.value
     }
 
+    /// Get current output-device diagnostics
+    func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
+        let manager = sampleRateManager
+        return await Task.detached {
+            manager.getCurrentDeviceInfo()
+        }.value
+    }
+
     /// Expose the active player to the progress tracker
     /// This keeps progress tracking separate, but still couples the engine to AVAudioPlayer.
     func getPlayer() -> AVAudioPlayer? {

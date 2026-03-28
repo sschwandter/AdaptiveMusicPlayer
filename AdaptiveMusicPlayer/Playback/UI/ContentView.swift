@@ -143,6 +143,26 @@ struct ContentView: View {
                 }
             }
             .font(.callout)
+
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledContent("Output Device") {
+                    Text(player.hardwareDeviceDisplayName)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                LabeledContent("Supported Rates") {
+                    Text(player.supportedHardwareSampleRatesDescription)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                LabeledContent("Sync Status") {
+                    Text(player.sampleRateStatusDetail)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
             
             // Status message
             if !player.statusMessage.isEmpty {

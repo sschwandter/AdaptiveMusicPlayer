@@ -20,6 +20,8 @@ struct AudioPlayerTests {
         // Hardware sample rate is fetched asynchronously off the main thread
         try await Task.sleep(for: .milliseconds(100))
         #expect(player.hardwareSampleRate > 0) // Should get system default
+        #expect(!player.hardwareDeviceDisplayName.isEmpty)
+        #expect(!player.sampleRateStatusDetail.isEmpty)
         #expect(player.statusMessage == "")
         #expect(player.hasError == false)
         #expect(player.isLoading == false)
@@ -107,6 +109,7 @@ struct AudioPlayerTests {
         // Should have error state
         #expect(player.hasError == true)
         #expect(!player.statusMessage.isEmpty)
+        #expect(!player.sampleRateStatusDetail.isEmpty)
     }
 }
 

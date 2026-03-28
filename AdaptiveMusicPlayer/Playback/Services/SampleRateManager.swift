@@ -1,11 +1,21 @@
 import Foundation
 import CoreAudio
 
+struct AudioDeviceInfo: Sendable, Equatable {
+    let name: String
+    let currentSampleRate: Double
+    let supportedSampleRates: [Double]
+}
+
 /// Protocol for managing audio device sample rates
 protocol SampleRateManaging: Sendable {
     /// Get the current hardware sample rate
     /// - Returns: The current sample rate in Hz, or nil if unavailable
     nonisolated func getCurrentSampleRate() -> Double?
+
+    /// Get the active output device name
+    /// - Returns: Human-readable device name, or nil if unavailable
+    nonisolated func getCurrentOutputDeviceName() -> String?
 
     /// Set the hardware sample rate
     /// - Parameter rate: The desired sample rate in Hz
@@ -15,6 +25,10 @@ protocol SampleRateManaging: Sendable {
     /// Get all supported sample rates for the current device
     /// - Returns: Array of supported sample rates in Hz
     nonisolated func getSupportedSampleRates() -> [Double]
+
+    /// Get current output device details in one query
+    /// - Returns: Device information, or nil if unavailable
+    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo?
 }
 
 /// Core Audio implementation of sample rate management
@@ -24,27 +38,14 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         guard let deviceID = try? getDefaultAudioDevice() else {
             return nil
         }
+        return getCurrentSampleRate(deviceID: deviceID)
+    }
 
-        var sampleRate: Double = 0
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<Double>.size)
-
-        guard AudioObjectGetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            &size,
-            &sampleRate
-        ) == noErr else {
+    nonisolated func getCurrentOutputDeviceName() -> String? {
+        guard let deviceID = try? getDefaultAudioDevice() else {
             return nil
         }
-
-        return sampleRate
+        return getDeviceName(deviceID: deviceID)
     }
 
     nonisolated func setSampleRate(_ rate: Double) throws {
@@ -87,6 +88,27 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
             return []
         }
         return getSupportedSampleRateRanges(deviceID: deviceID).flatMap(Self.expandSupportedRates(from:))
+    }
+
+    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
+        guard let deviceID = try? getDefaultAudioDevice() else {
+            return nil
+        }
+        guard
+            let name = getDeviceName(deviceID: deviceID),
+            let currentSampleRate = getCurrentSampleRate(deviceID: deviceID)
+        else {
+            return nil
+        }
+
+        let supportedRates = getSupportedSampleRateRanges(deviceID: deviceID)
+            .flatMap(Self.expandSupportedRates(from:))
+
+        return AudioDeviceInfo(
+            name: name,
+            currentSampleRate: currentSampleRate,
+            supportedSampleRates: Array(Set(supportedRates)).sorted()
+        )
     }
 
     // MARK: - Private Methods
@@ -159,5 +181,53 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         }
 
         return ranges
+    }
+
+    nonisolated private func getCurrentSampleRate(deviceID: AudioDeviceID) -> Double? {
+        var sampleRate: Double = 0
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size = UInt32(MemoryLayout<Double>.size)
+
+        guard AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &size,
+            &sampleRate
+        ) == noErr else {
+            return nil
+        }
+
+        return sampleRate
+    }
+
+    nonisolated private func getDeviceName(deviceID: AudioDeviceID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &size,
+            &name
+        )
+
+        guard status == noErr else {
+            return nil
+        }
+
+        return name?.takeUnretainedValue() as String?
     }
 }

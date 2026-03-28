@@ -32,6 +32,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var currentFileName: String? { engine.state.audioInfo?.fileName }
     var fileSampleRate: Double { engine.state.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double = 0
+    var hardwareDeviceName: String = ""
+    var supportedHardwareSampleRates: [Double] = []
 
     var isLoading: Bool { engine.state.isLoading }
 
@@ -40,6 +42,40 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var hasSampleRateMismatch: Bool {
         guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
         return abs(fileSampleRate - hardwareSampleRate) > Constants.sampleRateTolerance
+    }
+
+    var hardwareDeviceDisplayName: String {
+        hardwareDeviceName.isEmpty ? "Unknown output" : hardwareDeviceName
+    }
+
+    var supportedHardwareSampleRatesDescription: String {
+        guard !supportedHardwareSampleRates.isEmpty else { return "Unavailable" }
+        return supportedHardwareSampleRates
+            .map(Self.formatSampleRate)
+            .joined(separator: ", ")
+    }
+
+    var sampleRateStatusDetail: String {
+        guard fileSampleRate > 0 else {
+            return "Load a file to compare its sample rate with the active output device."
+        }
+
+        let deviceName = hardwareDeviceDisplayName
+        guard hardwareSampleRate > 0 else {
+            return "Could not read the current sample rate for \(deviceName)."
+        }
+
+        if !hasSampleRateMismatch {
+            return "Matched on \(deviceName). Playback is running at the file's native rate."
+        }
+
+        if !supportedHardwareSampleRates.isEmpty &&
+            !Self.sampleRate(fileSampleRate, isWithin: supportedHardwareSampleRates)
+        {
+            return "\(deviceName) does not advertise support for \(Self.formatSampleRate(fileSampleRate)). Supported rates: \(supportedHardwareSampleRatesDescription)."
+        }
+
+        return "\(deviceName) supports \(Self.formatSampleRate(fileSampleRate)), but the hardware is still at \(Self.formatSampleRate(hardwareSampleRate)). Playback will be resampled until the device switches."
     }
 
     // MARK: - Dependencies
@@ -58,7 +94,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         self.engine = engine
         self.progressTracker = progressTracker
         Task {
-            await updateHardwareSampleRate()
+            await refreshHardwareInfo()
         }
     }
 
@@ -111,7 +147,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
                 currentTime = 0
                 engine.setVolume(volume)
-                await updateHardwareSampleRate()
+                await refreshHardwareInfo()
                 showReadyStatus(for: audioInfo)
 
             } catch let error as PlaybackError {
@@ -148,7 +184,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             try engine.play()
             startProgressTracking()
             Task {
-                await updateHardwareSampleRate()
+                await refreshHardwareInfo()
             }
             showPlayingStatus()
         } catch let error as PlaybackError {
@@ -223,14 +259,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             }
 
             // Back on MainActor after await - safe to update UI
-            await updateHardwareSampleRate()
+            await refreshHardwareInfo()
 
             // Verify the switch actually took effect
             if hasSampleRateMismatch {
-                showError(.sampleRateSyncFailed(
-                    "Hardware stayed at \(Int(hardwareSampleRate)) Hz"))
+                showError(.sampleRateSyncFailed(sampleRateStatusDetail))
             } else {
-                setStatusMessage("Hardware sample rate set to \(Int(fileSampleRate)) Hz")
+                setStatusMessage("Hardware sample rate set to \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
             }
         } catch let error as PlaybackError {
             showError(error)
@@ -259,7 +294,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             },
             onPeriodicUpdate: { [weak self] in
                 Task {
-                    await self?.updateHardwareSampleRate()
+                    await self?.refreshHardwareInfo()
                 }
             }
         )
@@ -267,23 +302,31 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - Private Methods
 
-    private func updateHardwareSampleRate() async {
-        hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
+    private func refreshHardwareInfo() async {
+        if let deviceInfo = await engine.getCurrentAudioDeviceInfo() {
+            hardwareDeviceName = deviceInfo.name
+            hardwareSampleRate = deviceInfo.currentSampleRate
+            supportedHardwareSampleRates = deviceInfo.supportedSampleRates
+        } else {
+            hardwareDeviceName = ""
+            hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
+            supportedHardwareSampleRates = []
+        }
     }
 
     private func showReadyStatus(for audioInfo: AudioInfo) {
         if hasSampleRateMismatch {
-            setStatusMessage("Ready — output at \(Int(hardwareSampleRate)) Hz (file is \(Int(audioInfo.sampleRate)) Hz)")
+            setStatusMessage("Ready — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("Ready to play at \(Int(audioInfo.sampleRate)) Hz")
+            setStatusMessage("Ready to play at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
     private func showPlayingStatus() {
         if hasSampleRateMismatch {
-            setStatusMessage("Playing at \(Int(hardwareSampleRate)) Hz (resampled from \(Int(fileSampleRate)) Hz)")
+            setStatusMessage("Playing — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("Playing at \(Int(fileSampleRate)) Hz")
+            setStatusMessage("Playing at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
@@ -295,5 +338,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func setStatusMessage(_ message: String) {
         statusMessage = message
         hasError = false
+    }
+
+    private static func formatSampleRate(_ sampleRate: Double) -> String {
+        let kilohertz = sampleRate / 1000
+        if abs(kilohertz.rounded() - kilohertz) < 0.05 {
+            return "\(Int(kilohertz.rounded())) kHz"
+        }
+        return String(format: "%.1f kHz", kilohertz)
+    }
+
+    private static func sampleRate(_ target: Double, isWithin supportedRates: [Double]) -> Bool {
+        supportedRates.contains { abs($0 - target) <= Constants.sampleRateTolerance }
     }
 }
