@@ -33,75 +33,56 @@ protocol SampleRateManaging: Sendable {
 
 /// Core Audio implementation of sample rate management
 final class CoreAudioSampleRateManager: SampleRateManaging {
+    nonisolated private let hardwareSystem = AudioHardwareSystem.shared
 
     nonisolated func getCurrentSampleRate() -> Double? {
-        guard let deviceID = try? getDefaultAudioDevice() else {
+        guard let device = try? getDefaultAudioDevice() else {
             return nil
         }
-        return getCurrentSampleRate(deviceID: deviceID)
+        return try? device.nominalSampleRate
     }
 
     nonisolated func getCurrentOutputDeviceName() -> String? {
-        guard let deviceID = try? getDefaultAudioDevice() else {
+        guard let device = try? getDefaultAudioDevice() else {
             return nil
         }
-        return getDeviceName(deviceID: deviceID)
+        return try? device.name
     }
 
     nonisolated func setSampleRate(_ rate: Double) throws {
-        let deviceID = try getDefaultAudioDevice()
+        let device = try getDefaultAudioDevice()
 
         // Check if sample rate is supported
-        let supportedRanges = getSupportedSampleRateRanges(deviceID: deviceID)
+        let supportedRanges = try device.availableNominalSampleRates
         guard Self.sampleRate(rate, isSupportedBy: supportedRanges) else {
             throw NSError(domain: "SampleRateManager", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Sample rate \(Int(rate)) Hz not supported by device"
             ])
         }
 
-        // Set sample rate
-        var nominalSampleRate = rate
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectSetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            UInt32(MemoryLayout<Double>.size),
-            &nominalSampleRate
-        )
-
-        guard status == noErr else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to set sample rate"
-            ])
-        }
+        try device.setNominalSampleRate(rate)
     }
 
     nonisolated func getSupportedSampleRates() -> [Double] {
-        guard let deviceID = try? getDefaultAudioDevice() else {
+        guard let device = try? getDefaultAudioDevice() else {
             return []
         }
-        return getSupportedSampleRateRanges(deviceID: deviceID).flatMap(Self.expandSupportedRates(from:))
+        let ranges = (try? device.availableNominalSampleRates) ?? []
+        return ranges.flatMap(Self.expandSupportedRates(from:))
     }
 
     nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
-        guard let deviceID = try? getDefaultAudioDevice() else {
+        guard let device = try? getDefaultAudioDevice() else {
             return nil
         }
         guard
-            let name = getDeviceName(deviceID: deviceID),
-            let currentSampleRate = getCurrentSampleRate(deviceID: deviceID)
+            let name = try? device.name,
+            let currentSampleRate = try? device.nominalSampleRate
         else {
             return nil
         }
 
-        let supportedRates = getSupportedSampleRateRanges(deviceID: deviceID)
+        let supportedRates = ((try? device.availableNominalSampleRates) ?? [])
             .flatMap(Self.expandSupportedRates(from:))
 
         return AudioDeviceInfo(
@@ -133,101 +114,12 @@ final class CoreAudioSampleRateManager: SampleRateManaging {
         return [range.mMinimum, range.mMaximum]
     }
 
-    nonisolated private func getDefaultAudioDevice() throws -> AudioDeviceID {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &deviceID
-        )
-
-        guard status == noErr else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to get audio device"
+    nonisolated private func getDefaultAudioDevice() throws -> AudioHardwareDevice {
+        guard let device = try hardwareSystem.defaultOutputDevice else {
+            throw NSError(domain: "SampleRateManager", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "No default output device available"
             ])
         }
-
-        return deviceID
-    }
-
-    nonisolated private func getSupportedSampleRateRanges(deviceID: AudioDeviceID) -> [AudioValueRange] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyAvailableNominalSampleRates,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr else {
-            return []
-        }
-
-        let count = Int(size) / MemoryLayout<AudioValueRange>.size
-        var ranges = [AudioValueRange](repeating: AudioValueRange(), count: count)
-
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &ranges) == noErr else {
-            return []
-        }
-
-        return ranges
-    }
-
-    nonisolated private func getCurrentSampleRate(deviceID: AudioDeviceID) -> Double? {
-        var sampleRate: Double = 0
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<Double>.size)
-
-        guard AudioObjectGetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            &size,
-            &sampleRate
-        ) == noErr else {
-            return nil
-        }
-
-        return sampleRate
-    }
-
-    nonisolated private func getDeviceName(deviceID: AudioDeviceID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertyName,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var name: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &address,
-            0,
-            nil,
-            &size,
-            &name
-        )
-
-        guard status == noErr else {
-            return nil
-        }
-
-        return name?.takeUnretainedValue() as String?
+        return device
     }
 }
