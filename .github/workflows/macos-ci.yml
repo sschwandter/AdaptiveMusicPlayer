@@ -4,7 +4,12 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build-and-test:
@@ -54,6 +59,61 @@ jobs:
           path: ${{ env.TEST_RESULT_BUNDLE }}
           if-no-files-found: error
 
+      - name: Summarize test results
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import subprocess
+          import sys
+
+          bundle_path = "TestResults.xcresult"
+
+          try:
+              raw = subprocess.check_output([
+                  "xcrun", "xcresulttool", "get",
+                  "--legacy",
+                  "--path", bundle_path,
+                  "--format", "json",
+              ], text=True)
+          except subprocess.CalledProcessError as exc:
+              print("## Test Results")
+              print("")
+              print(f"Could not read `{bundle_path}`: exit code {exc.returncode}")
+              sys.exit(0)
+
+          data = json.loads(raw)
+          metrics = data.get("metrics", {})
+          total = metrics.get("testsCount", {}).get("_value", "0")
+          failed = metrics.get("testsFailedCount", {}).get("_value", "0")
+
+          print("## Test Results")
+          print("")
+          print(f"- Total tests: {total}")
+          print(f"- Failed tests: {failed}")
+          print("")
+
+          actions = data.get("actions", {}).get("_values", [])
+          failure_summaries = []
+          for action in actions:
+              issues = action.get("actionResult", {}).get("issues", {})
+              failure_summaries.extend(
+                  issues.get("testFailureSummaries", {}).get("_values", [])
+              )
+
+          if not failure_summaries:
+              print("All tests passed.")
+              sys.exit(0)
+
+          print("### Failures")
+          print("")
+          for failure in failure_summaries:
+              test_name = failure.get("testCaseName", {}).get("_value", "Unknown test")
+              message = failure.get("message", {}).get("_value", "No message")
+              print(f"- `{test_name}`")
+              print(f"  {message}")
+          PY
+
       - name: Package app artifact
         if: success()
         run: |
@@ -66,3 +126,10 @@ jobs:
         with:
           name: ${{ env.APP_NAME }}-macOS-${{ github.sha }}
           path: ${{ env.APP_NAME }}.zip
+
+      - name: Create GitHub release
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APP_NAME }}.zip
+          generate_release_notes: true
