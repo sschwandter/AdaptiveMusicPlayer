@@ -201,6 +201,45 @@ struct AudioPlayerTests {
         #expect(secondPlayer.playCallCount == 0)
     }
 
+    @Test("Selecting a playlist track during startup preserves autoplay intent")
+    func selectingPlaylistTrackDuringStartupKeepsPlaybackIntent() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let firstURL = rootFolder.appending(path: "album/01-first.wav")
+        let secondURL = rootFolder.appending(path: "album/02-second.wav")
+        try TemporaryFolder.writeWaveFile(at: firstURL)
+        try TemporaryFolder.writeWaveFile(at: secondURL)
+
+        let firstPlayer = try StubAudioPlayer()
+        let secondPlayer = try StubAudioPlayer()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                    firstURL: AudioSession(player: firstPlayer, fileName: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: AudioSession(player: secondPlayer, fileName: "02-second.wav", sampleRate: 48_000, duration: 1)
+                ]),
+                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        player.selectPlaylistTrack(at: 1)
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "02-second.wav")
+        #expect(player.playlistTrackPosition == "2 of 2")
+        #expect(player.isPlaying == true)
+        #expect(player.hasError == false)
+        #expect(firstPlayer.playCallCount == 0)
+        #expect(secondPlayer.playCallCount == 1)
+    }
+
 }
 
 @Suite("AudioPlayer Folder Loading Tests", .serialized)

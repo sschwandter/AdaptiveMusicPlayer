@@ -316,7 +316,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func selectPlaylistTrack(at index: Int) {
-        let shouldAutoplay = isPlaying
+        let shouldAutoplay = isPlaying || playbackStartupTask != nil
         guard let playlistSession, playlistSession.currentIndex != index else { return }
         loadPlaylistTrack(at: index, autoplayOnSuccess: shouldAutoplay)
     }
