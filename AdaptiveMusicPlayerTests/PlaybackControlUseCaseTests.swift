@@ -1,0 +1,34 @@
+import Testing
+import AVFoundation
+@testable import AdaptiveMusicPlayer
+
+@Suite("PlaybackControlUseCase Tests")
+@MainActor
+struct PlaybackControlUseCaseTests {
+
+    @Test("Playing a finished track rewinds before restarting")
+    func playFinishedTrackRewindsToStart() throws {
+        let useCase = PlaybackControlUseCase()
+        let player = try StubAudioPlayer()
+        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+
+        player.currentTime = 0.75
+        let newState = try useCase.play(player: player, state: .finished(audioInfo))
+
+        #expect(newState == .playing(audioInfo))
+        #expect(player.playCallCount == 1)
+        #expect(player.currentTime == 0)
+    }
+
+    @Test("State does not advance when AVAudioPlayer fails to start")
+    func playFailureDoesNotAdvanceState() throws {
+        let useCase = PlaybackControlUseCase()
+        let player = try StubAudioPlayer(playResult: false)
+        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+
+        #expect(throws: PlaybackError.playbackStartFailed) {
+            try useCase.play(player: player, state: .ready(audioInfo))
+        }
+        #expect(player.playCallCount == 1)
+    }
+}

@@ -1,0 +1,38 @@
+import Testing
+import Foundation
+@testable import AdaptiveMusicPlayer
+
+@Suite("AudioPlaybackEngine Tests")
+@MainActor
+struct AudioPlaybackEngineTests {
+
+    @Test("Starting playback switches hardware to the file sample rate")
+    func playRequestsFileSampleRateBeforeStartingPlayback() async throws {
+        let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 44_100)
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            sampleRateManager: sampleRateManager
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        try await engine.play()
+
+        #expect(sampleRateManager.requestedSampleRates == [96_000])
+        #expect(engine.state.isPlaying == true)
+    }
+
+    @Test("Starting playback skips switching when hardware already matches the file sample rate")
+    func playSkipsSampleRateSwitchWhenAlreadyMatched() async throws {
+        let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 96_000)
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            sampleRateManager: sampleRateManager
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        try await engine.play()
+
+        #expect(sampleRateManager.requestedSampleRates.isEmpty)
+        #expect(engine.state.isPlaying == true)
+    }
+}
