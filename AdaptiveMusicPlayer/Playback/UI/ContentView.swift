@@ -98,7 +98,7 @@ struct ContentView: View {
                         .textCase(.uppercase)
                         .tracking(1.2)
 
-                    HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Group {
                             if let fileName = player.currentFileName {
                                 Text(fileName)
@@ -107,9 +107,12 @@ struct ContentView: View {
                             } else {
                                 Text("Choose an audio file or folder to begin")
                                     .foregroundStyle(.white.opacity(0.9))
+                                    .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         HStack(spacing: 8) {
                             libraryButton(
@@ -126,8 +129,6 @@ struct ContentView: View {
                                 help: "Open Folder (⇧⌘O)"
                             )
                         }
-
-                        Spacer(minLength: 0)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
