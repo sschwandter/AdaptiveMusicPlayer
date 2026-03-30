@@ -92,8 +92,9 @@ final class AudioPlaybackEngine {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
+        let requestedAudioInfo = state.audioInfo
 
-        if let targetSampleRate = state.audioInfo?.sampleRate {
+        if let targetSampleRate = requestedAudioInfo?.sampleRate {
             let currentSampleRate = await getCurrentHardwareSampleRate()
             if currentSampleRate <= 0 ||
                 abs(currentSampleRate - targetSampleRate) > Constants.sampleRateTolerance
@@ -104,6 +105,11 @@ final class AudioPlaybackEngine {
                     // Playback should still start even if the device refuses the requested rate.
                 }
             }
+        }
+
+        try Task.checkCancellation()
+        guard self.player === player, self.state.audioInfo == requestedAudioInfo else {
+            throw CancellationError()
         }
 
         state = try playbackControlUseCase.play(player: player, state: state)

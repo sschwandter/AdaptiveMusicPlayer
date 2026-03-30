@@ -512,6 +512,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         cancelCurrentLoad: Bool = true,
         advanceGeneration: Bool = true
     ) {
+        _ = cancelPendingPlaybackStart()
         engine.beginLoading()
         syncPlaybackStateFromEngine()
         progressTracker.stopTracking()

@@ -168,6 +168,39 @@ struct AudioPlayerTests {
         #expect(player.statusMessage == "Stopped")
     }
 
+    @Test("Loading a new file cancels a pending playback start for the previous file")
+    func loadingNewFileCancelsPendingPlaybackStart() async throws {
+        let firstPlayer = try StubAudioPlayer()
+        let secondPlayer = try StubAudioPlayer()
+        let firstURL = URL(fileURLWithPath: "/tmp/first.wav")
+        let secondURL = URL(fileURLWithPath: "/tmp/second.wav")
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                    firstURL: AudioSession(player: firstPlayer, fileName: "first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: AudioSession(player: secondPlayer, fileName: "second.wav", sampleRate: 48_000, duration: 1)
+                ]),
+                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFile(url: firstURL)
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        player.loadFile(url: secondURL)
+        await player.waitForCurrentLoad()
+        try await Task.sleep(for: .milliseconds(400))
+
+        #expect(player.currentFileName == "second.wav")
+        #expect(player.isPlaying == false)
+        #expect(player.hasError == false)
+        #expect(firstPlayer.playCallCount == 0)
+        #expect(secondPlayer.playCallCount == 0)
+    }
+
 }
 
 @Suite("AudioPlayer Folder Loading Tests", .serialized)
@@ -722,6 +755,17 @@ private struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable
             sampleRate: sampleRate,
             duration: 1
         )
+    }
+}
+
+private struct RoutingStubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
+    let sessionsByURL: [URL: AudioSession]
+
+    func execute(from url: URL) async throws -> AudioSession {
+        guard let session = sessionsByURL[url] else {
+            throw PlaybackError.loadFailed("Missing stub session for \(url.path)")
+        }
+        return session
     }
 }
 
