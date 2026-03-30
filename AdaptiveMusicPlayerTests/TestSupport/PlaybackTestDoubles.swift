@@ -79,8 +79,14 @@ struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
 struct RoutingStubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
     let sessionsByURL: [URL: AudioSession]
 
+    init(sessionsByURL: [URL: AudioSession]) {
+        self.sessionsByURL = Dictionary(
+            uniqueKeysWithValues: sessionsByURL.map { (canonicalTestFileURL($0.key), $0.value) }
+        )
+    }
+
     func execute(from url: URL) async throws -> AudioSession {
-        guard let session = sessionsByURL[url] else {
+        guard let session = sessionsByURL[canonicalTestFileURL(url)] else {
             throw PlaybackError.loadFailed("Missing stub session for \(url.path)")
         }
         return session

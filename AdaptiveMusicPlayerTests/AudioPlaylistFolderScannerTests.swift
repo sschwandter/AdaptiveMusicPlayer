@@ -29,7 +29,10 @@ struct AudioPlaylistFolderScannerTests {
 
         let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(result == [deepPlayable, nestedPlayable, topLevelPlayable])
+        #expect(
+            result.map(canonicalTestFileURL) ==
+            [deepPlayable, nestedPlayable, topLevelPlayable].map(canonicalTestFileURL)
+        )
     }
 
     @Test("Rejects file URLs instead of folders")
@@ -64,6 +67,9 @@ struct AudioPlaylistFolderScannerTests {
 
         let result = try scanner.scan(folderURL: rootFolder)
 
-        #expect(result == [expectedAudio, alsoPlayable])
+        #expect(
+            result.map(canonicalTestFileURL) ==
+            [expectedAudio, alsoPlayable].map(canonicalTestFileURL)
+        )
     }
 }

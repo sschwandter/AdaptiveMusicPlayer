@@ -1,6 +1,10 @@
 import Foundation
 @testable import AdaptiveMusicPlayer
 
+func canonicalTestFileURL(_ url: URL) -> URL {
+    url.standardizedFileURL.resolvingSymlinksInPath()
+}
+
 struct StubDirectoryTreeEnumerator: DirectoryTreeEnumerating {
     let urls: [URL]
 
@@ -13,7 +17,7 @@ struct StubPlayableAudioFileClassifier: PlayableAudioFileClassifying {
     let playableURLs: Set<URL>
 
     func isPlayableFile(at url: URL) -> Bool {
-        playableURLs.contains(url)
+        playableURLs.contains(canonicalTestFileURL(url))
     }
 }
 
