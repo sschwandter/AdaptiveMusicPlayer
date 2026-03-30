@@ -79,7 +79,7 @@ That means the UI-facing contract for file loading now lives in one place instea
 
 ## Sample Rate Behavior
 
-When a file is loaded, the app reads the file sample rate from the prepared `AVAudioPlayer` and tries to set the default output device to the same nominal rate. If that fails, playback still proceeds and the UI shows that the hardware and file rates differ.
+When playback starts, the app compares the file sample rate with the current hardware sample rate. If they already match, playback starts without requesting a hardware change. If they differ, the app tries to switch the default output device to the file sample rate before playback continues. If that fails, playback still proceeds and the UI shows that the hardware and file rates differ.
 
 The UI uses:
 
