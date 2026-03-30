@@ -11,6 +11,8 @@ jobs:
     runs-on: macos-latest
     env:
       DERIVED_DATA_PATH: .build/DerivedData
+      APP_NAME: AdaptiveMusicPlayer
+      BUILD_CONFIGURATION: Debug
 
     steps:
       - name: Check out repository
@@ -29,6 +31,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Package app artifact
+        run: |
+          APP_PATH="$DERIVED_DATA_PATH/Build/Products/$BUILD_CONFIGURATION/$APP_NAME.app"
+          ditto -c -k --keepParent "$APP_PATH" "$APP_NAME.zip"
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-macOS-${{ github.sha }}
+          path: ${{ env.APP_NAME }}.zip
 
       - name: Run unit tests
         run: |
