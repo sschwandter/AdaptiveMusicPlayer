@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 @testable import AdaptiveMusicPlayer
 
 @MainActor
@@ -63,5 +64,23 @@ struct StartupTestContext {
         if let delay {
             try await Task.sleep(for: delay)
         }
+    }
+}
+
+@MainActor
+func waitUntil(
+    timeout: Duration = .seconds(1),
+    pollInterval: Duration = .milliseconds(10),
+    _ condition: @escaping @MainActor () -> Bool
+) async throws {
+    let start = ContinuousClock.now
+
+    while !condition() {
+        if ContinuousClock.now - start >= timeout {
+            Issue.record("Timed out waiting for test condition.")
+            return
+        }
+
+        try await Task.sleep(for: pollInterval)
     }
 }

@@ -183,6 +183,7 @@ struct AudioPlayerTests {
         player.togglePlayPause()
         player.selectPlaylistTrack(at: 1)
         await player.waitForCurrentLoad()
+        try await waitUntil { player.isPlaying }
 
         #expect(player.currentFileName == "02-second.wav")
         #expect(player.playlistTrackPosition == "2 of 2")
