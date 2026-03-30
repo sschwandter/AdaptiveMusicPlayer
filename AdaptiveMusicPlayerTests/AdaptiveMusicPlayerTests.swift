@@ -113,6 +113,61 @@ struct AudioPlayerTests {
         #expect(!player.sampleRateStatusDetail.isEmpty)
     }
 
+    @Test("Repeated play taps do not start overlapping playback tasks")
+    func repeatedPlayTapsDoNotRacePlaybackStartup() async throws {
+        let stubAudioPlayer = try StubAudioPlayer()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(
+                    sampleRate: 44_100,
+                    player: stubAudioPlayer
+                ),
+                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(100)),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"))
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        player.togglePlayPause()
+        try await Task.sleep(for: .milliseconds(150))
+
+        #expect(player.isPlaying == true)
+        #expect(player.hasError == false)
+        #expect(player.statusMessage != PlaybackError.alreadyPlaying.localizedDescription)
+        #expect(stubAudioPlayer.playCallCount == 1)
+    }
+
+    @Test("Stop cancels a pending playback start")
+    func stopCancelsPendingPlaybackStart() async throws {
+        let stubAudioPlayer = try StubAudioPlayer()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(
+                    sampleRate: 44_100,
+                    player: stubAudioPlayer
+                ),
+                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"))
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        player.stop()
+        try await Task.sleep(for: .milliseconds(350))
+
+        #expect(player.isPlaying == false)
+        #expect(player.hasError == false)
+        #expect(player.statusMessage == "Stopped")
+    }
+
 }
 
 @Suite("AudioPlayer Folder Loading Tests", .serialized)
@@ -255,6 +310,41 @@ struct PlaybackControlUseCaseTests {
             try useCase.play(player: player, state: .ready(audioInfo))
         }
         #expect(player.playCallCount == 1)
+    }
+}
+
+@Suite("AudioPlaybackEngine Tests")
+@MainActor
+struct AudioPlaybackEngineTests {
+
+    @Test("Starting playback switches hardware to the file sample rate")
+    func playRequestsFileSampleRateBeforeStartingPlayback() async throws {
+        let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 44_100)
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            sampleRateManager: sampleRateManager
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        try await engine.play()
+
+        #expect(sampleRateManager.requestedSampleRates == [96_000])
+        #expect(engine.state.isPlaying == true)
+    }
+
+    @Test("Starting playback skips switching when hardware already matches the file sample rate")
+    func playSkipsSampleRateSwitchWhenAlreadyMatched() async throws {
+        let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 96_000)
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            sampleRateManager: sampleRateManager
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        try await engine.play()
+
+        #expect(sampleRateManager.requestedSampleRates.isEmpty)
+        #expect(engine.state.isPlaying == true)
     }
 }
 
@@ -594,6 +684,57 @@ private struct StubSampleRateManager: SampleRateManaging {
     nonisolated func getSupportedSampleRates() -> [Double] { [44_100] }
     nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
         AudioDeviceInfo(name: "Test Device", currentSampleRate: 44_100, supportedSampleRates: [44_100])
+    }
+}
+
+private final class RecordingSampleRateManager: SampleRateManaging, @unchecked Sendable {
+    let currentSampleRate: Double
+    private(set) var requestedSampleRates: [Double] = []
+
+    init(currentSampleRate: Double) {
+        self.currentSampleRate = currentSampleRate
+    }
+
+    nonisolated func getCurrentSampleRate() -> Double? { currentSampleRate }
+    nonisolated func getCurrentOutputDeviceName() -> String? { "Test Device" }
+    func setSampleRate(_ rate: Double) throws {
+        requestedSampleRates.append(rate)
+    }
+    nonisolated func getSupportedSampleRates() -> [Double] { [44_100, 96_000] }
+    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
+        AudioDeviceInfo(name: "Test Device", currentSampleRate: currentSampleRate, supportedSampleRates: [44_100, 96_000])
+    }
+}
+
+private struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
+    let sampleRate: Double
+    let player: AVAudioPlayer
+
+    init(sampleRate: Double, player: AVAudioPlayer? = nil) {
+        self.sampleRate = sampleRate
+        self.player = player ?? (try! StubAudioPlayer())
+    }
+
+    func execute(from url: URL) async throws -> AudioSession {
+        AudioSession(
+            player: player,
+            fileName: url.lastPathComponent,
+            sampleRate: sampleRate,
+            duration: 1
+        )
+    }
+}
+
+private struct DelayedSyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
+    let delay: Duration
+
+    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {
+        try await Task.sleep(for: delay)
+        try Task.checkCancellation()
+        guard let audioInfo = state.audioInfo else {
+            throw PlaybackError.noFileLoaded
+        }
+        try sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }
 

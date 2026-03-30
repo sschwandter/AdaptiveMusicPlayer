@@ -7,6 +7,21 @@ import Observation
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
+    struct ActivityIndicatorPresentation: Equatable {
+        enum Style: Equatable {
+            case idle
+            case playing
+            case sampleRateMatched
+            case sampleRateMismatched
+            case error
+        }
+
+        let title: String
+        let iconName: String
+        let helpText: String
+        let style: Style
+    }
+
     struct PlaylistTrackRow: Identifiable, Equatable {
         let url: URL
         let index: Int
@@ -77,12 +92,46 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             .joined(separator: ", ")
     }
 
-    var sampleRateBadgeTitle: String {
+    var playbackSampleRateBadgeTitle: String {
         guard fileSampleRate > 0 else { return "No File" }
         guard hardwareSampleRate > 0 else { return "Unknown" }
-        if !hasSampleRateMismatch { return "Matched" }
-        if !deviceSupportsFileSampleRate { return "Unsupported" }
-        return "Resampling"
+        return Self.formatSampleRate(hardwareSampleRate)
+    }
+
+    var activityIndicatorPresentation: ActivityIndicatorPresentation {
+        if hasError {
+            return ActivityIndicatorPresentation(
+                title: "Error",
+                iconName: "exclamationmark.triangle.fill",
+                helpText: statusMessage.isEmpty ? "Playback error" : statusMessage,
+                style: .error
+            )
+        }
+
+        if fileSampleRate > 0 && hardwareSampleRate > 0 {
+            return ActivityIndicatorPresentation(
+                title: playbackSampleRateBadgeTitle,
+                iconName: hasSampleRateMismatch ? "exclamationmark.triangle.fill" : "waveform.circle.fill",
+                helpText: sampleRateStatusDetail,
+                style: hasSampleRateMismatch ? .sampleRateMismatched : .sampleRateMatched
+            )
+        }
+
+        if isPlaying {
+            return ActivityIndicatorPresentation(
+                title: "Live",
+                iconName: "waveform.circle.fill",
+                helpText: "Playback in progress",
+                style: .playing
+            )
+        }
+
+        return ActivityIndicatorPresentation(
+            title: "Idle",
+            iconName: "pause.circle",
+            helpText: "Playback is idle",
+            style: .idle
+        )
     }
 
     var sampleRateRouteDescription: String {
@@ -145,6 +194,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let folderScanner: AudioPlaylistFolderScanning
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
+    private var playbackStartupTask: Task<Void, Never>?
+    private var activePlaybackStartupGeneration: Int?
+    private var playbackStartupGeneration: Int = 0
     private var playlistSession: PlaylistSession?
 
     // MARK: - Initialization
@@ -252,6 +304,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     func waitForCurrentLoad() async {
         await loadingTask?.value
+        await playbackStartupTask?.value
     }
 
     func playNextTrack() {
@@ -274,27 +327,61 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         if isPlaying {
             pause()
         } else {
-            play()
+            startPlayback()
         }
     }
 
-    private func play() {
+    private func startPlayback() {
+        guard playbackStartupTask == nil else { return }
+
+        playbackStartupGeneration += 1
+        let generation = playbackStartupGeneration
+        activePlaybackStartupGeneration = generation
+        playbackStartupTask = Task { @MainActor [weak self] in
+            await self?.play(generation: generation)
+        }
+    }
+
+    private func play(generation: Int) async {
+        defer {
+            if activePlaybackStartupGeneration == generation {
+                activePlaybackStartupGeneration = nil
+                playbackStartupTask = nil
+            }
+        }
+
         do {
-            try engine.play()
+            try await engine.play()
+
+            guard playbackStartupRemainsCurrent(generation) else {
+                engine.stop()
+                syncPlaybackStateFromEngine()
+                currentTime = 0
+                return
+            }
+
             syncPlaybackStateFromEngine()
             startProgressTracking()
-            Task {
-                await refreshHardwareInfo()
-            }
+            await refreshHardwareInfo()
             showPlayingStatus()
+        } catch is CancellationError {
+            guard playbackStartupRemainsCurrent(generation) else { return }
         } catch let error as PlaybackError {
+            guard playbackStartupRemainsCurrent(generation) else { return }
             showError(error)
         } catch {
+            guard playbackStartupRemainsCurrent(generation) else { return }
             showError(.notReady)
         }
     }
 
     private func pause() {
+        if cancelPendingPlaybackStart() {
+            progressTracker.stopTracking()
+            setStatusMessage("Paused")
+            return
+        }
+
         do {
             try engine.pause()
             syncPlaybackStateFromEngine()
@@ -308,6 +395,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func stop() {
+        _ = cancelPendingPlaybackStart()
         engine.stop()
         syncPlaybackStateFromEngine()
         progressTracker.stopTracking()
@@ -511,8 +599,22 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         showReadyStatus(for: audioInfo)
 
         if autoplayOnSuccess {
-            play()
+            startPlayback()
         }
+    }
+
+    private func cancelPendingPlaybackStart() -> Bool {
+        guard playbackStartupTask != nil else { return false }
+
+        playbackStartupGeneration += 1
+        activePlaybackStartupGeneration = nil
+        playbackStartupTask?.cancel()
+        playbackStartupTask = nil
+        return true
+    }
+
+    private func playbackStartupRemainsCurrent(_ generation: Int) -> Bool {
+        activePlaybackStartupGeneration == generation && !Task.isCancelled
     }
 
     @discardableResult

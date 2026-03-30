@@ -20,28 +20,17 @@ protocol AudioSessionManaging: Sendable {
     func createSession(from url: URL) async throws -> AudioSession
 }
 
-/// Manages audio session creation by coordinating file loading, player creation, and hardware configuration
+/// Manages audio session creation by coordinating file loading, player creation, and metadata extraction
 final class AudioSessionManager: AudioSessionManaging {
-
-    // MARK: - Constants
-
-    private enum Constants {
-        static let hardwareSwitchDelay: UInt64 = 500_000_000  // nanoseconds (0.5 seconds)
-    }
 
     // MARK: - Properties
 
     private let fileLoader: AudioFileLoading
-    private let sampleRateManager: SampleRateManaging
 
     // MARK: - Initialization
 
-    init(
-        fileLoader: AudioFileLoading = SecurityScopedFileLoader(),
-        sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
-    ) {
+    init(fileLoader: AudioFileLoading = SecurityScopedFileLoader()) {
         self.fileLoader = fileLoader
-        self.sampleRateManager = sampleRateManager
     }
 
     // MARK: - Public Methods
@@ -59,20 +48,7 @@ final class AudioSessionManager: AudioSessionManaging {
         let sampleRate = player.format.sampleRate
         let duration = player.duration
 
-        // 4. Configure hardware sample rate (best effort - don't fail if unsupported)
-        do {
-            try sampleRateManager.setSampleRate(sampleRate)
-            // Wait for hardware to actually switch
-            try await Task.sleep(nanoseconds: Constants.hardwareSwitchDelay)
-            guard !Task.isCancelled else { throw CancellationError() }
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            // Hardware sample rate configuration is optional
-            // Continue even if it fails - playback will work with resampling
-        }
-
-        // 5. Return complete session
+        // 4. Return complete session
         return AudioSession(
             player: player,
             fileName: loadedFile.fileName,

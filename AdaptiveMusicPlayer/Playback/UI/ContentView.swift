@@ -358,51 +358,39 @@ struct ContentView: View {
     }
 
     private var activityIndicatorForegroundColor: Color {
-        if player.hasError {
+        switch player.activityIndicatorPresentation.style {
+        case .error, .sampleRateMismatched:
             return .red
-        }
-
-        if player.isPlaying {
+        case .playing, .sampleRateMatched:
             return .green
+        case .idle:
+            return .white.opacity(0.92)
         }
-
-        return .white.opacity(0.92)
     }
 
     private var activityIndicatorBackgroundColor: Color {
-        if player.hasError {
+        switch player.activityIndicatorPresentation.style {
+        case .error, .sampleRateMismatched:
             return .red.opacity(0.16)
+        case .playing:
+            return .white.opacity(0.16)
+        case .sampleRateMatched:
+            return .white.opacity(0.16)
+        case .idle:
+            return .white.opacity(0.10)
         }
-
-        return .white.opacity(player.isPlaying ? 0.16 : 0.10)
     }
 
     private var activityIndicatorIconName: String {
-        if player.hasError {
-            return "exclamationmark.triangle.fill"
-        }
-
-        if player.isPlaying {
-            return "waveform.circle.fill"
-        }
-
-        return "pause.circle"
+        player.activityIndicatorPresentation.iconName
     }
 
     private var activityIndicatorTitle: String {
-        if player.hasError {
-            return "Error"
-        }
-
-        return player.isPlaying ? "Live" : "Idle"
+        player.activityIndicatorPresentation.title
     }
 
     private var activityIndicatorHelpText: String {
-        if player.hasError, !player.statusMessage.isEmpty {
-            return player.statusMessage
-        }
-
-        return player.isPlaying ? "Playback in progress" : "Playback is idle"
+        player.activityIndicatorPresentation.helpText
     }
 
     // MARK: - Private Methods

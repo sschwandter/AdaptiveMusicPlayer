@@ -5,6 +5,9 @@ import AVFoundation
 /// Owns playback state and delegates smaller operations to use cases
 @MainActor
 final class AudioPlaybackEngine {
+    private enum Constants {
+        static let sampleRateTolerance: Double = 1.0
+    }
 
     // MARK: - Properties
 
@@ -29,11 +32,7 @@ final class AudioPlaybackEngine {
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
         self.sampleRateManager = sampleRateManager
-        // Share the same sampleRateManager with the load file use case
-        // to avoid duplicate CoreAudioSampleRateManager instances
-        self.loadFileUseCase = loadFileUseCase ?? LoadFileUseCase(
-            sessionManager: AudioSessionManager(sampleRateManager: sampleRateManager)
-        )
+        self.loadFileUseCase = loadFileUseCase ?? LoadFileUseCase(sessionManager: AudioSessionManager())
         self.playbackControlUseCase = playbackControlUseCase
         self.seekingUseCase = seekingUseCase
         self.syncSampleRateUseCase = syncSampleRateUseCase
@@ -89,9 +88,22 @@ final class AudioPlaybackEngine {
     // MARK: - Playback Control
 
     /// Start or resume playback
-    func play() throws {
+    func play() async throws {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
+        }
+
+        if let targetSampleRate = state.audioInfo?.sampleRate {
+            let currentSampleRate = await getCurrentHardwareSampleRate()
+            if currentSampleRate <= 0 ||
+                abs(currentSampleRate - targetSampleRate) > Constants.sampleRateTolerance
+            {
+                do {
+                    try await syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
+                } catch {
+                    // Playback should still start even if the device refuses the requested rate.
+                }
+            }
         }
 
         state = try playbackControlUseCase.play(player: player, state: state)
