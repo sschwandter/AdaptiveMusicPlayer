@@ -113,8 +113,8 @@ struct AudioPlayerTests {
         #expect(!player.sampleRateStatusDetail.isEmpty)
     }
 
-    @Test("Repeated play taps do not start overlapping playback tasks")
-    func repeatedPlayTapsDoNotRacePlaybackStartup() async throws {
+    @Test("Main play/pause button cancels a pending playback start")
+    func togglePlayPauseCancelsPendingPlaybackStart() async throws {
         let stubAudioPlayer = try StubAudioPlayer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
@@ -133,12 +133,12 @@ struct AudioPlayerTests {
 
         player.togglePlayPause()
         player.togglePlayPause()
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(for: .milliseconds(250))
 
-        #expect(player.isPlaying == true)
+        #expect(player.isPlaying == false)
         #expect(player.hasError == false)
-        #expect(player.statusMessage != PlaybackError.alreadyPlaying.localizedDescription)
-        #expect(stubAudioPlayer.playCallCount == 1)
+        #expect(player.statusMessage == "Paused")
+        #expect(stubAudioPlayer.playCallCount == 0)
     }
 
     @Test("Stop cancels a pending playback start")

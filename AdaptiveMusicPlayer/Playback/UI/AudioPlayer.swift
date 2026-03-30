@@ -324,7 +324,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Playback Control
 
     func togglePlayPause() {
-        if isPlaying {
+        if isPlaying || playbackStartupTask != nil {
             pause()
         } else {
             startPlayback()
