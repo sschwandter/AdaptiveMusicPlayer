@@ -127,9 +127,84 @@ jobs:
           name: ${{ env.APP_NAME }}-macOS-${{ github.sha }}
           path: ${{ env.APP_NAME }}.zip
 
+  signed-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    runs-on: macos-26
+    env:
+      APP_NAME: AdaptiveMusicPlayer
+      BUILD_CONFIGURATION: Release
+      ARCHIVE_PATH: .build/ReleaseArchive/AdaptiveMusicPlayer.xcarchive
+      EXPORT_PATH: .build/ReleaseExport
+      KEYCHAIN_PATH: ${{ runner.temp }}/build.keychain-db
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install signing certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import certificate.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Archive signed app
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          xcodebuild \
+            -scheme AdaptiveMusicPlayer \
+            -configuration "$BUILD_CONFIGURATION" \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            archive
+
+      - name: Export signed app
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>$DEVELOPMENT_TEAM</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$EXPORT_PATH"
+
+      - name: Package signed app
+        run: |
+          ditto -c -k --keepParent "$EXPORT_PATH/$APP_NAME.app" "$APP_NAME-signed.zip"
+
+      - name: Upload signed app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-signed-macOS-${{ github.sha }}
+          path: ${{ env.APP_NAME }}-signed.zip
+
       - name: Create GitHub release
-        if: success() && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.APP_NAME }}.zip
+          files: ${{ env.APP_NAME }}-signed.zip
           generate_release_notes: true
