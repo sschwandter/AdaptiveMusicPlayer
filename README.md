@@ -151,5 +151,5 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Notes
 
-- The codebase aims for clear separation of concerns, but some state and orchestration are still split between the engine, the view model, and the view.
+- The codebase aims for clear separation of concerns, but playback coordination and UI-facing state are still shared across the engine, the view model, and a small amount of view-local state.
 - The README is intended to describe the code as it exists today, not an idealized future architecture.
