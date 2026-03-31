@@ -412,6 +412,8 @@
 					TODO.md,
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adaptive Music Player";
+				INFOPLIST_KEY_CFBundleName = "Adaptive Music Player";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -449,6 +451,8 @@
 					TODO.md,
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adaptive Music Player";
+				INFOPLIST_KEY_CFBundleName = "Adaptive Music Player";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
