@@ -16,6 +16,7 @@ struct ContentView: View {
         case folder
     }
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var player = AudioPlayer()
     @State private var activeImportTarget: ImportTarget?
     @State private var showingImporter = false
@@ -61,29 +62,25 @@ struct ContentView: View {
     private var backgroundView: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color(red: 0.08, green: 0.11, blue: 0.16),
-                    Color(red: 0.11, green: 0.15, blue: 0.22),
-                    Color(red: 0.17, green: 0.20, blue: 0.27)
-                ],
+                colors: backgroundGradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
             Circle()
-                .fill(Color.cyan.opacity(0.16))
-                .blur(radius: 70)
+                .fill(Color.cyan.opacity(colorScheme == .dark ? 0.16 : 0.22))
+                .blur(radius: colorScheme == .dark ? 70 : 90)
                 .frame(width: 220, height: 220)
                 .offset(x: -150, y: -170)
 
             Circle()
-                .fill(Color.orange.opacity(0.14))
-                .blur(radius: 90)
+                .fill(Color.orange.opacity(colorScheme == .dark ? 0.14 : 0.18))
+                .blur(radius: colorScheme == .dark ? 90 : 110)
                 .frame(width: 260, height: 260)
                 .offset(x: 180, y: 210)
 
             Rectangle()
-                .fill(.ultraThinMaterial.opacity(0.25))
+                .fill(backgroundVeilColor)
         }
         .ignoresSafeArea()
     }
@@ -106,7 +103,7 @@ struct ContentView: View {
                                     .truncationMode(.middle)
                             } else {
                                 Text("Choose an audio file or folder to begin")
-                                    .foregroundStyle(.white.opacity(0.9))
+                                    .foregroundStyle(secondaryTextColor)
                                     .lineLimit(2)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -114,20 +111,22 @@ struct ContentView: View {
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                        HStack(spacing: 8) {
-                            libraryButton(
-                                systemImage: "waveform.badge.plus",
-                                action: { presentImporter(for: .file) },
-                                help: player.currentFileName == nil
-                                    ? "Open Audio File (⌘O)"
-                                    : "Choose Another Audio File (⌘O)"
-                            )
+                        GlassEffectContainer {
+                            HStack(spacing: 8) {
+                                libraryButton(
+                                    systemImage: "waveform.badge.plus",
+                                    action: { presentImporter(for: .file) },
+                                    help: player.currentFileName == nil
+                                        ? "Open Audio File (⌘O)"
+                                        : "Choose Another Audio File (⌘O)"
+                                )
 
-                            libraryButton(
-                                systemImage: "folder.badge.plus",
-                                action: { presentImporter(for: .folder) },
-                                help: "Open Folder (⇧⌘O)"
-                            )
+                                libraryButton(
+                                    systemImage: "folder.badge.plus",
+                                    action: { presentImporter(for: .folder) },
+                                    help: "Open Folder (⇧⌘O)"
+                                )
+                            }
                         }
                     }
 
@@ -135,7 +134,7 @@ struct ContentView: View {
                         if let playlistTrackPosition = player.playlistTrackPosition {
                             Label("Track \(playlistTrackPosition)", systemImage: "music.note.list")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.78))
+                                .foregroundStyle(secondaryTextColor)
                         }
                     }
                 }
@@ -181,7 +180,7 @@ struct ContentView: View {
                         .contentTransition(.numericText())
                 }
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(tertiaryTextColor)
                 .monospacedDigit()
             }
             .disabled(player.currentFileName == nil || player.isLoading)
@@ -247,19 +246,19 @@ struct ContentView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "speaker.fill")
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(secondaryTextColor)
                     .frame(width: 16)
                 Slider(value: $player.volume, in: 0...1)
-                    .tint(.white.opacity(0.92))
+                    .tint(sliderTintColor)
                     .disabled(player.isLoading)
                 Image(systemName: "speaker.wave.3.fill")
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(secondaryTextColor)
                     .frame(width: 16)
             }
             .font(.caption)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 60)
-            .background(cardBackground)
+            .background(auxiliaryControlBackground)
         }
     }
 
@@ -311,12 +310,21 @@ struct ContentView: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(.regularMaterial.opacity(0.78))
+            .fill(cardFillColor)
             .overlay(
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(.white.opacity(0.09), lineWidth: 1)
+                    .strokeBorder(cardStrokeColor, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.18), radius: 24, y: 14)
+            .shadow(color: cardShadowColor, radius: colorScheme == .dark ? 24 : 18, y: 14)
+    }
+
+    private var auxiliaryControlBackground: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(auxiliaryFillColor)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(auxiliaryStrokeColor, lineWidth: 1)
+            )
     }
 
     // MARK: - Computed Properties
@@ -365,7 +373,7 @@ struct ContentView: View {
         case .playing, .sampleRateMatched:
             return .green
         case .idle:
-            return .white.opacity(0.92)
+            return primaryTextColor
         }
     }
 
@@ -374,12 +382,80 @@ struct ContentView: View {
         case .error, .sampleRateMismatched:
             return .red.opacity(0.16)
         case .playing:
-            return .white.opacity(0.16)
+            return neutralCapsuleColor
         case .sampleRateMatched:
-            return .white.opacity(0.16)
+            return neutralCapsuleColor
         case .idle:
-            return .white.opacity(0.10)
+            return subduedCapsuleColor
         }
+    }
+
+    private var backgroundGradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.08, green: 0.11, blue: 0.16),
+                Color(red: 0.11, green: 0.15, blue: 0.22),
+                Color(red: 0.17, green: 0.20, blue: 0.27)
+            ]
+        }
+
+        return [
+            Color(red: 0.92, green: 0.95, blue: 0.98),
+            Color(red: 0.84, green: 0.90, blue: 0.96),
+            Color(red: 0.95, green: 0.91, blue: 0.86)
+        ]
+    }
+
+    private var backgroundVeilColor: Color {
+        colorScheme == .dark ? .black.opacity(0.08) : .white.opacity(0.18)
+    }
+
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? .white.opacity(0.92) : .black.opacity(0.78)
+    }
+
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? .white.opacity(0.78) : .black.opacity(0.60)
+    }
+
+    private var tertiaryTextColor: Color {
+        colorScheme == .dark ? .white.opacity(0.72) : .black.opacity(0.52)
+    }
+
+    private var sliderTintColor: Color {
+        colorScheme == .dark ? .white.opacity(0.92) : .black.opacity(0.72)
+    }
+
+    private var cardFillColor: AnyShapeStyle {
+        if colorScheme == .dark {
+            return AnyShapeStyle(.regularMaterial.opacity(0.78))
+        }
+
+        return AnyShapeStyle(.white.opacity(0.42))
+    }
+
+    private var cardStrokeColor: Color {
+        colorScheme == .dark ? .white.opacity(0.09) : .white.opacity(0.45)
+    }
+
+    private var cardShadowColor: Color {
+        colorScheme == .dark ? .black.opacity(0.18) : .cyan.opacity(0.10)
+    }
+
+    private var auxiliaryFillColor: Color {
+        colorScheme == .dark ? .white.opacity(0.08) : .white.opacity(0.20)
+    }
+
+    private var auxiliaryStrokeColor: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .white.opacity(0.35)
+    }
+
+    private var neutralCapsuleColor: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.08)
+    }
+
+    private var subduedCapsuleColor: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.05)
     }
 
     private var activityIndicatorIconName: String {
@@ -404,16 +480,9 @@ struct ContentView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.96))
-                .frame(width: 36, height: 36)
-                .background(.white.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .frame(width: 20, height: 20)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
         .help(help)
     }
 
@@ -452,7 +521,7 @@ struct ContentView: View {
                 Text("\(track.index + 1)")
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(track.isCurrent ? .white : .secondary)
+                    .foregroundStyle(track.isCurrent ? primaryTextColor : secondaryTextColor)
                     .frame(width: 24, alignment: .trailing)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -462,7 +531,7 @@ struct ContentView: View {
 
                     Text(track.subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryTextColor)
                         .lineLimit(1)
                 }
 
@@ -479,14 +548,26 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: LayoutMetrics.playlistRowMinHeight)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(track.isCurrent ? .white.opacity(0.12) : .white.opacity(0.05))
+                    .fill(track.isCurrent ? currentTrackFillColor : trackFillColor)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(track.isCurrent ? .cyan.opacity(0.25) : .white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(track.isCurrent ? .cyan.opacity(colorScheme == .dark ? 0.25 : 0.35) : trackStrokeColor, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private var currentTrackFillColor: Color {
+        colorScheme == .dark ? .white.opacity(0.12) : .white.opacity(0.30)
+    }
+
+    private var trackFillColor: Color {
+        colorScheme == .dark ? .white.opacity(0.05) : .white.opacity(0.18)
+    }
+
+    private var trackStrokeColor: Color {
+        colorScheme == .dark ? .white.opacity(0.06) : .white.opacity(0.26)
     }
 }
 
