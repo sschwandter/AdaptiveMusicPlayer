@@ -102,6 +102,7 @@
 				F8C938B12EA40C9E00E18E93 /* Sources */,
 				F8C938B22EA40C9E00E18E93 /* Frameworks */,
 				F8C938B32EA40C9E00E18E93 /* Resources */,
+				F8C9390A2EA40C9F00E18E93 /* Sync Git Tag Version */,
 			);
 			buildRules = (
 			);
@@ -230,6 +231,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F8C9390A2EA40C9F00E18E93 /* Sync Git Tag Version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+				"$(SRCROOT)/tools/sync_git_tag_version.sh",
+			);
+			name = "Sync Git Tag Version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -x \"$SRCROOT/tools/sync_git_tag_version.sh\" ]; then\n  \"$SRCROOT/tools/sync_git_tag_version.sh\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		F8C938B12EA40C9E00E18E93 /* Sources */ = {
@@ -406,6 +431,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					README.md,
@@ -445,6 +471,7 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					README.md,
