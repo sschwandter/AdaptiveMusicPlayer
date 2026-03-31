@@ -2,6 +2,8 @@
 
 Adaptive Music Player is a macOS audio player focused on sample-rate-aware playback. It loads local audio files, displays both file and hardware sample rates, and attempts to switch the system output rate to match the file for bit-perfect playback when possible.
 
+![Adaptive Music Player screenshot](docs/screenshots/app-screenshot.png)
+
 ## What It Does
 
 - Plays local audio files with `AVAudioPlayer`
