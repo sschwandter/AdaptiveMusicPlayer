@@ -256,5 +256,7 @@ struct AudioPlayerTests {
         #expect(player.hasError == true)
         #expect(player.isLoading == false)
         #expect(player.statusMessage == "Failed to start audio playback")
+        #expect(player.currentFileName == "failing.wav")
+        #expect(player.duration == 1)
     }
 }

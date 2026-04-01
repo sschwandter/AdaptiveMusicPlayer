@@ -113,7 +113,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Presentation State
 
     private var screenState = PlayerScreenState()
-    private var playbackState: PlaybackState = .idle
 
     // MARK: - Domain State (exposed to UI)
 
@@ -288,7 +287,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         self.hardwareObserver = hardwareObserver
         self.hardwareInfoProvider = hardwareInfoProvider
         self.folderScanner = folderScanner
-        syncPlaybackStateFromEngine()
 
         hardwareObserver.startObserving { [weak self] in
             Task { @MainActor [weak self] in
@@ -425,7 +423,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         do {
             try engine.pause()
-            syncPlaybackStateFromEngine()
+            transitionToPausedPlayback()
             progressTracker.stopTracking()
             setStatusMessage("Paused")
         } catch let error as PlaybackError {
@@ -438,7 +436,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     func stop() {
         _ = cancelPendingPlaybackStart()
         engine.stop()
-        syncPlaybackStateFromEngine()
+        transitionToStoppedPlayback()
         progressTracker.stopTracking()
         currentTime = 0
         setStatusMessage("Stopped")
@@ -521,7 +519,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 guard let self else { return }
                 if !self.moveToAdjacentTrack(next: true, autoplay: true) {
                     self.engine.markFinished()
-                    self.syncPlaybackStateFromEngine()
+                    self.transitionToFinishedPlayback()
                     self.currentTime = self.duration
                     self.setStatusMessage("Playback finished")
                 }
@@ -555,7 +553,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     ) {
         _ = cancelPendingPlaybackStart()
         engine.beginLoading()
-        syncPlaybackStateFromEngine()
+        transitionToLoadingPlayback()
         progressTracker.stopTracking()
         currentTime = 0
         screenState.loading = message == "Scanning folder..." ? .scanningFolder : .loadingTrack
@@ -643,7 +641,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         autoplayOnSuccess: Bool = false
     ) async throws {
         let audioInfo = try await engine.loadFile(from: trackURL)
-        syncPlaybackStateFromEngine()
+        transitionToReadyPlayback(audioInfo)
 
         try ensureLoadRemainsCurrent(generation)
 
@@ -713,12 +711,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func finishSuccessfulPlaybackStart(generation: Int) async throws {
         guard playbackStartupRemainsCurrent(generation) else {
             engine.stop()
-            syncPlaybackStateFromEngine()
+            transitionToStoppedPlayback()
             currentTime = 0
             return
         }
 
-        syncPlaybackStateFromEngine()
+        transitionToPlayingPlayback()
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()
@@ -776,8 +774,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func showError(_ error: PlaybackError) {
-        syncPlaybackStateFromEngine()
-        if playbackState.isLoading {
+        if currentAudioInfo == nil {
             screenState.playback = .unavailable
         }
         screenState.loading = .failed
@@ -800,11 +797,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         screenState.status = StatusPresentationState(kind: message.isEmpty ? .neutral : .info, message: message)
     }
 
-    private func syncPlaybackStateFromEngine() {
-        playbackState = engine.state
-        screenState.playback = Self.playbackPresentationState(from: playbackState)
-    }
-
     private static func formatSampleRate(_ sampleRate: Double) -> String {
         let kilohertz = sampleRate / 1000
         if abs(kilohertz.rounded() - kilohertz) < 0.05 {
@@ -817,25 +809,45 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         supportedRates.contains { abs($0 - target) <= Constants.sampleRateTolerance }
     }
 
-    private static func playbackPresentationState(from playbackState: PlaybackState) -> PlaybackPresentationState {
-        switch playbackState {
-        case .idle:
-            return .idle
-        case .ready(let info):
-            return .ready(info)
-        case .playing(let info):
-            return .playing(info)
-        case .paused(let info):
-            return .paused(info)
-        case .finished(let info):
-            return .finished(info)
-        case .loading(let info):
-            if let info {
-                return .ready(info)
-            }
-            return .idle
-        case .error:
-            return .unavailable
+    private var currentAudioInfo: AudioInfo? {
+        screenState.playback.audioInfo
+    }
+
+    private func transitionToLoadingPlayback() {
+        if let currentAudioInfo {
+            screenState.playback = .ready(currentAudioInfo)
+        } else {
+            screenState.playback = .idle
         }
+    }
+
+    private func transitionToReadyPlayback(_ audioInfo: AudioInfo) {
+        screenState.playback = .ready(audioInfo)
+    }
+
+    private func transitionToPlayingPlayback() {
+        guard let currentAudioInfo else {
+            screenState.playback = .unavailable
+            return
+        }
+        screenState.playback = .playing(currentAudioInfo)
+    }
+
+    private func transitionToPausedPlayback() {
+        guard let currentAudioInfo else { return }
+        screenState.playback = .paused(currentAudioInfo)
+    }
+
+    private func transitionToStoppedPlayback() {
+        guard let currentAudioInfo else {
+            screenState.playback = .idle
+            return
+        }
+        screenState.playback = .ready(currentAudioInfo)
+    }
+
+    private func transitionToFinishedPlayback() {
+        guard let currentAudioInfo else { return }
+        screenState.playback = .finished(currentAudioInfo)
     }
 }
