@@ -1,9 +1,9 @@
 name: macOS Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types:
+      - published
 
 permissions:
   contents: write
@@ -20,6 +20,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -68,11 +72,15 @@ jobs:
       BUILD_CONFIGURATION: Release
       ARCHIVE_PATH: .build/ReleaseArchive/AdaptiveMusicPlayer.xcarchive
       EXPORT_PATH: .build/ReleaseExport
-      RELEASE_ZIP: AdaptiveMusicPlayer-${{ github.ref_name }}-macOS.zip
+      RELEASE_ZIP: AdaptiveMusicPlayer-${{ github.event.release.tag_name }}-macOS.zip
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Install signing certificate
         env:
@@ -109,8 +117,8 @@ jobs:
           name: ${{ env.APP_NAME }}-signed-macOS-${{ github.sha }}
           path: ${{ env.RELEASE_ZIP }}
 
-      - name: Create GitHub release
+      - name: Upload signed app to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name }}
           files: ${{ env.RELEASE_ZIP }}
-          generate_release_notes: true

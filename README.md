@@ -36,6 +36,22 @@ xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-
 
 UI tests exist, but command-line execution may depend on the local environment and permissions available to the test runner.
 
+## Releases
+
+Releases are managed with `release-please`.
+
+- Merges to `main` update or create a release PR based on Conventional Commits.
+- Merging the release PR creates the version tag and GitHub release.
+- Creating that release triggers the macOS signing, notarization, and asset upload workflow.
+- For branch-scoped testing, `release-please` can temporarily target a feature branch instead of `main`.
+- GitHub Actions must be allowed to create pull requests for `release-please` to open its release PR.
+
+Examples:
+
+- `fix: handle missing output device` -> patch release
+- `feat: add folder playback shortcuts` -> minor release
+- `feat!: redesign playback session model` or a commit body containing `BREAKING CHANGE:` -> major release
+
 ## Sample Rate Behavior
 
 When playback starts, the app compares the file sample rate with the current hardware sample rate.
