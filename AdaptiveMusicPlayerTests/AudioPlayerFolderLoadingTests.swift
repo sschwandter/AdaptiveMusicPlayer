@@ -53,6 +53,29 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.hasError == false)
     }
 
+    @Test("Loading an empty folder stops loading and shows an error")
+    func loadEmptyFolderShowsErrorWithoutSpinner() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        try FileManager.default.createDirectory(
+            at: rootFolder.appending(path: "empty-album"),
+            withIntermediateDirectories: true
+        )
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver()
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        #expect(player.hasError == true)
+        #expect(player.isLoading == false)
+        #expect(player.statusMessage == "Error loading file: No playable audio files were found in the selected folder.")
+    }
+
     @Test("Selecting a playlist track updates the current track")
     func selectPlaylistTrackMovesToChosenEntry() async throws {
         let rootFolder = try TemporaryFolder.make()

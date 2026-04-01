@@ -659,6 +659,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private func showError(_ error: PlaybackError) {
         syncPlaybackStateFromEngine()
+        if playbackState.isLoading {
+            playbackState = .error(error)
+        }
         statusMessage = error.localizedDescription
         hasError = true
     }
