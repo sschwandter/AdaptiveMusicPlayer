@@ -43,6 +43,7 @@ Releases are managed with `release-please`.
 - Merges to `main` update or create a release PR based on Conventional Commits.
 - Merging the release PR creates the version tag and GitHub release.
 - Creating that release triggers the macOS signing, notarization, and asset upload workflow.
+- For branch-scoped testing, `release-please` can temporarily target a feature branch instead of `main`.
 
 Examples:
 
