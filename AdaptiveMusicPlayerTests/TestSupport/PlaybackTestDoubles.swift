@@ -121,3 +121,13 @@ struct DelayedSyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
         try sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }
+
+struct DelayedFolderScanner: AudioPlaylistFolderScanning {
+    let delay: TimeInterval
+    let tracks: [URL]
+
+    nonisolated func scan(folderURL: URL) throws -> [URL] {
+        Thread.sleep(forTimeInterval: delay)
+        return tracks
+    }
+}

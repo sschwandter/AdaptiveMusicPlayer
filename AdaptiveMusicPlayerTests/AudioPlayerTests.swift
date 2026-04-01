@@ -233,4 +233,28 @@ struct AudioPlayerTests {
         #expect(firstPlayer.playCallCount == 0)
         #expect(secondPlayer.playCallCount == 1)
     }
+
+    @Test("Playback start failure shows an error without leaving loading active")
+    func playbackStartFailureDoesNotLeaveLoadingStateActive() async throws {
+        let failingPlayer = try StubAudioPlayer(playResult: false)
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100, player: failingPlayer),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/failing.wav"))
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        await player.waitForCurrentLoad()
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(player.hasError == true)
+        #expect(player.isLoading == false)
+        #expect(player.statusMessage == "Failed to start audio playback")
+    }
 }

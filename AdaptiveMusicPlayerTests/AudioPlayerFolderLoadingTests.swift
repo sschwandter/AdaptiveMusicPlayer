@@ -104,4 +104,30 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.playlistTracks.count == 2)
         #expect(player.playlistTracks.last?.isCurrent == true)
     }
+
+    @Test("Cancelling a folder scan does not leave stale loading UI")
+    func cancellingFolderScanClearsLoadingState() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let replacementURL = rootFolder.appending(path: "replacement.wav")
+        try TemporaryFolder.writeWaveFile(at: replacementURL)
+
+        let delayedTrack = rootFolder.appending(path: "album/delayed.wav")
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(),
+            folderScanner: DelayedFolderScanner(delay: 0.15, tracks: [delayedTrack])
+        )
+
+        player.loadFolder(url: rootFolder)
+        player.loadFile(url: replacementURL)
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "replacement.wav")
+        #expect(player.isLoading == false)
+        #expect(player.hasError == false)
+        #expect(player.statusMessage.contains("Ready to play"))
+    }
 }

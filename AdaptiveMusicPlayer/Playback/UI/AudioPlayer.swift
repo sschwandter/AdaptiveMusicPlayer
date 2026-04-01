@@ -311,66 +311,41 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// A short delay can be requested to let the file importer dismiss first.
     func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
         playlistSession = PlaylistSession.singleTrack(url)
-        loadPlaylistTrack(at: 0, importerDismissalDelay: importerDismissalDelay)
+        loadPlaylistTrack(
+            at: 0,
+            importerDismissalDelay: importerDismissalDelay
+        )
     }
 
     func loadFolder(url: URL, importerDismissalDelay: Duration = .zero) {
-        beginLoading(with: "Scanning folder...")
+        runLoadTask(loadingState: .scanningFolder, message: "Scanning folder...") { generation in
+            try await self.waitForImporterDismissal(
+                importerDismissalDelay,
+                generation: generation
+            )
 
-        loadingTask = Task {
-            let generation = self.loadGeneration
-
-            do {
-                try await self.waitForImporterDismissal(
-                    importerDismissalDelay,
-                    generation: generation
-                )
-
-                guard let folderAccess = ScopedFolderAccess(folderURL: url) else {
-                    throw PlaybackError.loadFailed("Cannot access folder")
-                }
-
-                let tracks = try await Task.detached(priority: .userInitiated) {
-                    try self.folderScanner.scan(folderURL: url)
-                }.value
-
-                guard generation == self.loadGeneration else { return }
-                guard !Task.isCancelled else {
-                    self.setStatusMessage("Loading cancelled")
-                    return
-                }
-
-                guard let playlistSession = PlaylistSession.folderPlaylist(
-                    tracks: tracks,
-                    folderAccess: folderAccess
-                ) else {
-                    self.showError(.loadFailed("No playable audio files were found in the selected folder."))
-                    return
-                }
-
-                self.playlistSession = playlistSession
-                let loadingMessage = playlistSession.trackCount > 1
-                    ? "Loading track \(playlistSession.positionDescription)..."
-                    : "Loading file..."
-                self.beginLoading(
-                    with: loadingMessage,
-                    cancelCurrentLoad: false,
-                    advanceGeneration: false
-                )
-                try await self.finishLoadingTrack(
-                    from: playlistSession.currentTrackURL,
-                    generation: generation
-                )
-            } catch is CancellationError {
-                guard generation == self.loadGeneration else { return }
-                self.setStatusMessage("Loading cancelled")
-            } catch let error as PlaybackError {
-                guard generation == self.loadGeneration else { return }
-                self.showError(error)
-            } catch {
-                guard generation == self.loadGeneration else { return }
-                self.showError(.loadFailed(error.localizedDescription))
+            guard let folderAccess = ScopedFolderAccess(folderURL: url) else {
+                throw PlaybackError.loadFailed("Cannot access folder")
             }
+
+            let tracks = try await Task.detached(priority: .userInitiated) {
+                try self.folderScanner.scan(folderURL: url)
+            }.value
+
+            try self.ensureLoadRemainsCurrent(generation)
+
+            guard let playlistSession = PlaylistSession.folderPlaylist(
+                tracks: tracks,
+                folderAccess: folderAccess
+            ) else {
+                throw PlaybackError.loadFailed("No playable audio files were found in the selected folder.")
+            }
+
+            self.playlistSession = playlistSession
+            try await self.continueLoadingPreparedTrack(
+                from: playlistSession.currentTrackURL,
+                generation: generation
+            )
         }
     }
 
@@ -431,25 +406,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         do {
             try await engine.play()
 
-            guard playbackStartupRemainsCurrent(generation) else {
-                engine.stop()
-                syncPlaybackStateFromEngine()
-                currentTime = 0
-                return
-            }
-
-            syncPlaybackStateFromEngine()
-            startProgressTracking()
-            await refreshHardwareInfo()
-            showPlayingStatus()
+            try await finishSuccessfulPlaybackStart(generation: generation)
         } catch is CancellationError {
-            guard playbackStartupRemainsCurrent(generation) else { return }
+            handlePlaybackStartupCancellation(generation: generation)
         } catch let error as PlaybackError {
-            guard playbackStartupRemainsCurrent(generation) else { return }
-            showError(error)
+            handlePlaybackStartupFailure(error, generation: generation)
         } catch {
-            guard playbackStartupRemainsCurrent(generation) else { return }
-            showError(.notReady)
+            handlePlaybackStartupFailure(.notReady, generation: generation)
         }
     }
 
@@ -606,6 +569,36 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
+    private func runLoadTask(
+        loadingState: LoadingPresentationState,
+        message: String,
+        cancelCurrentLoad: Bool = true,
+        advanceGeneration: Bool = true,
+        operation: @escaping @MainActor (Int) async throws -> Void
+    ) {
+        beginLoading(
+            with: message,
+            cancelCurrentLoad: cancelCurrentLoad,
+            advanceGeneration: advanceGeneration
+        )
+        screenState.loading = loadingState
+
+        let generation = loadGeneration
+        loadingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                try await operation(generation)
+            } catch is CancellationError {
+                self.handleLoadCancellation(generation: generation)
+            } catch let error as PlaybackError {
+                self.handleLoadFailure(error, generation: generation)
+            } catch {
+                self.handleLoadFailure(.loadFailed(error.localizedDescription), generation: generation)
+            }
+        }
+    }
+
     private func loadPlaylistTrack(
         at index: Int,
         importerDismissalDelay: Duration = .zero,
@@ -618,31 +611,16 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let loadingMessage = nextPlaylistSession.trackCount > 1
             ? "Loading track \(nextPlaylistSession.positionDescription)..."
             : "Loading file..."
-        beginLoading(with: loadingMessage)
-
-        loadingTask = Task {
-            let generation = self.loadGeneration
-
-            do {
-                try await self.waitForImporterDismissal(
-                    importerDismissalDelay,
-                    generation: generation
-                )
-                try await self.finishLoadingTrack(
-                    from: trackURL,
-                    generation: generation,
-                    autoplayOnSuccess: autoplayOnSuccess
-                )
-            } catch is CancellationError {
-                guard generation == self.loadGeneration else { return }
-                self.setStatusMessage("Loading cancelled")
-            } catch let error as PlaybackError {
-                guard generation == self.loadGeneration else { return }
-                self.showError(error)
-            } catch {
-                guard generation == self.loadGeneration else { return }
-                self.showError(.loadFailed(error.localizedDescription))
-            }
+        runLoadTask(loadingState: .loadingTrack, message: loadingMessage) { generation in
+            try await self.waitForImporterDismissal(
+                importerDismissalDelay,
+                generation: generation
+            )
+            try await self.finishLoadingTrack(
+                from: trackURL,
+                generation: generation,
+                autoplayOnSuccess: autoplayOnSuccess
+            )
         }
     }
 
@@ -667,11 +645,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let audioInfo = try await engine.loadFile(from: trackURL)
         syncPlaybackStateFromEngine()
 
-        guard generation == loadGeneration else { return }
-        guard !Task.isCancelled else {
-            setStatusMessage("Loading cancelled")
-            return
-        }
+        try ensureLoadRemainsCurrent(generation)
 
         currentTime = 0
         engine.setVolume(volume)
@@ -681,6 +655,29 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         if autoplayOnSuccess {
             startPlayback()
         }
+    }
+
+    private func continueLoadingPreparedTrack(
+        from trackURL: URL,
+        generation: Int,
+        autoplayOnSuccess: Bool = false
+    ) async throws {
+        let loadingMessage = playlistSession?.trackCount ?? 0 > 1
+            ? "Loading track \(playlistSession?.positionDescription ?? "")..."
+            : "Loading file..."
+
+        beginLoading(
+            with: loadingMessage,
+            cancelCurrentLoad: false,
+            advanceGeneration: false
+        )
+        screenState.loading = .loadingTrack
+
+        try await finishLoadingTrack(
+            from: trackURL,
+            generation: generation,
+            autoplayOnSuccess: autoplayOnSuccess
+        )
     }
 
     private func cancelPendingPlaybackStart() -> Bool {
@@ -695,6 +692,46 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private func playbackStartupRemainsCurrent(_ generation: Int) -> Bool {
         activePlaybackStartupGeneration == generation && !Task.isCancelled
+    }
+
+    private func ensureLoadRemainsCurrent(_ generation: Int) throws {
+        guard generation == loadGeneration, !Task.isCancelled else {
+            throw CancellationError()
+        }
+    }
+
+    private func handleLoadCancellation(generation: Int) {
+        guard generation == loadGeneration else { return }
+        setStatusMessage("Loading cancelled")
+    }
+
+    private func handleLoadFailure(_ error: PlaybackError, generation: Int) {
+        guard generation == loadGeneration else { return }
+        showError(error)
+    }
+
+    private func finishSuccessfulPlaybackStart(generation: Int) async throws {
+        guard playbackStartupRemainsCurrent(generation) else {
+            engine.stop()
+            syncPlaybackStateFromEngine()
+            currentTime = 0
+            return
+        }
+
+        syncPlaybackStateFromEngine()
+        startProgressTracking()
+        await refreshHardwareInfo()
+        showPlayingStatus()
+    }
+
+    private func handlePlaybackStartupCancellation(generation: Int) {
+        guard playbackStartupRemainsCurrent(generation) else { return }
+        screenState.loading = .idle
+    }
+
+    private func handlePlaybackStartupFailure(_ error: PlaybackError, generation: Int) {
+        guard playbackStartupRemainsCurrent(generation) else { return }
+        showError(error)
     }
 
     @discardableResult
