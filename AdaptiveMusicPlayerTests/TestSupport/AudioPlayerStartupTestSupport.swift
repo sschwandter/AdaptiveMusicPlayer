@@ -50,7 +50,8 @@ struct StartupTestContext {
                 syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: syncDelay),
                 sampleRateManager: StubSampleRateManager()
             ),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
     }
 

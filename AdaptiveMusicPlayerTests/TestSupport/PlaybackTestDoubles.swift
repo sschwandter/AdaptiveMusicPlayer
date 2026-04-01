@@ -28,6 +28,22 @@ final class StubAudioHardwareObserver: AudioHardwareObserving {
     nonisolated func stopObserving() {}
 }
 
+struct StubAudioHardwareInfoProvider: AudioHardwareInfoProviding {
+    let deviceInfo: AudioDeviceInfo?
+
+    init(deviceInfo: AudioDeviceInfo? = AudioDeviceInfo(
+        name: "Test Device",
+        currentSampleRate: 44_100,
+        supportedSampleRates: [44_100]
+    )) {
+        self.deviceInfo = deviceInfo
+    }
+
+    func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
+        deviceInfo
+    }
+}
+
 struct StubSampleRateManager: SampleRateManaging {
     nonisolated func getCurrentSampleRate() -> Double? { 44_100 }
     nonisolated func getCurrentOutputDeviceName() -> String? { "Test Device" }

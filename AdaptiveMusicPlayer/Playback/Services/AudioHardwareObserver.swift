@@ -6,6 +6,25 @@ protocol AudioHardwareObserving: AnyObject, Sendable {
     nonisolated func stopObserving()
 }
 
+protocol AudioHardwareInfoProviding: Sendable {
+    func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo?
+}
+
+struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
+    private let sampleRateManager: SampleRateManaging
+
+    init(sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()) {
+        self.sampleRateManager = sampleRateManager
+    }
+
+    func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
+        let manager = sampleRateManager
+        return await Task.detached {
+            manager.getCurrentDeviceInfo()
+        }.value
+    }
+}
+
 /// Observes the active output device and its sample-rate-related properties.
 final class CoreAudioHardwareObserver: @unchecked Sendable, AudioHardwareObserving {
     private let callbackQueue = DispatchQueue(label: "AdaptiveMusicPlayer.AudioHardwareObserver")

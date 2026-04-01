@@ -8,7 +8,10 @@ struct AudioPlayerTests {
 
     @Test("AudioPlayer initializes with default values")
     func initialState() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         #expect(player.isPlaying == false)
         #expect(player.currentTime == 0)
@@ -23,9 +26,28 @@ struct AudioPlayerTests {
         #expect(player.isLoading == false)
     }
 
+    @Test("AudioPlayer initializes cleanly when hardware info is unavailable")
+    func initialStateWithoutHardwareSnapshot() async throws {
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(deviceInfo: nil)
+        )
+
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(player.hardwareSampleRate == 0)
+        #expect(player.hardwareDeviceDisplayName == "Unknown output")
+        #expect(!player.sampleRateStatusDetail.isEmpty)
+        #expect(player.hasError == false)
+        #expect(player.isLoading == false)
+    }
+
     @Test("Volume changes are applied correctly")
     func volumeControl() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         player.volume = 0.8
         #expect(player.volume == 0.8)
@@ -48,7 +70,10 @@ struct AudioPlayerTests {
 
     @Test("Toggle play/pause with no file loaded")
     func toggleWithoutFile() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         player.togglePlayPause()
         #expect(player.isPlaying == false)
@@ -56,7 +81,10 @@ struct AudioPlayerTests {
 
     @Test("Stop functionality")
     func stopFunctionality() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         player.stop()
         #expect(player.isPlaying == false)
@@ -65,7 +93,10 @@ struct AudioPlayerTests {
 
     @Test("Skip operations without file")
     func skipWithoutFile() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         player.skipForward()
         player.skipBackward()
@@ -76,7 +107,10 @@ struct AudioPlayerTests {
 
     @Test("Seek bounds checking")
     func seekBounds() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         player.seek(to: 10.0)
         #expect(player.currentTime == 0)
@@ -87,7 +121,10 @@ struct AudioPlayerTests {
 
     @Test("Error state management")
     func errorStates() async throws {
-        let player = AudioPlayer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
 
         #expect(player.hasError == false)
 
@@ -172,7 +209,8 @@ struct AudioPlayerTests {
                 syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()
             ),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
 
         player.loadFolder(url: rootFolder)

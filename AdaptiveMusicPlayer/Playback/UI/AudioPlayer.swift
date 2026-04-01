@@ -7,6 +7,76 @@ import Observation
 @MainActor
 @Observable
 final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
+    struct PlayerScreenState {
+        var playback: PlaybackPresentationState = .idle
+        var loading: LoadingPresentationState = .idle
+        var status: StatusPresentationState = .init()
+        var playlist: PlaylistPresentationState = .init()
+        var hardware: HardwarePresentationState = .init()
+    }
+
+    enum PlaybackPresentationState {
+        case idle
+        case ready(AudioInfo)
+        case playing(AudioInfo)
+        case paused(AudioInfo)
+        case finished(AudioInfo)
+        case unavailable
+
+        var audioInfo: AudioInfo? {
+            switch self {
+            case .ready(let info), .playing(let info), .paused(let info), .finished(let info):
+                return info
+            case .idle, .unavailable:
+                return nil
+            }
+        }
+
+        var isPlaying: Bool {
+            if case .playing = self { return true }
+            return false
+        }
+    }
+
+    enum LoadingPresentationState {
+        case idle
+        case scanningFolder
+        case loadingTrack
+        case startingPlayback
+        case cancelled
+        case failed
+
+        var isActive: Bool {
+            switch self {
+            case .scanningFolder, .loadingTrack:
+                return true
+            case .idle, .startingPlayback, .cancelled, .failed:
+                return false
+            }
+        }
+    }
+
+    struct StatusPresentationState {
+        enum Kind {
+            case neutral
+            case info
+            case error
+        }
+
+        var kind: Kind = .neutral
+        var message: String = ""
+    }
+
+    struct PlaylistPresentationState {
+        var session: PlaylistSession?
+    }
+
+    struct HardwarePresentationState {
+        var deviceName: String = ""
+        var currentSampleRate: Double = 0
+        var supportedSampleRates: [Double] = []
+    }
+
     struct ActivityIndicatorPresentation: Equatable {
         enum Style: Equatable {
             case idle
@@ -42,20 +112,21 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - Presentation State
 
-    var statusMessage: String = ""
-    var hasError: Bool = false
+    private var screenState = PlayerScreenState()
     private var playbackState: PlaybackState = .idle
 
     // MARK: - Domain State (exposed to UI)
 
     var currentTime: Double = 0
-    var duration: Double { playbackState.audioInfo?.duration ?? 0 }
+    var duration: Double { screenState.playback.audioInfo?.duration ?? 0 }
     var volume: Double = 1 {
         didSet {
             engine.setVolume(volume)
         }
     }
-    var currentFileName: String? { playbackState.audioInfo?.fileName }
+    var statusMessage: String { screenState.status.message }
+    var hasError: Bool { screenState.status.kind == .error }
+    var currentFileName: String? { screenState.playback.audioInfo?.fileName }
     var playlistTrackPosition: String? { playlistSession?.positionDescription }
     var playlistTracks: [PlaylistTrackRow] {
         guard let playlistSession else { return [] }
@@ -67,14 +138,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var hasPlaylist: Bool { playlistSession?.trackCount ?? 0 > 1 }
     var canPlayPreviousTrack: Bool { playlistSession?.canMoveToPreviousTrack ?? false }
     var canPlayNextTrack: Bool { playlistSession?.canMoveToNextTrack ?? false }
-    var fileSampleRate: Double { playbackState.audioInfo?.sampleRate ?? 0 }
-    var hardwareSampleRate: Double = 0
-    var hardwareDeviceName: String = ""
-    var supportedHardwareSampleRates: [Double] = []
+    var fileSampleRate: Double { screenState.playback.audioInfo?.sampleRate ?? 0 }
+    var hardwareSampleRate: Double { screenState.hardware.currentSampleRate }
+    var hardwareDeviceName: String { screenState.hardware.deviceName }
+    var supportedHardwareSampleRates: [Double] { screenState.hardware.supportedSampleRates }
 
-    var isLoading: Bool { playbackState.isLoading }
+    var isLoading: Bool { screenState.loading.isActive }
 
-    var isPlaying: Bool { playbackState.isPlaying }
+    var isPlaying: Bool { screenState.playback.isPlaying }
 
     var hasSampleRateMismatch: Bool {
         guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
@@ -191,13 +262,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
     private let hardwareObserver: AudioHardwareObserving
+    private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let folderScanner: AudioPlaylistFolderScanning
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
     private var playbackStartupTask: Task<Void, Never>?
     private var activePlaybackStartupGeneration: Int?
     private var playbackStartupGeneration: Int = 0
-    private var playlistSession: PlaylistSession?
+    private var playlistSession: PlaylistSession? {
+        get { screenState.playlist.session }
+        set { screenState.playlist.session = newValue }
+    }
 
     // MARK: - Initialization
 
@@ -205,13 +280,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         engine: AudioPlaybackEngine = AudioPlaybackEngine(),
         progressTracker: PlaybackProgressTracking = PlaybackProgressTracker(),
         hardwareObserver: AudioHardwareObserving = CoreAudioHardwareObserver(),
+        hardwareInfoProvider: AudioHardwareInfoProviding = CoreAudioHardwareInfoProvider(),
         folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner()
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
         self.hardwareObserver = hardwareObserver
+        self.hardwareInfoProvider = hardwareInfoProvider
         self.folderScanner = folderScanner
-        self.playbackState = engine.state
+        syncPlaybackStateFromEngine()
 
         hardwareObserver.startObserving { [weak self] in
             Task { @MainActor [weak self] in
@@ -337,6 +414,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         playbackStartupGeneration += 1
         let generation = playbackStartupGeneration
         activePlaybackStartupGeneration = generation
+        screenState.loading = .startingPlayback
         playbackStartupTask = Task { @MainActor [weak self] in
             await self?.play(generation: generation)
         }
@@ -496,14 +574,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Private Methods
 
     private func refreshHardwareInfo() async {
-        if let deviceInfo = await engine.getCurrentAudioDeviceInfo() {
-            hardwareDeviceName = deviceInfo.name
-            hardwareSampleRate = deviceInfo.currentSampleRate
-            supportedHardwareSampleRates = deviceInfo.supportedSampleRates
+        if let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo() {
+            screenState.hardware = HardwarePresentationState(
+                deviceName: deviceInfo.name,
+                currentSampleRate: deviceInfo.currentSampleRate,
+                supportedSampleRates: deviceInfo.supportedSampleRates
+            )
         } else {
-            hardwareDeviceName = ""
-            hardwareSampleRate = await engine.getCurrentHardwareSampleRate()
-            supportedHardwareSampleRates = []
+            screenState.hardware = HardwarePresentationState()
         }
     }
 
@@ -517,6 +595,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         syncPlaybackStateFromEngine()
         progressTracker.stopTracking()
         currentTime = 0
+        screenState.loading = message == "Scanning folder..." ? .scanningFolder : .loadingTrack
         setStatusMessage(message)
 
         if cancelCurrentLoad {
@@ -634,6 +713,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func showReadyStatus(for audioInfo: AudioInfo) {
+        screenState.loading = .idle
         let prefix = playlistSession?.trackCount ?? 0 > 1
             ? "Track \(playlistSession?.positionDescription ?? "") ready"
             : "Ready to play"
@@ -646,6 +726,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func showPlayingStatus() {
+        screenState.loading = .idle
         let prefix = playlistSession?.trackCount ?? 0 > 1
             ? "Playing track \(playlistSession?.positionDescription ?? "")"
             : "Playing"
@@ -660,19 +741,31 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func showError(_ error: PlaybackError) {
         syncPlaybackStateFromEngine()
         if playbackState.isLoading {
-            playbackState = .error(error)
+            screenState.playback = .unavailable
         }
-        statusMessage = error.localizedDescription
-        hasError = true
+        screenState.loading = .failed
+        screenState.status = StatusPresentationState(kind: .error, message: error.localizedDescription)
     }
 
     private func setStatusMessage(_ message: String) {
-        statusMessage = message
-        hasError = false
+        if message == "Loading cancelled" {
+            screenState.loading = .cancelled
+            screenState.status = StatusPresentationState(kind: .info, message: message)
+            return
+        }
+
+        if screenState.loading.isActive {
+            screenState.status = StatusPresentationState(kind: .info, message: message)
+            return
+        }
+
+        screenState.loading = .idle
+        screenState.status = StatusPresentationState(kind: message.isEmpty ? .neutral : .info, message: message)
     }
 
     private func syncPlaybackStateFromEngine() {
         playbackState = engine.state
+        screenState.playback = Self.playbackPresentationState(from: playbackState)
     }
 
     private static func formatSampleRate(_ sampleRate: Double) -> String {
@@ -685,5 +778,27 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private static func sampleRate(_ target: Double, isWithin supportedRates: [Double]) -> Bool {
         supportedRates.contains { abs($0 - target) <= Constants.sampleRateTolerance }
+    }
+
+    private static func playbackPresentationState(from playbackState: PlaybackState) -> PlaybackPresentationState {
+        switch playbackState {
+        case .idle:
+            return .idle
+        case .ready(let info):
+            return .ready(info)
+        case .playing(let info):
+            return .playing(info)
+        case .paused(let info):
+            return .paused(info)
+        case .finished(let info):
+            return .finished(info)
+        case .loading(let info):
+            if let info {
+                return .ready(info)
+            }
+            return .idle
+        case .error:
+            return .unavailable
+        }
     }
 }

@@ -16,7 +16,8 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
 
         player.loadFolder(url: rootFolder)
@@ -38,7 +39,8 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
 
         player.loadFolder(url: rootFolder)
@@ -65,7 +67,8 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
 
         player.loadFolder(url: rootFolder)
@@ -86,7 +89,8 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
-            hardwareObserver: StubAudioHardwareObserver()
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
 
         player.loadFolder(url: rootFolder)
