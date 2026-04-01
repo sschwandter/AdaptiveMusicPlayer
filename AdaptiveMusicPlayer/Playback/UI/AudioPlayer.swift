@@ -468,9 +468,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
 
         do {
-            try await engine.play()
+            let audioInfo = try await engine.play()
 
-            try await finishSuccessfulPlaybackStart(generation: generation)
+            try await finishSuccessfulPlaybackStart(generation: generation, audioInfo: audioInfo)
         } catch is CancellationError {
             handlePlaybackStartupCancellation(generation: generation)
         } catch let error as PlaybackError {
@@ -488,8 +488,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
 
         do {
-            try engine.pause()
-            transitionToPausedPlayback()
+            let audioInfo = try engine.pause()
+            transitionToPausedPlayback(audioInfo)
             progressTracker.stopTracking()
             setStatusMessage("Paused")
         } catch let error as PlaybackError {
@@ -501,8 +501,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     func stop() {
         _ = cancelPendingPlaybackStart()
-        engine.stop()
-        transitionToStoppedPlayback()
+        let audioInfo = engine.stop()
+        transitionToStoppedPlayback(preserving: audioInfo)
         progressTracker.stopTracking()
         currentTime = 0
         setStatusMessage("Stopped")
@@ -584,8 +584,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             onPlaybackFinished: { [weak self] in
                 guard let self else { return }
                 if !self.moveToAdjacentTrack(next: true, autoplay: true) {
-                    self.engine.markFinished()
-                    self.transitionToFinishedPlayback()
+                    let audioInfo = self.engine.markFinished()
+                    self.transitionToFinishedPlayback(audioInfo)
                     self.currentTime = self.duration
                     self.setStatusMessage("Playback finished")
                 }
@@ -618,8 +618,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         advanceGeneration: Bool = true
     ) {
         _ = cancelPendingPlaybackStart()
-        engine.beginLoading()
-        transitionToLoadingPlayback()
+        let preservedAudioInfo = engine.beginLoading()
+        transitionToLoadingPlayback(preserving: preservedAudioInfo)
         progressTracker.stopTracking()
         currentTime = 0
         screenState.loading = message == "Scanning folder..." ? .scanningFolder : .loadingTrack
@@ -774,15 +774,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         showError(error)
     }
 
-    private func finishSuccessfulPlaybackStart(generation: Int) async throws {
+    private func finishSuccessfulPlaybackStart(generation: Int, audioInfo: AudioInfo) async throws {
         guard playbackStartupRemainsCurrent(generation) else {
-            engine.stop()
-            transitionToStoppedPlayback()
+            let preservedAudioInfo = engine.stop()
+            transitionToStoppedPlayback(preserving: preservedAudioInfo)
             currentTime = 0
             return
         }
 
-        transitionToPlayingPlayback()
+        transitionToPlayingPlayback(audioInfo)
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()
@@ -879,8 +879,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         screenState.playback.audioInfo
     }
 
-    private func transitionToLoadingPlayback() {
-        if let currentAudioInfo {
+    private func transitionToLoadingPlayback(preserving audioInfo: AudioInfo?) {
+        if let audioInfo {
+            screenState.playback = .ready(audioInfo)
+        } else if let currentAudioInfo {
             screenState.playback = .ready(currentAudioInfo)
         } else {
             screenState.playback = .idle
@@ -891,20 +893,19 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         screenState.playback = .ready(audioInfo)
     }
 
-    private func transitionToPlayingPlayback() {
-        guard let currentAudioInfo else {
-            screenState.playback = .unavailable
+    private func transitionToPlayingPlayback(_ audioInfo: AudioInfo) {
+        screenState.playback = .playing(audioInfo)
+    }
+
+    private func transitionToPausedPlayback(_ audioInfo: AudioInfo) {
+        screenState.playback = .paused(audioInfo)
+    }
+
+    private func transitionToStoppedPlayback(preserving audioInfo: AudioInfo?) {
+        if let audioInfo {
+            screenState.playback = .ready(audioInfo)
             return
         }
-        screenState.playback = .playing(currentAudioInfo)
-    }
-
-    private func transitionToPausedPlayback() {
-        guard let currentAudioInfo else { return }
-        screenState.playback = .paused(currentAudioInfo)
-    }
-
-    private func transitionToStoppedPlayback() {
         guard let currentAudioInfo else {
             screenState.playback = .idle
             return
@@ -912,8 +913,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         screenState.playback = .ready(currentAudioInfo)
     }
 
-    private func transitionToFinishedPlayback() {
-        guard let currentAudioInfo else { return }
-        screenState.playback = .finished(currentAudioInfo)
+    private func transitionToFinishedPlayback(_ audioInfo: AudioInfo?) {
+        if let audioInfo {
+            screenState.playback = .finished(audioInfo)
+        }
     }
 }

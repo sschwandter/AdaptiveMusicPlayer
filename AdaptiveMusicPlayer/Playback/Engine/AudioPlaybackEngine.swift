@@ -41,12 +41,14 @@ final class AudioPlaybackEngine {
     // MARK: - File Loading
 
     /// Move the engine into a loading state before async file work begins.
-    func beginLoading() {
+    func beginLoading() -> AudioInfo? {
+        let preservedAudioInfo = state.audioInfo
         if let player {
             player.stop()
             player.currentTime = 0
         }
-        state = .loading(state.audioInfo)
+        state = .loading(preservedAudioInfo)
+        return preservedAudioInfo
     }
 
     /// Load an audio file and prepare for playback
@@ -88,7 +90,7 @@ final class AudioPlaybackEngine {
     // MARK: - Playback Control
 
     /// Start or resume playback
-    func play() async throws {
+    func play() async throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
@@ -113,28 +115,38 @@ final class AudioPlaybackEngine {
         }
 
         state = try playbackControlUseCase.play(player: player, state: state)
+        guard let audioInfo = state.audioInfo else {
+            throw PlaybackError.notReady
+        }
+        return audioInfo
     }
 
     /// Pause playback
-    func pause() throws {
+    func pause() throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
 
         state = try playbackControlUseCase.pause(player: player, state: state)
+        guard let audioInfo = state.audioInfo else {
+            throw PlaybackError.notReady
+        }
+        return audioInfo
     }
 
     /// Stop playback and reset to beginning
-    func stop() {
-        guard let player = player else { return }
+    func stop() -> AudioInfo? {
+        guard let player = player else { return nil }
 
         state = playbackControlUseCase.stop(player: player, state: state)
+        return state.audioInfo
     }
 
     /// Mark playback as finished
-    func markFinished() {
-        guard let audioInfo = state.audioInfo else { return }
+    func markFinished() -> AudioInfo? {
+        guard let audioInfo = state.audioInfo else { return nil }
         state = .finished(audioInfo)
+        return audioInfo
     }
 
     // MARK: - Seeking

@@ -14,10 +14,11 @@ struct AudioPlaybackEngineTests {
             sampleRateManager: sampleRateManager
         )
 
-        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
-        try await engine.play()
+        let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        let playingAudioInfo = try await engine.play()
 
         #expect(sampleRateManager.requestedSampleRates == [96_000])
+        #expect(playingAudioInfo == loadedAudioInfo)
         #expect(engine.state.isPlaying == true)
     }
 
@@ -29,10 +30,11 @@ struct AudioPlaybackEngineTests {
             sampleRateManager: sampleRateManager
         )
 
-        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
-        try await engine.play()
+        let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+        let playingAudioInfo = try await engine.play()
 
         #expect(sampleRateManager.requestedSampleRates.isEmpty)
+        #expect(playingAudioInfo == loadedAudioInfo)
         #expect(engine.state.isPlaying == true)
     }
 }

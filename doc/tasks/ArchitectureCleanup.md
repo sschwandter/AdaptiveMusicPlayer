@@ -1,249 +1,157 @@
-# Architecture Cleanup Plan
+# Architecture Cleanup Status
 
-## Goal
+## Summary
 
-Reduce the current architectural caveats by making ownership of playback state, loading state, and hardware state more explicit and easier to test.
+The compat-first architecture cleanup is complete.
 
-The target outcome is:
+The original goals were to make ownership of playback state, loading state, and hardware state more explicit without forcing a large UI rewrite. That work is now in place:
 
-- `ContentView` stays focused on rendering and short-lived UI interaction state.
-- `AudioPlayer` becomes the single owner of screen-facing state and user workflows.
-- `AudioPlaybackEngine` becomes a lower-level playback service instead of a second UI-visible state holder.
-- Tests stop depending on real hardware behavior.
+- `AudioPlayer` is the single owner of screen-facing playback, loading, status, playlist, and hardware presentation state.
+- `AudioPlaybackEngine` is narrowed to backend playback mechanics and no longer acts as the UI state model.
+- `ContentView` reads from a thinner presentation surface instead of many loosely related `AudioPlayer` properties.
+- hardware behavior is split into observation and info-provider dependencies and is fully testable with doubles.
+- unit tests no longer depend on real machine audio hardware.
 
-## Current Pain Points
+## Completed Work
 
-### 1. Split playback coordination
+### 1. Explicit screen-state model in `AudioPlayer`
 
-Playback behavior is currently spread across:
+Implemented in:
 
-- `AdaptiveMusicPlayer/Playback/UI/ContentView.swift`
 - `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
+
+Completed changes:
+
+- added `PlayerScreenState`
+- added explicit presentation types for playback, loading, status, playlist, and hardware
+- moved `isLoading`, `hasError`, `statusMessage`, playlist helpers, and hardware display data to derive from that structured state
+
+Result:
+
+- spinner, error, ready, and playback presentation no longer depend on loosely coordinated flags
+
+### 2. Workflow ownership moved into `AudioPlayer`
+
+Implemented in:
+
+- `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
+
+Completed changes:
+
+- centralized file loading, folder scanning, prepared-track continuation, autoplay intent, and cancellation handling
+- added explicit handling for outcomes such as:
+  - scanning folder
+  - loading track
+  - cancelled load
+  - failed load
+  - playback start success
+  - playback start failure
+
+Result:
+
+- workflow transitions are now readable in one place instead of being split across engine state and UI patch-up logic
+
+### 3. Engine responsibilities narrowed
+
+Implemented in:
+
 - `AdaptiveMusicPlayer/Playback/Engine/AudioPlaybackEngine.swift`
+- `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
 
-This makes it harder to answer simple questions like:
+Completed changes:
 
-- Which layer owns the current loading state?
-- Which layer is responsible for playlist navigation intent?
-- Which layer should transition from loading to error?
+- `AudioPlayer` no longer mirrors `engine.state` as its presentation model
+- playback presentation transitions are driven explicitly in `AudioPlayer`
+- engine operations now return concrete backend results:
+  - `beginLoading() -> AudioInfo?`
+  - `play() async throws -> AudioInfo`
+  - `pause() throws -> AudioInfo`
+  - `stop() -> AudioInfo?`
+  - `markFinished() -> AudioInfo?`
 
-### 2. Mixed state model
+Result:
 
-The screen behavior is derived from several parallel pieces of state:
+- `AudioPlaybackEngine` remains stateful internally, but that state is now a backend detail rather than the source of screen behavior
 
-- `playbackState`
-- `hasError`
-- `statusMessage`
-- `playlistSession`
-- async task references such as `loadingTask` and `playbackStartupTask`
+### 4. Hardware behavior formalized for tests
 
-That allows awkward combinations and makes regressions like “error shown while spinner keeps running” easier to introduce.
+Implemented in:
 
-### 3. Runtime-dependent tests
+- `AdaptiveMusicPlayer/Playback/Services/AudioHardwareObserver.swift`
+- `AdaptiveMusicPlayerTests/TestSupport/PlaybackTestDoubles.swift`
+- `AdaptiveMusicPlayerTests/AudioPlayerTests.swift`
 
-`AudioPlayer` performs real hardware observation and queries during initialization. That makes unit tests less deterministic and caused CI failures when a virtual machine reported no usable hardware sample rate.
+Completed changes:
 
-## Refactor Principles
+- split hardware responsibilities into:
+  - `AudioHardwareObserving`
+  - `AudioHardwareInfoProviding`
+- updated `AudioPlayer` to accept both dependencies
+- introduced deterministic hardware doubles for tests
 
-### Single owner per concern
+Result:
 
-Each concern should have one obvious owner:
+- `AudioPlayerTests` no longer assume real hardware sample-rate/device information exists
+- CI runs are safe on virtual machines and hardware-limited environments
 
-- playback session control
-- loading workflow
-- hardware diagnostics
-- playlist/session navigation
-- presentation state
+### 5. View boundary tightened without redesign
 
-### UI derives from explicit state
+Implemented in:
 
-Spinner, error presentation, button enablement, and status text should derive from a structured model rather than from loosely coordinated flags.
+- `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
+- `AdaptiveMusicPlayer/Playback/UI/ContentView.swift`
 
-### Unit tests should not depend on Core Audio
+Completed changes:
 
-Hardware-dependent behavior should be fully replaceable with test doubles.
+- added `contentViewState` presentation data to `AudioPlayer`
+- moved `ContentView` reads onto that state for:
+  - header/file display
+  - activity indicator
+  - slider enablement and opacity
+  - transport-button availability and labels
+  - playlist browser visibility and row source
 
-## Proposed End State
+Result:
 
-### ContentView
+- `ContentView` still owns local UI state like importer presentation and slider editing, but no longer reaches into a wide scatter of playback and workflow properties
 
-`ContentView` should keep only view-local interaction state, for example:
+## Regression Coverage Added
 
-- importer presentation
-- active import target
-- slider editing progress
-- purely visual local state if needed
+Covered by unit tests:
 
-`ContentView` should not own workflow decisions such as:
+- empty folder shows an error and stops loading
+- cancelling folder scanning clears stale loading UI
+- selecting a playlist track during startup preserves autoplay intent
+- playback-start failure does not leave loading active
+- playback-start failure preserves the loaded file presentation
+- initial `AudioPlayer` state works when hardware info is unavailable
+- engine playback tests verify concrete return values as well as sample-rate behavior
 
-- how folder loading is sequenced
-- when loading becomes error
-- whether a selected track should autoplay
+Primary test targets:
 
-### AudioPlayer
+- `AdaptiveMusicPlayerTests/AudioPlayerTests.swift`
+- `AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests.swift`
+- `AdaptiveMusicPlayerTests/AudioPlaybackEngineTests.swift`
 
-`AudioPlayer` should become the single screen-facing coordinator:
+## Remaining Opportunities
 
-- owns presentation state
-- owns loading workflow
-- owns playlist workflow
-- owns playback intent
-- maps engine/service results into UI state
+The original cleanup plan is complete. Any further work is optional follow-on refinement.
 
-It should expose a coherent model to the view instead of forcing the view to infer behavior from several separate flags.
+Good next opportunities:
 
-### AudioPlaybackEngine
+1. Add a small integration/UI test layer for importer and command routing behavior if macOS UI test stability is acceptable.
+2. Consider whether `AudioPlaybackEngine.state` still needs to remain publicly readable for tests, or whether a narrower inspection API would be cleaner.
+3. If the app grows, consider splitting `AudioPlayer` into:
+   - a presentation-facing observable type
+   - a lower-level workflow coordinator
+   but only if new features start making `AudioPlayer` too broad.
 
-`AudioPlaybackEngine` should narrow toward low-level playback responsibilities:
+## Success Criteria Review
 
-- load prepared track into the playback backend
-- play / pause / stop / seek
-- synchronize hardware sample rate
-- surface current engine state in a narrow, predictable way
-
-It should avoid owning UI-facing concerns such as screen status text or higher-level workflow state.
-
-## Proposed Steps
-
-### Phase 1. Introduce an explicit screen state model
-
-Create a structured screen-facing model inside `AudioPlayer`, for example:
-
-- `PlaybackPresentationState`
-- `LoadingState`
-- `BannerState` or `StatusState`
-- `PlaylistPresentationState`
-- `HardwarePresentationState`
-
-Possible shape:
-
-```swift
-struct PlayerScreenState {
-    var playback: PlaybackPresentationState
-    var loading: LoadingState
-    var status: StatusState
-    var playlist: PlaylistPresentationState
-    var hardware: HardwarePresentationState
-}
-```
-
-This phase should replace ad-hoc combinations such as:
-
-- `hasError`
-- `statusMessage`
-- `playbackState.isLoading`
-
-with a clearer representation.
-
-Expected payoff:
-
-- easier UI rendering
-- fewer impossible state combinations
-- clearer transitions for loading and error states
-
-### Phase 2. Make AudioPlayer the workflow owner
-
-Move workflow-level transitions fully into `AudioPlayer`:
-
-- file load flow
-- folder scan flow
-- playlist setup
-- autoplay after selection
-- cancellation and generation handling
-
-Keep `AudioPlaybackEngine` focused on low-level playback mechanics.
-
-Expected payoff:
-
-- one obvious place for behavior changes
-- less ambiguity around who owns playback workflow
-- easier debugging of state transitions
-
-### Phase 3. Narrow engine state responsibilities
-
-Review whether `AudioPlaybackEngine.state` should remain a broad enum or be simplified.
-
-Options:
-
-1. Keep engine state but make it backend-oriented only.
-2. Replace it with narrower return values and let `AudioPlayer` own most presentation-oriented state.
-
-Questions to answer during this phase:
-
-- Should `.error` live in the engine or only in `AudioPlayer`?
-- Should loading state exist in the engine, or only in the coordinator/view model?
-- Can playlist/session state be fully removed from engine-adjacent flows?
-
-Expected payoff:
-
-- cleaner separation between backend playback and screen state
-
-### Phase 4. Formalize dependency injection for hardware behavior
-
-Make hardware behavior fully injectable:
-
-- hardware observer
-- hardware info provider
-- sample-rate manager
-- optional scheduler/clock for async waits
-
-This may involve separating “observe hardware changes” from “fetch current hardware snapshot” into distinct protocols if that improves clarity.
-
-Expected payoff:
-
-- deterministic unit tests
-- no reliance on VM/device audio configuration
-- simpler CI behavior
-
-### Phase 5. Tighten view boundaries
-
-Keep only genuinely local state in `ContentView`.
-
-Good candidates to remain local:
-
-- importer sheet presentation
-- transient slider editing state
-
-Good candidates to route through `AudioPlayer` methods:
-
-- imported file/folder handling
-- seek completion behavior
-- command routing intent
-
-Expected payoff:
-
-- thinner view
-- less behavior hidden in SwiftUI closures
-
-## Concrete First Tasks
-
-These are the best low-risk starting points:
-
-1. Introduce a dedicated loading/error presentation model in `AudioPlayer`.
-2. Replace spinner/error derivation in `ContentView` with that new model.
-3. Refactor folder loading to produce explicit outcomes:
-   - scanning
-   - empty folder
-   - track ready
-   - cancelled
-   - failed
-4. Add hardware-provider test doubles and migrate `AudioPlayerTests` away from real hardware assumptions.
-
-## Non-Goals
-
-To keep the cleanup focused, avoid doing these in the first pass:
-
-- a full rewrite into “clean architecture”
-- moving every single piece of state out of `ContentView`
-- changing the visual design while refactoring architecture
-- replacing working use cases unless they block clearer ownership
-
-## Success Criteria
-
-The cleanup is successful when:
+The cleanup goals are satisfied:
 
 - screen loading/error behavior is represented explicitly
 - `AudioPlayer` is the obvious owner of user workflow state
 - `AudioPlaybackEngine` is easier to describe as a lower-level service
 - unit tests do not require real hardware sample-rate information
-- contributors can tell where to add new behavior without reading three layers first
+- contributors can now find most behavior changes in one main place
