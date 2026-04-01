@@ -5,8 +5,7 @@
       "release-type": "simple",
       "package-name": "AdaptiveMusicPlayer",
       "include-v-in-tag": true,
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-minor-pre-major": true
     }
   }
 }
