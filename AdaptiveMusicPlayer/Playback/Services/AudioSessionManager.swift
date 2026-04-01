@@ -19,19 +19,24 @@ protocol AudioTitleReading: Sendable {
 struct AVAssetAudioTitleReader: AudioTitleReading {
     func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String {
         let asset = AVURLAsset(url: url)
-        return titleFromCommonMetadata(asset.commonMetadata) ?? fallbackFileName
+        do {
+            let metadata = try await asset.load(.commonMetadata)
+            return try await titleFromCommonMetadata(metadata) ?? fallbackFileName
+        } catch {
+            return fallbackFileName
+        }
     }
 
-    private func titleFromCommonMetadata(_ metadataItems: [AVMetadataItem]) -> String? {
+    private func titleFromCommonMetadata(_ metadataItems: [AVMetadataItem]) async throws -> String? {
         if let item = AVMetadataItem.metadataItems(
             from: metadataItems,
             filteredByIdentifier: .commonIdentifierTitle
         ).first {
-            return item.stringValue
+            return try await item.load(.stringValue)
         }
 
         if let item = metadataItems.first(where: { $0.commonKey?.rawValue == "title" }) {
-            return item.stringValue
+            return try await item.load(.stringValue)
         }
 
         return nil
