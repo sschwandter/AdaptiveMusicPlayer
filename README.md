@@ -40,11 +40,10 @@ UI tests exist, but command-line execution may depend on the local environment a
 
 Releases are managed with `release-please`.
 
-- Merges to `main` update or create a release PR based on Conventional Commits.
-- Merging the release PR creates the version tag and GitHub release.
-- Creating that release triggers the macOS signing, notarization, and asset upload workflow.
-- For branch-scoped testing, `release-please` can temporarily target a feature branch instead of `main`.
-- GitHub Actions must be allowed to create pull requests for `release-please` to open its release PR.
+- Pushes to `main` update or create a release PR based on Conventional Commits.
+- Merging the release PR creates the version tag and GitHub release automatically.
+- Publishing that release triggers the macOS signing, notarization, and asset upload workflow.
+- Pushing a tag manually does not create a release.
 
 Examples:
 
