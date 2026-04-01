@@ -6,7 +6,7 @@ struct PlaybackStateTests {
 
     @Test("Loading state preserves prior audio info during transitions")
     func loadingStatePreservesAudioInfo() {
-        let audioInfo = AudioInfo(fileName: "track.wav", duration: 42, sampleRate: 44_100)
+        let audioInfo = AudioInfo(fileName: "track.wav", displayTitle: "Track Title", duration: 42, sampleRate: 44_100)
 
         #expect(PlaybackState.loading(audioInfo).isLoading == true)
         #expect(PlaybackState.loading(audioInfo).audioInfo == audioInfo)

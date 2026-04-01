@@ -18,6 +18,7 @@ struct AudioPlayerTests {
         #expect(player.duration == 0)
         #expect(player.volume == 1.0)
         #expect(player.currentFileName == nil)
+        #expect(player.currentDisplayTitle == nil)
         #expect(player.fileSampleRate == 0)
         try await Task.sleep(for: .milliseconds(100))
         #expect(!player.sampleRateStatusDetail.isEmpty)
@@ -188,6 +189,28 @@ struct AudioPlayerTests {
         #expect(try #require(context.secondPlayer).playCallCount == 0)
     }
 
+    @Test("Main display uses metadata title when available")
+    func displayTitleUsesResolvedMetadataTitle() async throws {
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(
+                    sampleRate: 44_100,
+                    displayTitle: "Tagged Song"
+                ),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/tagged-song.mp3"))
+        await player.waitForCurrentLoad()
+
+        #expect(player.currentFileName == "tagged-song.mp3")
+        #expect(player.currentDisplayTitle == "Tagged Song")
+        #expect(player.contentViewState.currentTrackTitle == "Tagged Song")
+    }
+
     @Test("Selecting a playlist track during startup preserves autoplay intent")
     func selectingPlaylistTrackDuringStartupKeepsPlaybackIntent() async throws {
         let rootFolder = try TemporaryFolder.make()
@@ -203,8 +226,8 @@ struct AudioPlayerTests {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
                 loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
-                    firstURL: AudioSession(player: firstPlayer, fileName: "01-first.wav", sampleRate: 44_100, duration: 1),
-                    secondURL: AudioSession(player: secondPlayer, fileName: "02-second.wav", sampleRate: 48_000, duration: 1)
+                    firstURL: AudioSession(player: firstPlayer, fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: AudioSession(player: secondPlayer, fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                 ]),
                 syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()

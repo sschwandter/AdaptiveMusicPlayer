@@ -65,6 +65,7 @@ final class AudioPlaybackEngine {
 
             let audioInfo = AudioInfo(
                 fileName: session.fileName,
+                displayTitle: session.displayTitle,
                 duration: session.duration,
                 sampleRate: session.sampleRate
             )

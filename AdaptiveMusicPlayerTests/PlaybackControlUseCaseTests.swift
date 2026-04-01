@@ -10,7 +10,7 @@ struct PlaybackControlUseCaseTests {
     func playFinishedTrackRewindsToStart() throws {
         let useCase = PlaybackControlUseCase()
         let player = try StubAudioPlayer()
-        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+        let audioInfo = AudioInfo(fileName: "test.wav", displayTitle: "Test Track", duration: 1, sampleRate: 44_100)
 
         player.currentTime = 0.75
         let newState = try useCase.play(player: player, state: .finished(audioInfo))
@@ -24,7 +24,7 @@ struct PlaybackControlUseCaseTests {
     func playFailureDoesNotAdvanceState() throws {
         let useCase = PlaybackControlUseCase()
         let player = try StubAudioPlayer(playResult: false)
-        let audioInfo = AudioInfo(fileName: "test.wav", duration: 1, sampleRate: 44_100)
+        let audioInfo = AudioInfo(fileName: "test.wav", displayTitle: "Test Track", duration: 1, sampleRate: 44_100)
 
         #expect(throws: PlaybackError.playbackStartFailed) {
             try useCase.play(player: player, state: .ready(audioInfo))

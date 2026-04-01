@@ -30,6 +30,7 @@ struct StartupTestContext {
             firstURL: AudioSession(
                 player: firstPlayer,
                 fileName: firstURL.lastPathComponent,
+                displayTitle: firstURL.lastPathComponent,
                 sampleRate: firstSampleRate,
                 duration: 1
             )
@@ -39,6 +40,7 @@ struct StartupTestContext {
             sessionsByURL[secondURL] = AudioSession(
                 player: secondPlayer,
                 fileName: secondURL.lastPathComponent,
+                displayTitle: secondURL.lastPathComponent,
                 sampleRate: secondSampleRate,
                 duration: 1
             )

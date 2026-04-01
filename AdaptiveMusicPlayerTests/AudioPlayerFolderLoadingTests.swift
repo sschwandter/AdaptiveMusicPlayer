@@ -84,11 +84,31 @@ struct AudioPlayerFolderLoadingTests {
         let rootFolder = try TemporaryFolder.make()
         defer { try? TemporaryFolder.remove(rootFolder) }
 
-        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/01-first.wav"))
-        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/02-second.wav"))
+        let firstURL = rootFolder.appending(path: "album/01-first.wav")
+        let secondURL = rootFolder.appending(path: "album/02-second.wav")
+        try TemporaryFolder.writeWaveFile(at: firstURL)
+        try TemporaryFolder.writeWaveFile(at: secondURL)
 
         let player = AudioPlayer(
-            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                    firstURL: AudioSession(
+                        player: try StubAudioPlayer(),
+                        fileName: "01-first.wav",
+                        displayTitle: "Opening Track",
+                        sampleRate: 44_100,
+                        duration: 1
+                    ),
+                    secondURL: AudioSession(
+                        player: try StubAudioPlayer(),
+                        fileName: "02-second.wav",
+                        displayTitle: "Finale",
+                        sampleRate: 44_100,
+                        duration: 1
+                    )
+                ]),
+                sampleRateManager: StubSampleRateManager()
+            ),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
         )
@@ -96,13 +116,18 @@ struct AudioPlayerFolderLoadingTests {
         player.loadFolder(url: rootFolder)
         await player.waitForCurrentLoad()
 
+        #expect(player.playlistTracks.first?.title == "Opening Track")
+        #expect(player.playlistTracks.last?.title == "02-second.wav")
+
         player.selectPlaylistTrack(at: 1)
         await player.waitForCurrentLoad()
 
         #expect(player.currentFileName == "02-second.wav")
+        #expect(player.currentDisplayTitle == "Finale")
         #expect(player.playlistTrackPosition == "2 of 2")
         #expect(player.playlistTracks.count == 2)
         #expect(player.playlistTracks.last?.isCurrent == true)
+        #expect(player.playlistTracks.last?.title == "Finale")
     }
 
     @Test("Cancelling a folder scan does not leave stale loading UI")

@@ -76,16 +76,19 @@ final class RecordingSampleRateManager: SampleRateManaging, @unchecked Sendable 
 struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
     let sampleRate: Double
     let player: AVAudioPlayer
+    let displayTitle: String?
 
-    init(sampleRate: Double, player: AVAudioPlayer? = nil) {
+    init(sampleRate: Double, player: AVAudioPlayer? = nil, displayTitle: String? = nil) {
         self.sampleRate = sampleRate
         self.player = player ?? (try! StubAudioPlayer())
+        self.displayTitle = displayTitle
     }
 
     func execute(from url: URL) async throws -> AudioSession {
         AudioSession(
             player: player,
             fileName: url.lastPathComponent,
+            displayTitle: displayTitle ?? url.lastPathComponent,
             sampleRate: sampleRate,
             duration: 1
         )
@@ -129,5 +132,30 @@ struct DelayedFolderScanner: AudioPlaylistFolderScanning {
     nonisolated func scan(folderURL: URL) throws -> [URL] {
         Thread.sleep(forTimeInterval: delay)
         return tracks
+    }
+}
+
+struct StubAudioFileLoader: AudioFileLoading {
+    let data: Data
+    let fileName: String
+    let fileExtension: String
+
+    init(data: Data = WaveData.make(), fileName: String, fileExtension: String = "wav") {
+        self.data = data
+        self.fileName = fileName
+        self.fileExtension = fileExtension
+    }
+
+    func load(url: URL) async throws -> LoadedAudioFile {
+        LoadedAudioFile(data: data, fileName: fileName, fileExtension: fileExtension)
+    }
+}
+
+struct StubAudioTitleReader: AudioTitleReading {
+    let title: String?
+
+    func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String {
+        guard let title else { return fallbackFileName }
+        return title
     }
 }

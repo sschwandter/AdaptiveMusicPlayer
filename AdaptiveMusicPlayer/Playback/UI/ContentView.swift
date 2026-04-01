@@ -101,8 +101,8 @@ struct ContentView: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         Group {
-                            if let fileName = viewState.currentFileName {
-                                Text(fileName)
+                            if let currentTrackTitle = viewState.currentTrackTitle {
+                                Text(currentTrackTitle)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             } else {

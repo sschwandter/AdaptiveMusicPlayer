@@ -96,9 +96,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let url: URL
         let index: Int
         let isCurrent: Bool
+        let displayTitle: String
 
         var id: URL { url }
-        var title: String { url.lastPathComponent }
+        var title: String { displayTitle }
         var subtitle: String { url.deletingLastPathComponent().lastPathComponent }
     }
 
@@ -120,7 +121,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     struct ContentViewState {
-        let currentFileName: String?
+        let currentTrackTitle: String?
         let playlistTrackPosition: String?
         let duration: Double
         let currentTime: Double
@@ -158,12 +159,18 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var statusMessage: String { screenState.status.message }
     var hasError: Bool { screenState.status.kind == .error }
     var currentFileName: String? { screenState.playback.audioInfo?.fileName }
+    var currentDisplayTitle: String? { screenState.playback.audioInfo?.displayTitle }
     var playlistTrackPosition: String? { playlistSession?.positionDescription }
     var playlistTracks: [PlaylistTrackRow] {
         guard let playlistSession else { return [] }
 
         return playlistSession.playlist.tracks.enumerated().map { index, url in
-            PlaylistTrackRow(url: url, index: index, isCurrent: index == playlistSession.currentIndex)
+            PlaylistTrackRow(
+                url: url,
+                index: index,
+                isCurrent: index == playlistSession.currentIndex,
+                displayTitle: displayTitlesByTrackURL[url] ?? url.lastPathComponent
+            )
         }
     }
     var hasPlaylist: Bool { playlistSession?.trackCount ?? 0 > 1 }
@@ -179,7 +186,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var isPlaying: Bool { screenState.playback.isPlaying }
 
     var contentViewState: ContentViewState {
-        let hasLoadedFile = currentFileName != nil
+        let hasLoadedFile = currentDisplayTitle != nil
         let transport = TransportControlsPresentation(
             canPlayPreviousTrack: canPlayPreviousTrack && !isLoading,
             canPlayPause: hasLoadedFile && !isLoading,
@@ -197,7 +204,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
 
         return ContentViewState(
-            currentFileName: currentFileName,
+            currentTrackTitle: currentDisplayTitle,
             playlistTrackPosition: playlistTrackPosition,
             duration: duration,
             currentTime: currentTime,
@@ -334,6 +341,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private var playbackStartupTask: Task<Void, Never>?
     private var activePlaybackStartupGeneration: Int?
     private var playbackStartupGeneration: Int = 0
+    private var displayTitlesByTrackURL: [URL: String] = [:]
     private var playlistSession: PlaylistSession? {
         get { screenState.playlist.session }
         set { screenState.playlist.session = newValue }
@@ -708,6 +716,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     ) async throws {
         let audioInfo = try await engine.loadFile(from: trackURL)
         transitionToReadyPlayback(audioInfo)
+        displayTitlesByTrackURL[trackURL] = audioInfo.displayTitle
 
         try ensureLoadRemainsCurrent(generation)
 

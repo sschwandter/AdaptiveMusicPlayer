@@ -76,6 +76,7 @@ enum PlaybackState: Equatable {
 /// Audio file information with business rules
 struct AudioInfo: Equatable {
     nonisolated let fileName: String
+    nonisolated let displayTitle: String
     nonisolated let duration: Double
     nonisolated let sampleRate: Double
 
