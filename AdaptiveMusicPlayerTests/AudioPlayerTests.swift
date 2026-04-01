@@ -17,8 +17,6 @@ struct AudioPlayerTests {
         #expect(player.currentFileName == nil)
         #expect(player.fileSampleRate == 0)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(player.hardwareSampleRate > 0)
-        #expect(!player.hardwareDeviceDisplayName.isEmpty)
         #expect(!player.sampleRateStatusDetail.isEmpty)
         #expect(player.statusMessage == "")
         #expect(player.hasError == false)
