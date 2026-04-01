@@ -177,11 +177,11 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    Label(timeString(sliderPosition), systemImage: "playhead")
+                    Label(timeString(displayedPlaybackTime), systemImage: "playhead")
                         .contentTransition(.numericText())
                     Spacer()
                     HStack(spacing: 10) {
-                        Text(remainingTimeString(currentTime: sliderPosition, duration: viewState.duration))
+                        Text(remainingTimeString(currentTime: displayedPlaybackTime, duration: viewState.duration))
                             .foregroundStyle(secondaryTextColor)
                             .contentTransition(.numericText())
                         Text(timeString(viewState.duration))
@@ -340,6 +340,10 @@ struct ContentView: View {
 
     private var canPerformPlaybackAction: Bool {
         viewState.transport.canPlayPause
+    }
+
+    private var displayedPlaybackTime: Double {
+        isEditingSlider ? sliderPosition : viewState.currentTime
     }
 
     private var playbackCommandActions: PlaybackCommandActions {
