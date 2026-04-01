@@ -23,6 +23,10 @@ struct ContentView: View {
     @State private var sliderPosition: Double = 0
     @State private var isEditingSlider = false
 
+    private var viewState: AudioPlayer.ContentViewState {
+        player.contentViewState
+    }
+
     var body: some View {
         ZStack {
             backgroundView
@@ -97,7 +101,7 @@ struct ContentView: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         Group {
-                            if let fileName = player.currentFileName {
+                            if let fileName = viewState.currentFileName {
                                 Text(fileName)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -116,7 +120,7 @@ struct ContentView: View {
                                 libraryButton(
                                     systemImage: "waveform.badge.plus",
                                     action: { presentImporter(for: .file) },
-                                    help: player.currentFileName == nil
+                                    help: !viewState.hasLoadedFile
                                         ? "Open Audio File (⌘O)"
                                         : "Choose Another Audio File (⌘O)"
                                 )
@@ -131,7 +135,7 @@ struct ContentView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        if let playlistTrackPosition = player.playlistTrackPosition {
+                        if let playlistTrackPosition = viewState.playlistTrackPosition {
                             Label("Track \(playlistTrackPosition)", systemImage: "music.note.list")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(secondaryTextColor)
@@ -142,7 +146,7 @@ struct ContentView: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    if player.isLoading {
+                    if viewState.isLoading {
                         ProgressView()
                             .controlSize(.small)
                     }
@@ -159,14 +163,14 @@ struct ContentView: View {
             }
 
             VStack(spacing: 10) {
-                Slider(value: $sliderPosition, in: 0...max(player.duration, 1)) { isEditing in
+                Slider(value: $sliderPosition, in: 0...max(viewState.duration, 1)) { isEditing in
                     isEditingSlider = isEditing
                     if !isEditing {
                         player.seek(to: sliderPosition)
                     }
                 }
                 .tint(.white.opacity(0.95))
-                .onChange(of: player.currentTime) { oldValue, newValue in
+                .onChange(of: viewState.currentTime) { oldValue, newValue in
                     if !isEditingSlider {
                         sliderPosition = newValue
                     }
@@ -176,15 +180,15 @@ struct ContentView: View {
                     Label(timeString(sliderPosition), systemImage: "playhead")
                         .contentTransition(.numericText())
                     Spacer()
-                    Text(timeString(player.duration))
+                    Text(timeString(viewState.duration))
                         .contentTransition(.numericText())
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(tertiaryTextColor)
                 .monospacedDigit()
             }
-            .disabled(player.currentFileName == nil || player.isLoading)
-            .opacity(player.currentFileName == nil ? 0.45 : (player.isLoading ? 0.7 : 1.0))
+            .disabled(!viewState.sliderIsEnabled)
+            .opacity(viewState.sliderOpacity)
         }
         .padding(22)
         .background(cardBackground)
@@ -200,7 +204,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Previous Track (⌘←)")
-                    .disabled(!player.canPlayPreviousTrack || player.isLoading)
+                    .disabled(!viewState.transport.canPlayPreviousTrack)
 
                     Button(action: { player.skipBackward() }) {
                         Image(systemName: "gobackward.10")
@@ -208,15 +212,15 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Skip Backward 10s")
-                    .disabled(player.currentFileName == nil || player.isLoading)
+                    .disabled(!viewState.transport.canSkip)
 
                     Button(action: { player.togglePlayPause() }) {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        Image(systemName: viewState.transport.playPauseSymbolName)
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.glassProminent)
-                    .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
-                    .disabled(player.currentFileName == nil || player.isLoading)
+                    .help(viewState.transport.playPauseHelp)
+                    .disabled(!viewState.transport.canPlayPause)
 
                     Button(action: { player.skipForward() }) {
                         Image(systemName: "goforward.10")
@@ -224,7 +228,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Skip Forward 10s")
-                    .disabled(player.currentFileName == nil || player.isLoading)
+                    .disabled(!viewState.transport.canSkip)
 
                     Button(action: { player.playNextTrack() }) {
                         Image(systemName: "forward.end.fill")
@@ -232,7 +236,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Next Track (⌘→)")
-                    .disabled(!player.canPlayNextTrack || player.isLoading)
+                    .disabled(!viewState.transport.canPlayNextTrack)
 
                     Button(action: { player.stop() }) {
                         Image(systemName: "stop.fill")
@@ -240,7 +244,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.glass)
                     .help("Stop")
-                    .disabled(player.currentFileName == nil || player.isLoading)
+                    .disabled(!viewState.transport.canStop)
                 }
             }
 
@@ -250,7 +254,7 @@ struct ContentView: View {
                     .frame(width: 16)
                 Slider(value: $player.volume, in: 0...1)
                     .tint(sliderTintColor)
-                    .disabled(player.isLoading)
+                    .disabled(!viewState.transport.canAdjustVolume)
                 Image(systemName: "speaker.wave.3.fill")
                     .foregroundStyle(secondaryTextColor)
                     .frame(width: 16)
@@ -264,7 +268,7 @@ struct ContentView: View {
 
     private var playlistBrowserCard: some View {
         Group {
-            if player.hasPlaylist && player.currentFileName != nil {
+            if viewState.playlist.isVisible {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         Label("Playlist", systemImage: "music.note.list")
@@ -272,7 +276,7 @@ struct ContentView: View {
 
                         Spacer()
 
-                        if let playlistTrackPosition = player.playlistTrackPosition {
+                        if let playlistTrackPosition = viewState.playlist.positionDescription {
                             Text(playlistTrackPosition)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -281,7 +285,7 @@ struct ContentView: View {
 
                     ScrollView {
                         VStack(spacing: LayoutMetrics.playlistTrackSpacing) {
-                            ForEach(player.playlistTracks) { track in
+                            ForEach(viewState.playlist.tracks) { track in
                                 playlistTrackRow(track)
                             }
                         }
@@ -299,7 +303,7 @@ struct ContentView: View {
 
     private var playlistMinimumHeight: CGFloat {
         let visibleTrackCount = min(
-            max(player.playlistTracks.count, 1),
+            max(viewState.playlist.tracks.count, 1),
             LayoutMetrics.playlistMaxVisibleRowCount
         )
         let spacingCount = max(visibleTrackCount - 1, 0)
@@ -330,7 +334,7 @@ struct ContentView: View {
     // MARK: - Computed Properties
 
     private var canPerformPlaybackAction: Bool {
-        player.currentFileName != nil && !player.isLoading
+        viewState.transport.canPlayPause
     }
 
     private var playbackCommandActions: PlaybackCommandActions {
@@ -354,20 +358,20 @@ struct ContentView: View {
                 player.skipBackward()
             },
             playNextTrack: {
-                guard player.canPlayNextTrack && !player.isLoading else { return }
+                guard viewState.transport.canPlayNextTrack else { return }
                 player.playNextTrack()
             },
             playPreviousTrack: {
-                guard player.canPlayPreviousTrack && !player.isLoading else { return }
+                guard viewState.transport.canPlayPreviousTrack else { return }
                 player.playPreviousTrack()
             },
             canControlPlayback: canPerformPlaybackAction,
-            canNavigatePlaylist: !player.isLoading && (player.canPlayNextTrack || player.canPlayPreviousTrack)
+            canNavigatePlaylist: viewState.transport.canPlayNextTrack || viewState.transport.canPlayPreviousTrack
         )
     }
 
     private var activityIndicatorForegroundColor: Color {
-        switch player.activityIndicatorPresentation.style {
+        switch viewState.activityIndicator.style {
         case .error, .sampleRateMismatched:
             return .red
         case .playing, .sampleRateMatched:
@@ -378,7 +382,7 @@ struct ContentView: View {
     }
 
     private var activityIndicatorBackgroundColor: Color {
-        switch player.activityIndicatorPresentation.style {
+        switch viewState.activityIndicator.style {
         case .error, .sampleRateMismatched:
             return .red.opacity(0.16)
         case .playing:
@@ -459,15 +463,15 @@ struct ContentView: View {
     }
 
     private var activityIndicatorIconName: String {
-        player.activityIndicatorPresentation.iconName
+        viewState.activityIndicator.iconName
     }
 
     private var activityIndicatorTitle: String {
-        player.activityIndicatorPresentation.title
+        viewState.activityIndicator.title
     }
 
     private var activityIndicatorHelpText: String {
-        player.activityIndicatorPresentation.helpText
+        viewState.activityIndicator.helpText
     }
 
     // MARK: - Private Methods
@@ -538,7 +542,7 @@ struct ContentView: View {
                 Spacer()
 
                 if track.isCurrent {
-                    Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "music.note")
+                    Image(systemName: viewState.isPlaying ? "speaker.wave.2.fill" : "music.note")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.cyan)
                 }

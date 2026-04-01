@@ -102,6 +102,38 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         var subtitle: String { url.deletingLastPathComponent().lastPathComponent }
     }
 
+    struct TransportControlsPresentation {
+        let canPlayPreviousTrack: Bool
+        let canPlayPause: Bool
+        let canSkip: Bool
+        let canPlayNextTrack: Bool
+        let canStop: Bool
+        let canAdjustVolume: Bool
+        let playPauseSymbolName: String
+        let playPauseHelp: String
+    }
+
+    struct PlaylistBrowserPresentation {
+        let isVisible: Bool
+        let positionDescription: String?
+        let tracks: [PlaylistTrackRow]
+    }
+
+    struct ContentViewState {
+        let currentFileName: String?
+        let playlistTrackPosition: String?
+        let duration: Double
+        let currentTime: Double
+        let isLoading: Bool
+        let isPlaying: Bool
+        let hasLoadedFile: Bool
+        let sliderIsEnabled: Bool
+        let sliderOpacity: Double
+        let activityIndicator: ActivityIndicatorPresentation
+        let transport: TransportControlsPresentation
+        let playlist: PlaylistBrowserPresentation
+    }
+
 
     // MARK: - Constants
 
@@ -145,6 +177,40 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var isLoading: Bool { screenState.loading.isActive }
 
     var isPlaying: Bool { screenState.playback.isPlaying }
+
+    var contentViewState: ContentViewState {
+        let hasLoadedFile = currentFileName != nil
+        let transport = TransportControlsPresentation(
+            canPlayPreviousTrack: canPlayPreviousTrack && !isLoading,
+            canPlayPause: hasLoadedFile && !isLoading,
+            canSkip: hasLoadedFile && !isLoading,
+            canPlayNextTrack: canPlayNextTrack && !isLoading,
+            canStop: hasLoadedFile && !isLoading,
+            canAdjustVolume: !isLoading,
+            playPauseSymbolName: isPlaying ? "pause.fill" : "play.fill",
+            playPauseHelp: isPlaying ? "Pause (Space)" : "Play (Space)"
+        )
+        let playlist = PlaylistBrowserPresentation(
+            isVisible: hasPlaylist && hasLoadedFile,
+            positionDescription: playlistTrackPosition,
+            tracks: playlistTracks
+        )
+
+        return ContentViewState(
+            currentFileName: currentFileName,
+            playlistTrackPosition: playlistTrackPosition,
+            duration: duration,
+            currentTime: currentTime,
+            isLoading: isLoading,
+            isPlaying: isPlaying,
+            hasLoadedFile: hasLoadedFile,
+            sliderIsEnabled: hasLoadedFile && !isLoading,
+            sliderOpacity: hasLoadedFile ? (isLoading ? 0.7 : 1.0) : 0.45,
+            activityIndicator: activityIndicatorPresentation,
+            transport: transport,
+            playlist: playlist
+        )
+    }
 
     var hasSampleRateMismatch: Bool {
         guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
