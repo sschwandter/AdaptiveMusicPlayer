@@ -38,6 +38,8 @@ The project is organized by feature area under `Playback/`, with a small app she
 - `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
   Acts as the `@Observable` view model used by SwiftUI. It exposes UI-facing playback state, status/error text, hardware diagnostics, playlist state, and asynchronous load orchestration for the view.
 
+Playback coordination is intentionally split between the engine and the view model rather than centered in a single orchestration layer. The engine owns the active playback session and lower-level transitions, while the view model owns UI-facing state and higher-level loading and playlist behavior.
+
 ### Services
 
 - `AdaptiveMusicPlayer/Playback/Services/AudioFileLoader.swift`
@@ -84,7 +86,7 @@ This keeps command routing window-scoped instead of broadcasting process-wide ac
 
 `ContentView` delegates file and folder selection results to `AudioPlayer`. The view model moves into loading state, coordinates any short importer-dismissal delay, performs asynchronous loading or folder scanning work, and then updates the engine-backed playback state for the UI.
 
-This keeps the UI-facing loading contract in one place instead of splitting it between the view and lower-level playback services.
+This keeps the UI-facing loading contract in one place instead of splitting it between the view and lower-level playback services, although a small amount of view-local interaction state still remains in `ContentView`, such as importer presentation and slider editing state.
 
 ## Testing Overview
 
@@ -103,7 +105,4 @@ The unit tests currently cover:
 - `SampleRateManager` helper logic
 - `TimeFormatter`
 
-## Notes
-
-- The codebase aims for clear separation of concerns, but playback coordination and UI-facing state are still shared across the engine, the view model, and a small amount of view-local state.
-- This document is intended to describe the code as it exists today, not an idealized future architecture.
+Some behavior still depends on the runtime environment, especially hardware audio state. Tests should prefer injected doubles over assumptions about available devices or sample-rate information.
