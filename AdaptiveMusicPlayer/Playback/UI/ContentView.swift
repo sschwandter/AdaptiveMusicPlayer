@@ -180,8 +180,13 @@ struct ContentView: View {
                     Label(timeString(sliderPosition), systemImage: "playhead")
                         .contentTransition(.numericText())
                     Spacer()
-                    Text(timeString(viewState.duration))
-                        .contentTransition(.numericText())
+                    HStack(spacing: 10) {
+                        Text(remainingTimeString(currentTime: sliderPosition, duration: viewState.duration))
+                            .foregroundStyle(secondaryTextColor)
+                            .contentTransition(.numericText())
+                        Text(timeString(viewState.duration))
+                            .contentTransition(.numericText())
+                    }
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(tertiaryTextColor)
@@ -478,6 +483,10 @@ struct ContentView: View {
 
     private func timeString(_ time: Double) -> String {
         TimeFormatter.format(time)
+    }
+
+    private func remainingTimeString(currentTime: Double, duration: Double) -> String {
+        TimeFormatter.formatRemaining(currentTime: currentTime, duration: duration)
     }
 
     private func libraryButton(systemImage: String, action: @escaping () -> Void, help: String) -> some View {
