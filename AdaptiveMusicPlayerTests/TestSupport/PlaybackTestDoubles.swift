@@ -73,6 +73,14 @@ final class RecordingSampleRateManager: SampleRateManaging, @unchecked Sendable 
     }
 }
 
+final class RecordingFinderItemRevealer: FinderItemRevealing, @unchecked Sendable {
+    private(set) var revealedURLs: [URL] = []
+
+    func revealItem(at url: URL) {
+        revealedURLs.append(url)
+    }
+}
+
 struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
     let sampleRate: Double
     let player: AVAudioPlayer

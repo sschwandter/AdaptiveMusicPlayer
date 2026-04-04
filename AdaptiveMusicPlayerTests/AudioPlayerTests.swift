@@ -211,6 +211,77 @@ struct AudioPlayerTests {
         #expect(player.contentViewState.currentTrackTitle == "Tagged Song")
     }
 
+    @Test("Show in Finder reveals the current single-track file")
+    func showCurrentTrackInFinderForSingleTrack() async throws {
+        let finderItemRevealer = RecordingFinderItemRevealer()
+        let url = URL(fileURLWithPath: "/tmp/tagged-song.mp3")
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(
+                    sampleRate: 44_100,
+                    displayTitle: "Tagged Song"
+                ),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(),
+            finderItemRevealer: finderItemRevealer
+        )
+
+        player.loadFile(url: url)
+        await player.waitForCurrentLoad()
+        player.showCurrentTrackInFinder()
+
+        #expect(finderItemRevealer.revealedURLs == [url])
+    }
+
+    @Test("Show in Finder reveals the current playlist track")
+    func showCurrentTrackInFinderForPlaylistTrack() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let firstURL = rootFolder.appending(path: "album/01-first.wav")
+        let secondURL = rootFolder.appending(path: "album/02-second.wav")
+        try TemporaryFolder.writeWaveFile(at: firstURL)
+        try TemporaryFolder.writeWaveFile(at: secondURL)
+
+        let finderItemRevealer = RecordingFinderItemRevealer()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                    firstURL: AudioSession(player: try StubAudioPlayer(), fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: AudioSession(player: try StubAudioPlayer(), fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
+                ]),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(),
+            finderItemRevealer: finderItemRevealer
+        )
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+        player.selectPlaylistTrack(at: 1)
+        await player.waitForCurrentLoad()
+        player.showCurrentTrackInFinder()
+
+        #expect(finderItemRevealer.revealedURLs == [secondURL])
+    }
+
+    @Test("Show in Finder is ignored when nothing is loaded")
+    func showCurrentTrackInFinderWithoutLoadedTrack() async throws {
+        let finderItemRevealer = RecordingFinderItemRevealer()
+        let player = AudioPlayer(
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(),
+            finderItemRevealer: finderItemRevealer
+        )
+
+        player.showCurrentTrackInFinder()
+
+        #expect(finderItemRevealer.revealedURLs.isEmpty)
+    }
+
     @Test("Selecting a playlist track during startup preserves autoplay intent")
     func selectingPlaylistTrackDuringStartupKeepsPlaybackIntent() async throws {
         let rootFolder = try TemporaryFolder.make()

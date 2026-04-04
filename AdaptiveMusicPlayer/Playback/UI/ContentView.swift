@@ -573,6 +573,13 @@ struct ContentView: View {
             )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if track.isCurrent {
+                Button("Show in Finder") {
+                    player.showCurrentTrackInFinder()
+                }
+            }
+        }
     }
 
     private var currentTrackFillColor: Color {

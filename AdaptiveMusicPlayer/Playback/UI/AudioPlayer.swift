@@ -336,6 +336,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let hardwareObserver: AudioHardwareObserving
     private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let folderScanner: AudioPlaylistFolderScanning
+    private let finderItemRevealer: FinderItemRevealing
     private var loadingTask: Task<Void, Never>?
     private var loadGeneration: Int = 0
     private var playbackStartupTask: Task<Void, Never>?
@@ -354,13 +355,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         progressTracker: PlaybackProgressTracking = PlaybackProgressTracker(),
         hardwareObserver: AudioHardwareObserving = CoreAudioHardwareObserver(),
         hardwareInfoProvider: AudioHardwareInfoProviding = CoreAudioHardwareInfoProvider(),
-        folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner()
+        folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner(),
+        finderItemRevealer: FinderItemRevealing = FinderItemRevealer()
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
         self.hardwareObserver = hardwareObserver
         self.hardwareInfoProvider = hardwareInfoProvider
         self.folderScanner = folderScanner
+        self.finderItemRevealer = finderItemRevealer
 
         hardwareObserver.startObserving { [weak self] in
             Task { @MainActor [weak self] in
@@ -443,6 +446,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let shouldAutoplay = isPlaying || playbackStartupTask != nil
         guard let playlistSession, playlistSession.currentIndex != index else { return }
         loadPlaylistTrack(at: index, autoplayOnSuccess: shouldAutoplay)
+    }
+
+    func showCurrentTrackInFinder() {
+        guard let currentTrackURL = playlistSession?.currentTrackURL else { return }
+        finderItemRevealer.revealItem(at: currentTrackURL)
     }
 
     // MARK: - Playback Control
