@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.3.0...AdaptiveMusicPlayer-v0.4.0) (2026-04-04)
+
+
+### Features
+
+* context menu for current track: show in finder ([a717e46](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/a717e463029cf8d3903b14d8de847caab5583b6f))
+
+
+### Bug Fixes
+
+* remaing changes for show in finder feature ([95c7b86](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/95c7b864b8880e8f9a5cfca0bc1ee0e1b907b93d))
+
 ## [0.3.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.2.0...AdaptiveMusicPlayer-v0.3.0) (2026-04-01)
 
 
