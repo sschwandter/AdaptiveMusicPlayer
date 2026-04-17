@@ -77,16 +77,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         var supportedSampleRates: [Double] = []
     }
 
-    struct ActivityIndicatorPresentation: Equatable {
+    struct SampleRateBannerPresentation: Equatable {
         enum Style: Equatable {
             case idle
-            case playing
-            case sampleRateMatched
-            case sampleRateMismatched
+            case matched
+            case switching
+            case unsupported
             case error
         }
 
         let title: String
+        let detail: String?
         let iconName: String
         let helpText: String
         let style: Style
@@ -130,7 +131,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         let hasLoadedFile: Bool
         let sliderIsEnabled: Bool
         let sliderOpacity: Double
-        let activityIndicator: ActivityIndicatorPresentation
+        let sampleRateBanner: SampleRateBannerPresentation
         let transport: TransportControlsPresentation
         let playlist: PlaylistBrowserPresentation
     }
@@ -185,6 +186,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     var isPlaying: Bool { screenState.playback.isPlaying }
 
+    private var isAttemptingPlaybackStart: Bool {
+        playbackStartupTask != nil
+    }
+
     var contentViewState: ContentViewState {
         let hasLoadedFile = currentDisplayTitle != nil
         let transport = TransportControlsPresentation(
@@ -213,7 +218,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             hasLoadedFile: hasLoadedFile,
             sliderIsEnabled: hasLoadedFile && !isLoading,
             sliderOpacity: hasLoadedFile ? (isLoading ? 0.7 : 1.0) : 0.45,
-            activityIndicator: activityIndicatorPresentation,
+            sampleRateBanner: sampleRateBannerPresentation,
             transport: transport,
             playlist: playlist
         )
@@ -235,45 +240,73 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             .joined(separator: ", ")
     }
 
-    var playbackSampleRateBadgeTitle: String {
-        guard fileSampleRate > 0 else { return "No File" }
-        guard hardwareSampleRate > 0 else { return "Unknown" }
-        return Self.formatSampleRate(hardwareSampleRate)
-    }
-
-    var activityIndicatorPresentation: ActivityIndicatorPresentation {
+    var sampleRateBannerPresentation: SampleRateBannerPresentation {
         if hasError {
-            return ActivityIndicatorPresentation(
-                title: "Error",
+            return SampleRateBannerPresentation(
+                title: "Playback Error",
+                detail: nil,
                 iconName: "exclamationmark.triangle.fill",
                 helpText: statusMessage.isEmpty ? "Playback error" : statusMessage,
                 style: .error
             )
         }
 
-        if fileSampleRate > 0 && hardwareSampleRate > 0 {
-            return ActivityIndicatorPresentation(
-                title: playbackSampleRateBadgeTitle,
-                iconName: hasSampleRateMismatch ? "exclamationmark.triangle.fill" : "waveform.circle.fill",
+        guard fileSampleRate > 0 else {
+            return SampleRateBannerPresentation(
+                title: "No File Loaded",
+                detail: nil,
+                iconName: "waveform",
+                helpText: "Load a file to compare its sample rate with the active output device.",
+                style: .idle
+            )
+        }
+
+        guard hardwareSampleRate > 0 else {
+            return SampleRateBannerPresentation(
+                title: "Output Unknown",
+                detail: Self.formatSampleRate(fileSampleRate),
+                iconName: "speaker.slash.fill",
                 helpText: sampleRateStatusDetail,
-                style: hasSampleRateMismatch ? .sampleRateMismatched : .sampleRateMatched
+                style: .switching
             )
         }
 
-        if isPlaying {
-            return ActivityIndicatorPresentation(
-                title: "Live",
-                iconName: "waveform.circle.fill",
-                helpText: "Playback in progress",
-                style: .playing
+        if !isPlaying && !isAttemptingPlaybackStart && hasSampleRateMismatch {
+            return SampleRateBannerPresentation(
+                title: "Ready",
+                detail: Self.formatSampleRate(fileSampleRate),
+                iconName: "waveform",
+                helpText: "Press play to start playback and sync the output device if needed.",
+                style: .idle
             )
         }
 
-        return ActivityIndicatorPresentation(
-            title: "Idle",
-            iconName: "pause.circle",
-            helpText: "Playback is idle",
-            style: .idle
+        if !hasSampleRateMismatch {
+            return SampleRateBannerPresentation(
+                title: "Matched",
+                detail: Self.formatSampleRate(fileSampleRate),
+                iconName: "checkmark.circle.fill",
+                helpText: sampleRateStatusDetail,
+                style: .matched
+            )
+        }
+
+        if deviceSupportsFileSampleRate {
+            return SampleRateBannerPresentation(
+                title: "Switching",
+                detail: sampleRateRouteDescription,
+                iconName: "arrow.triangle.2.circlepath.circle.fill",
+                helpText: sampleRateStatusDetail,
+                style: .switching
+            )
+        }
+
+        return SampleRateBannerPresentation(
+            title: "Unsupported Rate",
+            detail: sampleRateRouteDescription,
+            iconName: "exclamationmark.triangle.fill",
+            helpText: sampleRateStatusDetail,
+            style: .unsupported
         )
     }
 

@@ -282,6 +282,98 @@ struct AudioPlayerTests {
         #expect(finderItemRevealer.revealedURLs.isEmpty)
     }
 
+    @Test("Sample-rate banner shows matched state when hardware matches the file")
+    func sampleRateBannerMatchedState() async throws {
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/matched.wav"))
+        await player.waitForCurrentLoad()
+
+        #expect(player.contentViewState.sampleRateBanner.title == "Matched")
+        #expect(player.contentViewState.sampleRateBanner.detail == "44.1 kHz")
+        #expect(player.contentViewState.sampleRateBanner.style == .matched)
+    }
+
+    @Test("Sample-rate banner stays neutral before playback starts when a supported mismatch exists")
+    func sampleRateBannerNeutralStateBeforeSupportedMismatchPlayback() async throws {
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(
+                deviceInfo: AudioDeviceInfo(
+                    name: "Test Device",
+                    currentSampleRate: 44_100,
+                    supportedSampleRates: [44_100, 96_000]
+                )
+            )
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/switching.wav"))
+        await player.waitForCurrentLoad()
+
+        #expect(player.contentViewState.sampleRateBanner.title == "Ready")
+        #expect(player.contentViewState.sampleRateBanner.detail == "96 kHz")
+        #expect(player.contentViewState.sampleRateBanner.style == .idle)
+    }
+
+    @Test("Sample-rate banner shows switching state during playback startup when the device can switch")
+    func sampleRateBannerSwitchingStateDuringStartup() async throws {
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider(
+                deviceInfo: AudioDeviceInfo(
+                    name: "Test Device",
+                    currentSampleRate: 44_100,
+                    supportedSampleRates: [44_100, 96_000]
+                )
+            )
+        )
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/startup-switching.wav"))
+        await player.waitForCurrentLoad()
+
+        player.togglePlayPause()
+        try await waitUntil {
+            player.contentViewState.sampleRateBanner.title == "Switching"
+        }
+
+        #expect(player.contentViewState.sampleRateBanner.detail == "96 kHz -> 44.1 kHz")
+        #expect(player.contentViewState.sampleRateBanner.style == .switching)
+    }
+
+    @Test("Sample-rate banner shows unsupported state when the device cannot match the file")
+    func sampleRateBannerUnsupportedState() async throws {
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.loadFile(url: URL(fileURLWithPath: "/tmp/unsupported.wav"))
+        await player.waitForCurrentLoad()
+
+        #expect(player.contentViewState.sampleRateBanner.title == "Ready")
+        #expect(player.contentViewState.sampleRateBanner.detail == "96 kHz")
+        #expect(player.contentViewState.sampleRateBanner.style == .idle)
+    }
+
     @Test("Selecting a playlist track during startup preserves autoplay intent")
     func selectingPlaylistTrackDuringStartupKeepsPlaybackIntent() async throws {
         let rootFolder = try TemporaryFolder.make()

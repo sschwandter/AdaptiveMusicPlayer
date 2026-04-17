@@ -115,6 +115,8 @@ struct ContentView: View {
                         .font(.system(size: 24, weight: .semibold, design: .rounded))
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                        sampleRateBanner
+
                         GlassEffectContainer {
                             HStack(spacing: 8) {
                                 libraryButton(
@@ -144,22 +146,6 @@ struct ContentView: View {
                 }
 
                 Spacer()
-
-                HStack(spacing: 8) {
-                    if viewState.isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-
-                    Label(activityIndicatorTitle, systemImage: activityIndicatorIconName)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(activityIndicatorBackgroundColor)
-                        .clipShape(Capsule())
-                        .help(activityIndicatorHelpText)
-                }
-                .foregroundStyle(activityIndicatorForegroundColor)
             }
 
             VStack(spacing: 10) {
@@ -197,6 +183,45 @@ struct ContentView: View {
         }
         .padding(22)
         .background(cardBackground)
+    }
+
+    private var sampleRateBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: sampleRateBannerIconName)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sampleRateBannerTitle)
+                    .font(.caption.weight(.bold))
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+
+                if let detail = sampleRateBannerDetail {
+                    Text(detail)
+                        .font(.callout.weight(.semibold))
+                        .monospacedDigit()
+                }
+            }
+
+            Spacer()
+
+            if viewState.isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(sampleRateBannerForegroundColor)
+            }
+        }
+        .foregroundStyle(sampleRateBannerForegroundColor)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(sampleRateBannerBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(sampleRateBannerBorderColor, lineWidth: 1.5)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .help(sampleRateBannerHelpText)
     }
 
     private var transportSection: some View {
@@ -379,30 +404,6 @@ struct ContentView: View {
         )
     }
 
-    private var activityIndicatorForegroundColor: Color {
-        switch viewState.activityIndicator.style {
-        case .error, .sampleRateMismatched:
-            return .red
-        case .playing, .sampleRateMatched:
-            return .green
-        case .idle:
-            return primaryTextColor
-        }
-    }
-
-    private var activityIndicatorBackgroundColor: Color {
-        switch viewState.activityIndicator.style {
-        case .error, .sampleRateMismatched:
-            return .red.opacity(0.16)
-        case .playing:
-            return neutralCapsuleColor
-        case .sampleRateMatched:
-            return neutralCapsuleColor
-        case .idle:
-            return subduedCapsuleColor
-        }
-    }
-
     private var backgroundGradientColors: [Color] {
         if colorScheme == .dark {
             return [
@@ -463,24 +464,64 @@ struct ContentView: View {
         colorScheme == .dark ? .white.opacity(0.10) : .white.opacity(0.35)
     }
 
-    private var neutralCapsuleColor: Color {
-        colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.08)
+    private var sampleRateBannerForegroundColor: Color {
+        switch viewState.sampleRateBanner.style {
+        case .matched:
+            return colorScheme == .dark ? Color(red: 0.82, green: 1.0, blue: 0.88) : Color(red: 0.07, green: 0.40, blue: 0.18)
+        case .switching:
+            return colorScheme == .dark ? Color(red: 1.0, green: 0.93, blue: 0.70) : Color(red: 0.56, green: 0.34, blue: 0.00)
+        case .unsupported, .error:
+            return colorScheme == .dark ? Color(red: 1.0, green: 0.86, blue: 0.86) : Color(red: 0.62, green: 0.07, blue: 0.10)
+        case .idle:
+            return primaryTextColor
+        }
     }
 
-    private var subduedCapsuleColor: Color {
-        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.05)
+    private var sampleRateBannerBorderColor: Color {
+        switch viewState.sampleRateBanner.style {
+        case .matched:
+            return colorScheme == .dark ? .green.opacity(0.55) : .green.opacity(0.35)
+        case .switching:
+            return colorScheme == .dark ? .orange.opacity(0.60) : .orange.opacity(0.42)
+        case .unsupported, .error:
+            return colorScheme == .dark ? .red.opacity(0.70) : .red.opacity(0.42)
+        case .idle:
+            return colorScheme == .dark ? .white.opacity(0.12) : .black.opacity(0.10)
+        }
     }
 
-    private var activityIndicatorIconName: String {
-        viewState.activityIndicator.iconName
+    private var sampleRateBannerBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(sampleRateBannerFillColor)
     }
 
-    private var activityIndicatorTitle: String {
-        viewState.activityIndicator.title
+    private var sampleRateBannerFillColor: Color {
+        switch viewState.sampleRateBanner.style {
+        case .matched:
+            return colorScheme == .dark ? .green.opacity(0.18) : .green.opacity(0.12)
+        case .switching:
+            return colorScheme == .dark ? .orange.opacity(0.20) : .orange.opacity(0.13)
+        case .unsupported, .error:
+            return colorScheme == .dark ? .red.opacity(0.24) : .red.opacity(0.14)
+        case .idle:
+            return colorScheme == .dark ? .white.opacity(0.07) : .white.opacity(0.24)
+        }
     }
 
-    private var activityIndicatorHelpText: String {
-        viewState.activityIndicator.helpText
+    private var sampleRateBannerIconName: String {
+        viewState.sampleRateBanner.iconName
+    }
+
+    private var sampleRateBannerTitle: String {
+        viewState.sampleRateBanner.title
+    }
+
+    private var sampleRateBannerDetail: String? {
+        viewState.sampleRateBanner.detail
+    }
+
+    private var sampleRateBannerHelpText: String {
+        viewState.sampleRateBanner.helpText
     }
 
     // MARK: - Private Methods
