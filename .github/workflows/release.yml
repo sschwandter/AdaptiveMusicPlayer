@@ -1,9 +1,12 @@
 name: macOS Release
 
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to build and upload
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,15 +19,16 @@ jobs:
       BUILD_CONFIGURATION: Release
       ARCHIVE_PATH: .build/ReleaseArchive/AdaptiveMusicPlayer.xcarchive
       EXPORT_PATH: .build/ReleaseExport
-      RELEASE_ZIP: AdaptiveMusicPlayer-${{ github.event.release.tag_name }}-macOS.zip
+      RELEASE_TAG: ${{ inputs.tag_name }}
+      RELEASE_ZIP: AdaptiveMusicPlayer-${{ inputs.tag_name }}-macOS.zip
 
     steps:
-      - name: Check out repository
+      - name: Check out release tag
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Install signing certificate
         env:
@@ -58,11 +62,11 @@ jobs:
       - name: Upload signed app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-signed-macOS-${{ github.sha }}
+          name: ${{ env.APP_NAME }}-signed-macOS-${{ env.RELEASE_TAG }}
           path: ${{ env.RELEASE_ZIP }}
 
       - name: Upload signed app to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: ${{ env.RELEASE_ZIP }}
