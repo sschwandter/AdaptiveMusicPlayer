@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.0...AdaptiveMusicPlayer-v0.5.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* canonicalize finder test URLs in CI ([e6da255](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/e6da255aa0bd47429f6c48831f28c36b0fb6abc8))
+* gate release-please on successful CI ([8ca111b](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/8ca111b33fda5c89bab666223de3edd727133741))
+
 ## [0.5.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.4.0...AdaptiveMusicPlayer-v0.5.0) (2026-04-17)
 
 
