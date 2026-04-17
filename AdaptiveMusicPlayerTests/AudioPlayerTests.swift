@@ -232,7 +232,10 @@ struct AudioPlayerTests {
         await player.waitForCurrentLoad()
         player.showCurrentTrackInFinder()
 
-        #expect(finderItemRevealer.revealedURLs == [url])
+        #expect(
+            finderItemRevealer.revealedURLs.map(canonicalTestFileURL) ==
+            [url].map(canonicalTestFileURL)
+        )
     }
 
     @Test("Show in Finder reveals the current playlist track")
@@ -265,7 +268,10 @@ struct AudioPlayerTests {
         await player.waitForCurrentLoad()
         player.showCurrentTrackInFinder()
 
-        #expect(finderItemRevealer.revealedURLs == [secondURL])
+        #expect(
+            finderItemRevealer.revealedURLs.map(canonicalTestFileURL) ==
+            [secondURL].map(canonicalTestFileURL)
+        )
     }
 
     @Test("Show in Finder is ignored when nothing is loaded")
