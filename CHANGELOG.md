@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.4.0...AdaptiveMusicPlayer-v0.5.0) (2026-04-17)
+
+
+### Features
+
+* redesign sample rate status feedback in the player UI ([c03aef7](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/c03aef7c4b436877c6eeb0d86092a27ec236312f))
+
 ## [0.4.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.3.0...AdaptiveMusicPlayer-v0.4.0) (2026-04-04)
 
 
