@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.2...AdaptiveMusicPlayer-v0.6.0) (2026-04-17)
+
+
+### Features
+
+* trigger a fresh release after notarization retry ([6f991a9](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/6f991a9bda6513035ac69314bda476746faa8681))
+
+
+### Bug Fixes
+
+* **ci:** force node24 for release-please ([b0e3c88](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/b0e3c88389284aa81375b0d97c7793a4be82c71b))
+
 ## [0.5.2](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.1...AdaptiveMusicPlayer-v0.5.2) (2026-04-17)
 
 
