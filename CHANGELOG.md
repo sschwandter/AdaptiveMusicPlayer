@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.1...AdaptiveMusicPlayer-v0.5.2) (2026-04-17)
+
+
+### Bug Fixes
+
+* build signed app in release-please workflow ([bd57b08](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/bd57b08edd0d2822711b52d1f5b38166f4fc0147))
+
 ## [0.5.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.0...AdaptiveMusicPlayer-v0.5.1) (2026-04-17)
 
 
