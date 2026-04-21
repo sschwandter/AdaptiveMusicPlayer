@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.6.0...AdaptiveMusicPlayer-v0.6.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* isolate hardware observation and sample rate access ([2be2422](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/2be24227aa1ae72d29d732a4054c576cf2297ed5))
+
 ## [0.6.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.5.2...AdaptiveMusicPlayer-v0.6.0) (2026-04-17)
 
 
