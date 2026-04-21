@@ -409,10 +409,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
-    deinit {
-        hardwareObserver.stopObserving()
-    }
-
     // MARK: - File Loading
 
     /// Starts a file load and enters loading state immediately.

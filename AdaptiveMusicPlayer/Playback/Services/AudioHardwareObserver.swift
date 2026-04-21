@@ -1,9 +1,10 @@
 import Foundation
 import CoreAudio
 
-protocol AudioHardwareObserving: AnyObject, Sendable {
-    nonisolated func startObserving(onChange: @escaping @Sendable () -> Void)
-    nonisolated func stopObserving()
+@MainActor
+protocol AudioHardwareObserving: AnyObject {
+    func startObserving(onChange: @escaping @Sendable () -> Void)
+    func stopObserving()
 }
 
 protocol AudioHardwareInfoProviding: Sendable {
@@ -18,202 +19,201 @@ struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
     }
 
     func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
-        let manager = sampleRateManager
-        return await Task.detached {
-            manager.getCurrentDeviceInfo()
-        }.value
+        await sampleRateManager.getCurrentDeviceInfo()
     }
 }
 
 /// Observes the active output device and its sample-rate-related properties.
-final class CoreAudioHardwareObserver: @unchecked Sendable, AudioHardwareObserving {
+@MainActor
+final class CoreAudioHardwareObserver: AudioHardwareObserving {
     private let callbackQueue = DispatchQueue(label: "AdaptiveMusicPlayer.AudioHardwareObserver")
+    private let hardwareSystem = AudioHardwareSystem.shared
 
-    nonisolated(unsafe) private var onChange: (@Sendable () -> Void)?
-    nonisolated(unsafe) private var observedDeviceID: AudioDeviceID?
-    nonisolated(unsafe) private var systemListener: AudioObjectPropertyListenerBlock?
-    nonisolated(unsafe) private var deviceListener: AudioObjectPropertyListenerBlock?
-    nonisolated(unsafe) private var isObserving = false
+    private var onChange: (@Sendable () -> Void)?
+    private var observedDeviceUID: String?
+    private var systemRegistration: PropertyListenerRegistration?
+    private var deviceRegistration: PropertyListenerRegistration?
 
-    nonisolated deinit {
-        stopObserving()
-    }
-
-    nonisolated func startObserving(onChange: @escaping @Sendable () -> Void) {
+    func startObserving(onChange: @escaping @Sendable () -> Void) {
         stopObserving()
         self.onChange = onChange
 
-        var systemAddress = Self.defaultOutputDeviceAddress
-        let systemListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self else { return }
-            self.handleDefaultOutputDeviceChange()
-        }
-        self.systemListener = systemListener
-
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &systemAddress,
-            callbackQueue,
-            systemListener
+        let systemRegistration = PropertyListenerRegistration(
+            object: hardwareSystem,
+            properties: [Self.defaultOutputDeviceAddress],
+            callbackQueue: callbackQueue,
+            delegate: PropertyChangeDelegate(observer: self, event: .defaultOutputDeviceChanged)
         )
-
-        guard status == noErr else {
-            self.systemListener = nil
+        guard let systemRegistration else {
             self.onChange = nil
             return
         }
 
-        isObserving = true
-        observedDeviceID = Self.getDefaultAudioDevice()
-        registerDeviceListenersIfNeeded()
+        self.systemRegistration = systemRegistration
+        let defaultDevice = getDefaultAudioDevice()
+        observedDeviceUID = defaultDevice.flatMap(Self.deviceUID)
+        registerDeviceListenersIfNeeded(for: defaultDevice)
     }
 
-    nonisolated func stopObserving() {
-        if let observedDeviceID {
-            unregisterDeviceListeners(for: observedDeviceID)
-        }
-
-        if let systemListener {
-            var systemAddress = Self.defaultOutputDeviceAddress
-            AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject),
-                &systemAddress,
-                callbackQueue,
-                systemListener
-            )
-        }
-
-        observedDeviceID = nil
-        systemListener = nil
-        deviceListener = nil
+    func stopObserving() {
+        unregisterDeviceListeners()
+        systemRegistration?.tearDown()
+        systemRegistration = nil
+        observedDeviceUID = nil
         onChange = nil
-        isObserving = false
     }
 
-    nonisolated private func handleDefaultOutputDeviceChange() {
-        let newDeviceID = Self.getDefaultAudioDevice()
-        let previousDeviceID = observedDeviceID
+    fileprivate func handlePropertyChange(_ event: ObserverPropertyChangeEvent) {
+        switch event {
+        case .defaultOutputDeviceChanged:
+            handleDefaultOutputDeviceChange()
+        case .devicePropertiesChanged:
+            notifyChange()
+        }
+    }
 
-        if let previousDeviceID, previousDeviceID != newDeviceID {
-            unregisterDeviceListeners(for: previousDeviceID)
+    private func handleDefaultOutputDeviceChange() {
+        guard systemRegistration != nil else {
+            return
         }
 
-        observedDeviceID = newDeviceID
-        registerDeviceListenersIfNeeded()
+        let defaultDevice = getDefaultAudioDevice()
+        let newDeviceUID = defaultDevice.flatMap(Self.deviceUID)
+
+        if observedDeviceUID != newDeviceUID {
+            unregisterDeviceListeners()
+        }
+        observedDeviceUID = newDeviceUID
+        registerDeviceListenersIfNeeded(for: defaultDevice)
         notifyChange()
     }
 
-    nonisolated private func registerDeviceListenersIfNeeded() {
-        guard isObserving, let deviceID = observedDeviceID, deviceListener == nil else {
+    private func registerDeviceListenersIfNeeded(for device: AudioHardwareDevice?) {
+        guard let device, deviceRegistration == nil, systemRegistration != nil else {
             return
         }
 
-        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            self?.notifyChange()
-        }
-
-        var nominalAddress = Self.nominalSampleRateAddress
-        let nominalStatus = AudioObjectAddPropertyListenerBlock(
-            deviceID,
-            &nominalAddress,
-            callbackQueue,
-            listener
-        )
-
-        guard nominalStatus == noErr else {
-            return
-        }
-
-        var availableRatesAddress = Self.availableNominalSampleRatesAddress
-        let availableRatesStatus = AudioObjectAddPropertyListenerBlock(
-            deviceID,
-            &availableRatesAddress,
-            callbackQueue,
-            listener
-        )
-
-        guard availableRatesStatus == noErr else {
-            AudioObjectRemovePropertyListenerBlock(
-                deviceID,
-                &nominalAddress,
-                callbackQueue,
-                listener
-            )
-            return
-        }
-
-        deviceListener = listener
-    }
-
-    nonisolated private func unregisterDeviceListeners(for deviceID: AudioDeviceID) {
-        guard let deviceListener else { return }
-
-        var nominalAddress = Self.nominalSampleRateAddress
-        AudioObjectRemovePropertyListenerBlock(
-            deviceID,
-            &nominalAddress,
-            callbackQueue,
-            deviceListener
-        )
-
-        var availableRatesAddress = Self.availableNominalSampleRatesAddress
-        AudioObjectRemovePropertyListenerBlock(
-            deviceID,
-            &availableRatesAddress,
-            callbackQueue,
-            deviceListener
-        )
-
-        self.deviceListener = nil
-    }
-
-    nonisolated private func notifyChange() {
-        guard let onChange else { return }
-        onChange()
-    }
-
-    nonisolated private static var defaultOutputDeviceAddress: AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
+        deviceRegistration = PropertyListenerRegistration(
+            object: device,
+            properties: [
+                Self.nominalSampleRateAddress,
+                Self.availableNominalSampleRatesAddress
+            ],
+            callbackQueue: callbackQueue,
+            delegate: PropertyChangeDelegate(observer: self, event: .devicePropertiesChanged)
         )
     }
 
-    nonisolated private static var nominalSampleRateAddress: AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+    private func unregisterDeviceListeners() {
+        deviceRegistration?.tearDown()
+        deviceRegistration = nil
     }
 
-    nonisolated private static var availableNominalSampleRatesAddress: AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyAvailableNominalSampleRates,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+    private func notifyChange() {
+        onChange?()
     }
 
-    nonisolated private static func getDefaultAudioDevice() -> AudioDeviceID? {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = defaultOutputDeviceAddress
+    private static var defaultOutputDeviceAddress: AudioObjectPropertyAddress {
+        PropertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
+    }
 
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &deviceID
-        )
+    private static var nominalSampleRateAddress: AudioObjectPropertyAddress {
+        PropertyAddress(kAudioDevicePropertyNominalSampleRate)
+    }
 
-        guard status == noErr else {
+    private static var availableNominalSampleRatesAddress: AudioObjectPropertyAddress {
+        PropertyAddress(kAudioDevicePropertyAvailableNominalSampleRates)
+    }
+
+    private func getDefaultAudioDevice() -> AudioHardwareDevice? {
+        do {
+            return try hardwareSystem.defaultOutputDevice
+        } catch {
             return nil
         }
+    }
 
-        return deviceID
+    private static func deviceUID(_ device: AudioHardwareDevice) -> String? {
+        try? device.uid
+    }
+}
+
+private enum ObserverPropertyChangeEvent: Sendable {
+    case defaultOutputDeviceChanged
+    case devicePropertiesChanged
+}
+
+private final class PropertyListenerRegistration: @unchecked Sendable {
+    nonisolated private let object: AudioHardwareObject
+    nonisolated private let properties: [AudioObjectPropertyAddress]
+    nonisolated private let callbackQueue: DispatchQueue
+    nonisolated private let delegate: PropertyChangeDelegate
+    nonisolated(unsafe) private var isTornDown = false
+
+    nonisolated init?(
+        object: AudioHardwareObject,
+        properties: [AudioObjectPropertyAddress],
+        callbackQueue: DispatchQueue,
+        delegate: PropertyChangeDelegate
+    ) {
+        self.object = object
+        self.properties = properties
+        self.callbackQueue = callbackQueue
+        self.delegate = delegate
+
+        var delegates = object.delegates
+        delegates.append(delegate)
+        object.delegates = delegates
+
+        do {
+            try object.addListener(forProperties: properties, dispatchQueue: callbackQueue)
+        } catch {
+            Self.remove(delegate: delegate, from: object)
+            return nil
+        }
+    }
+
+    deinit {
+        tearDown()
+    }
+
+    nonisolated func tearDown() {
+        guard !isTornDown else {
+            return
+        }
+
+        isTornDown = true
+        try? object.removeListener(forProperties: properties, dispatchQueue: callbackQueue)
+        Self.remove(delegate: delegate, from: object)
+    }
+
+    private nonisolated static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
+        var delegates = object.delegates
+        delegates.removeAll { existing in
+            guard let existing = existing as? PropertyChangeDelegate else { return false }
+            return existing === delegate
+        }
+        object.delegates = delegates
+    }
+}
+
+private final class PropertyChangeDelegate: PropertyListenerDelegate, @unchecked Sendable {
+    private weak var observer: CoreAudioHardwareObserver?
+    private let event: ObserverPropertyChangeEvent
+
+    init(observer: CoreAudioHardwareObserver, event: ObserverPropertyChangeEvent) {
+        self.observer = observer
+        self.event = event
+    }
+
+    nonisolated func propertiesChanged(properties: [AudioObjectPropertyAddress]) {
+        Task { @MainActor [weak self] in
+            self?.notifyObserver()
+        }
+    }
+
+    @MainActor
+    private func notifyObserver() {
+        observer?.handlePropertyChange(event)
     }
 }

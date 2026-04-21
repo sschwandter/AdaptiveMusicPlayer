@@ -23,9 +23,10 @@ final class StubAudioPlayer: AVAudioPlayer {
     }
 }
 
+@MainActor
 final class StubAudioHardwareObserver: AudioHardwareObserving {
-    nonisolated func startObserving(onChange: @escaping @Sendable () -> Void) {}
-    nonisolated func stopObserving() {}
+    func startObserving(onChange: @escaping @Sendable () -> Void) {}
+    func stopObserving() {}
 }
 
 struct StubAudioHardwareInfoProvider: AudioHardwareInfoProviding {
@@ -44,32 +45,36 @@ struct StubAudioHardwareInfoProvider: AudioHardwareInfoProviding {
     }
 }
 
-struct StubSampleRateManager: SampleRateManaging {
-    nonisolated func getCurrentSampleRate() -> Double? { 44_100 }
-    nonisolated func getCurrentOutputDeviceName() -> String? { "Test Device" }
-    nonisolated func setSampleRate(_ rate: Double) throws {}
-    nonisolated func getSupportedSampleRates() -> [Double] { [44_100] }
-    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
+actor StubSampleRateManager: SampleRateManaging {
+    func getCurrentSampleRate() async -> Double? { 44_100 }
+    func getCurrentOutputDeviceName() async -> String? { "Test Device" }
+    func setSampleRate(_ rate: Double) async throws {}
+    func getSupportedSampleRates() async -> [Double] { [44_100] }
+    func getCurrentDeviceInfo() async -> AudioDeviceInfo? {
         AudioDeviceInfo(name: "Test Device", currentSampleRate: 44_100, supportedSampleRates: [44_100])
     }
 }
 
-final class RecordingSampleRateManager: SampleRateManaging, @unchecked Sendable {
+actor RecordingSampleRateManager: SampleRateManaging {
     let currentSampleRate: Double
-    private(set) var requestedSampleRates: [Double] = []
+    private var requestedSampleRates: [Double] = []
 
     init(currentSampleRate: Double) {
         self.currentSampleRate = currentSampleRate
     }
 
-    nonisolated func getCurrentSampleRate() -> Double? { currentSampleRate }
-    nonisolated func getCurrentOutputDeviceName() -> String? { "Test Device" }
-    func setSampleRate(_ rate: Double) throws {
+    func getCurrentSampleRate() async -> Double? { currentSampleRate }
+    func getCurrentOutputDeviceName() async -> String? { "Test Device" }
+    func setSampleRate(_ rate: Double) async throws {
         requestedSampleRates.append(rate)
     }
-    nonisolated func getSupportedSampleRates() -> [Double] { [44_100, 96_000] }
-    nonisolated func getCurrentDeviceInfo() -> AudioDeviceInfo? {
+    func getSupportedSampleRates() async -> [Double] { [44_100, 96_000] }
+    func getCurrentDeviceInfo() async -> AudioDeviceInfo? {
         AudioDeviceInfo(name: "Test Device", currentSampleRate: currentSampleRate, supportedSampleRates: [44_100, 96_000])
+    }
+
+    func recordedSampleRates() -> [Double] {
+        requestedSampleRates
     }
 }
 
@@ -129,7 +134,7 @@ struct DelayedSyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
         guard let audioInfo = state.audioInfo else {
             throw PlaybackError.noFileLoaded
         }
-        try sampleRateManager.setSampleRate(audioInfo.sampleRate)
+        try await sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }
 

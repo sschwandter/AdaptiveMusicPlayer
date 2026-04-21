@@ -11,8 +11,8 @@ struct SampleRateManagerTests {
             AudioValueRange(mMinimum: 44_100, mMaximum: 192_000)
         ]
 
-        #expect(CoreAudioSampleRateManager.sampleRate(96_000, isSupportedBy: ranges))
-        #expect(!CoreAudioSampleRateManager.sampleRate(22_050, isSupportedBy: ranges))
+        #expect(SampleRateSupport.isSupported(96_000, by: ranges))
+        #expect(!SampleRateSupport.isSupported(22_050, by: ranges))
     }
 
     @Test("Range-backed sample rates expand to common nominal rates")
@@ -21,11 +21,11 @@ struct SampleRateManagerTests {
         let ranged = AudioValueRange(mMinimum: 44_100, mMaximum: 192_000)
 
         #expect(
-            CoreAudioSampleRateManager.expandSupportedRates(from: discrete) == [44_100]
+            SampleRateSupport.expandRates(from: discrete) == [44_100]
         )
         #expect(
-            CoreAudioSampleRateManager.expandSupportedRates(from: ranged)
-            == [44_100, 48_000, 88_200, 96_000, 176_400, 192_000]
+            SampleRateSupport.expandRates(from: ranged)
+                == [44_100, 48_000, 88_200, 96_000, 176_400, 192_000]
         )
     }
 }
