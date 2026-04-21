@@ -3,23 +3,44 @@ import Foundation
 final class ScopedFolderAccess: @unchecked Sendable {
     let folderURL: URL
     private let usesSecurityScope: Bool
+    private let stopAccessing: @Sendable (URL) -> Void
 
-    init?(folderURL: URL) {
-        let didStartScopedAccess = folderURL.startAccessingSecurityScopedResource()
-        let isReadableDirectory = (try? folderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-            && FileManager.default.isReadableFile(atPath: folderURL.path)
+    convenience init?(folderURL: URL) {
+        self.init(
+            folderURL: folderURL,
+            startAccessing: { $0.startAccessingSecurityScopedResource() },
+            isReadableDirectory: { url in
+                (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                    && FileManager.default.isReadableFile(atPath: url.path)
+            },
+            stopAccessing: { $0.stopAccessingSecurityScopedResource() }
+        )
+    }
 
-        guard didStartScopedAccess || isReadableDirectory else {
+    init?(
+        folderURL: URL,
+        startAccessing: @Sendable (URL) -> Bool,
+        isReadableDirectory: @Sendable (URL) -> Bool,
+        stopAccessing: @escaping @Sendable (URL) -> Void
+    ) {
+        let didStartScopedAccess = startAccessing(folderURL)
+        let isReadableDirectory = isReadableDirectory(folderURL)
+
+        guard isReadableDirectory else {
+            if didStartScopedAccess {
+                stopAccessing(folderURL)
+            }
             return nil
         }
 
         self.folderURL = folderURL
         self.usesSecurityScope = didStartScopedAccess
+        self.stopAccessing = stopAccessing
     }
 
     deinit {
         if usesSecurityScope {
-            folderURL.stopAccessingSecurityScopedResource()
+            stopAccessing(folderURL)
         }
     }
 }

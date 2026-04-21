@@ -432,8 +432,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                 throw PlaybackError.loadFailed("Cannot access folder")
             }
 
+            let folderScanner = self.folderScanner
             let tracks = try await Task.detached(priority: .userInitiated) {
-                try self.folderScanner.scan(folderURL: url)
+                try folderScanner.scan(folderURL: url)
             }.value
 
             try self.ensureLoadRemainsCurrent(generation)

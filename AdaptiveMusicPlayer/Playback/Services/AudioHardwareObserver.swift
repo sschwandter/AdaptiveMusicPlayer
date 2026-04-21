@@ -143,14 +143,14 @@ private enum ObserverPropertyChangeEvent: Sendable {
     case devicePropertiesChanged
 }
 
-private final class PropertyListenerRegistration: @unchecked Sendable {
-    nonisolated private let object: AudioHardwareObject
-    nonisolated private let properties: [AudioObjectPropertyAddress]
-    nonisolated private let callbackQueue: DispatchQueue
-    nonisolated private let delegate: PropertyChangeDelegate
-    nonisolated(unsafe) private var isTornDown = false
+private final class PropertyListenerRegistration {
+    private let object: AudioHardwareObject
+    private let properties: [AudioObjectPropertyAddress]
+    private let callbackQueue: DispatchQueue
+    private let delegate: PropertyChangeDelegate
+    private var isTornDown = false
 
-    nonisolated init?(
+    init?(
         object: AudioHardwareObject,
         properties: [AudioObjectPropertyAddress],
         callbackQueue: DispatchQueue,
@@ -173,11 +173,7 @@ private final class PropertyListenerRegistration: @unchecked Sendable {
         }
     }
 
-    deinit {
-        tearDown()
-    }
-
-    nonisolated func tearDown() {
+    func tearDown() {
         guard !isTornDown else {
             return
         }
@@ -187,7 +183,7 @@ private final class PropertyListenerRegistration: @unchecked Sendable {
         Self.remove(delegate: delegate, from: object)
     }
 
-    private nonisolated static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
+    private static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
         var delegates = object.delegates
         delegates.removeAll { existing in
             guard let existing = existing as? PropertyChangeDelegate else { return false }
