@@ -24,6 +24,10 @@ struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
 }
 
 /// Observes the active output device and its sample-rate-related properties.
+/// Design:
+/// - MainActor owns behavioral state (`onChange`, observed device identity, token references).
+/// - `ListenerToken` owns low-level CoreAudio registration and deterministic teardown in `deinit`.
+/// - `PropertyChangeDelegate` is a minimal callback bridge that hops onto MainActor.
 @MainActor
 final class CoreAudioHardwareObserver: AudioHardwareObserving {
     private let callbackQueue = DispatchQueue(label: "AdaptiveMusicPlayer.AudioHardwareObserver")
@@ -31,25 +35,25 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
 
     private var onChange: (@Sendable () -> Void)?
     private var observedDeviceUID: String?
-    private var systemRegistration: PropertyListenerRegistration?
-    private var deviceRegistration: PropertyListenerRegistration?
+    private var systemToken: ListenerToken?
+    private var deviceToken: ListenerToken?
 
     func startObserving(onChange: @escaping @Sendable () -> Void) {
         stopObserving()
         self.onChange = onChange
 
-        let systemRegistration = PropertyListenerRegistration(
+        let systemToken = ListenerToken(
             object: hardwareSystem,
             properties: [Self.defaultOutputDeviceAddress],
             callbackQueue: callbackQueue,
             delegate: PropertyChangeDelegate(observer: self, event: .defaultOutputDeviceChanged)
         )
-        guard let systemRegistration else {
+        guard let systemToken else {
             self.onChange = nil
             return
         }
 
-        self.systemRegistration = systemRegistration
+        self.systemToken = systemToken
         let defaultDevice = getDefaultAudioDevice()
         observedDeviceUID = defaultDevice.flatMap(Self.deviceUID)
         registerDeviceListenersIfNeeded(for: defaultDevice)
@@ -57,8 +61,7 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
 
     func stopObserving() {
         unregisterDeviceListeners()
-        systemRegistration?.tearDown()
-        systemRegistration = nil
+        systemToken = nil
         observedDeviceUID = nil
         onChange = nil
     }
@@ -73,7 +76,7 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
     }
 
     private func handleDefaultOutputDeviceChange() {
-        guard systemRegistration != nil else {
+        guard systemToken != nil else {
             return
         }
 
@@ -89,11 +92,11 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
     }
 
     private func registerDeviceListenersIfNeeded(for device: AudioHardwareDevice?) {
-        guard let device, deviceRegistration == nil, systemRegistration != nil else {
+        guard let device, deviceToken == nil, systemToken != nil else {
             return
         }
 
-        deviceRegistration = PropertyListenerRegistration(
+        deviceToken = ListenerToken(
             object: device,
             properties: [
                 Self.nominalSampleRateAddress,
@@ -105,8 +108,7 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
     }
 
     private func unregisterDeviceListeners() {
-        deviceRegistration?.tearDown()
-        deviceRegistration = nil
+        deviceToken = nil
     }
 
     private func notifyChange() {
@@ -143,14 +145,16 @@ private enum ObserverPropertyChangeEvent: Sendable {
     case devicePropertiesChanged
 }
 
-private final class PropertyListenerRegistration {
-    private let object: AudioHardwareObject
-    private let properties: [AudioObjectPropertyAddress]
-    private let callbackQueue: DispatchQueue
-    private let delegate: PropertyChangeDelegate
-    private var isTornDown = false
+/// RAII-style owner for one CoreAudio listener registration.
+/// Keeping this nonisolated lets teardown happen synchronously in `deinit`,
+/// independent of whether the MainActor observer is explicitly stopped.
+private final class ListenerToken {
+    nonisolated private let object: AudioHardwareObject
+    nonisolated private let properties: [AudioObjectPropertyAddress]
+    nonisolated private let callbackQueue: DispatchQueue
+    nonisolated private let delegate: PropertyChangeDelegate
 
-    init?(
+    nonisolated init?(
         object: AudioHardwareObject,
         properties: [AudioObjectPropertyAddress],
         callbackQueue: DispatchQueue,
@@ -173,17 +177,12 @@ private final class PropertyListenerRegistration {
         }
     }
 
-    func tearDown() {
-        guard !isTornDown else {
-            return
-        }
-
-        isTornDown = true
+    deinit {
         try? object.removeListener(forProperties: properties, dispatchQueue: callbackQueue)
         Self.remove(delegate: delegate, from: object)
     }
 
-    private static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
+    private nonisolated static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
         var delegates = object.delegates
         delegates.removeAll { existing in
             guard let existing = existing as? PropertyChangeDelegate else { return false }
@@ -193,6 +192,8 @@ private final class PropertyListenerRegistration {
     }
 }
 
+/// Receives CoreAudio property callbacks on the CoreAudio callback queue and
+/// forwards them to the MainActor observer, where all state transitions live.
 private final class PropertyChangeDelegate: PropertyListenerDelegate, @unchecked Sendable {
     private weak var observer: CoreAudioHardwareObserver?
     private let event: ObserverPropertyChangeEvent
