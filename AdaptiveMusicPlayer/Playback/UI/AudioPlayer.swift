@@ -3,9 +3,11 @@ import Observation
 
 /// Observable playback view model used by SwiftUI
 /// Wraps the engine and maintains additional UI-facing status state
+/// @MainActor ensures all UI updates happen on main thread.
+/// Implicitly Sendable in Swift 6 due to @MainActor.
 @MainActor
 @Observable
-final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on MainActor
+final class AudioPlayer {
     // MARK: - Presentation State
 
     private let stateStore = AudioPlayerStateStore()
@@ -88,7 +90,8 @@ private var sampleRatePresentation: SampleRatePresentationOutput {
 
         hardwareMonitor.startObserving()
 
-        Task { @MainActor [hardwareMonitor] in
+        // Task inherits @MainActor from surrounding context
+        Task {
             await hardwareMonitor.refreshHardwareInfo()
         }
     }

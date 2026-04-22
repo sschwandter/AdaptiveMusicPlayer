@@ -211,7 +211,7 @@ struct SampleRatePresenter {
         Self.sampleRate(input.fileSampleRate, isWithin: input.supportedHardwareSampleRates)
     }
 
-    static func formatSampleRate(_ sampleRate: Double) -> String {
+    nonisolated static func formatSampleRate(_ sampleRate: Double) -> String {
         let kilohertz = sampleRate / 1000
         if abs(kilohertz.rounded() - kilohertz) < 0.05 {
             return "\(Int(kilohertz.rounded())) kHz"

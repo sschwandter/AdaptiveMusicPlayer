@@ -120,10 +120,8 @@ final class AudioPlayerLoadCoordinator {
                 throw PlaybackError.loadFailed("Cannot access folder")
             }
 
-            let folderScanner = self.folderScanner
-            let tracks = try await Task.detached(priority: .userInitiated) {
-                try folderScanner.scan(folderURL: url)
-            }.value
+            // scan is now async, so it naturally runs off the main actor
+            let tracks = try await self.folderScanner.scan(folderURL: url)
 
             try self.ensureLoadRemainsCurrent(run)
 

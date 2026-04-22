@@ -2,7 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 
 protocol AudioPlaylistFolderScanning: Sendable {
-    nonisolated func scan(folderURL: URL) throws -> [URL]
+    func scan(folderURL: URL) async throws -> [URL]
 }
 
 protocol DirectoryTreeEnumerating: Sendable {
@@ -69,7 +69,7 @@ struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
         self.audioFileClassifier = audioFileClassifier
     }
 
-    nonisolated func scan(folderURL: URL) throws -> [URL] {
+    func scan(folderURL: URL) async throws -> [URL] {
         let resourceValues = try folderURL.resourceValues(forKeys: [.isDirectoryKey])
         guard resourceValues.isDirectory == true else {
             throw AudioPlaylistFolderScannerError.notADirectory(folderURL)

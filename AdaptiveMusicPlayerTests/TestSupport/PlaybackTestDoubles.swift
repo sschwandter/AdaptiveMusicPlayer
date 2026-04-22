@@ -161,8 +161,8 @@ struct DelayedFolderScanner: AudioPlaylistFolderScanning {
     let delay: TimeInterval
     let tracks: [URL]
 
-    nonisolated func scan(folderURL: URL) throws -> [URL] {
-        Thread.sleep(forTimeInterval: delay)
+    func scan(folderURL: URL) async throws -> [URL] {
+        try await Task.sleep(for: .seconds(delay))
         return tracks
     }
 }
