@@ -201,6 +201,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
     }
 
+    private let statusPresenter = PlayerStatusPresenter()
+
     var playlistTrackPosition: String? { contentViewPresentation.playlistTrackPosition }
     var playlistTracks: [PlaylistTrackRow] { contentViewPresentation.playlistTracks }
     var hasPlaylist: Bool { contentViewPresentation.hasPlaylist }
@@ -410,7 +412,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func pause() {
         if cancelPendingPlaybackStart() {
             progressTracker.stopTracking()
-            setStatusMessage("Paused")
+            applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
             return
         }
 
@@ -418,7 +420,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             let audioInfo = try engine.pause()
             transitionToPausedPlayback(audioInfo)
             progressTracker.stopTracking()
-            setStatusMessage("Paused")
+            applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
         } catch let error as PlaybackError {
             showError(error)
         } catch {
@@ -432,7 +434,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         transitionToStoppedPlayback(preserving: audioInfo)
         progressTracker.stopTracking()
         currentTime = 0
-        setStatusMessage("Stopped")
+        applyStatusPresentation(statusPresenter.presentInfo(message: "Stopped"))
     }
 
     // MARK: - Seeking
@@ -487,7 +489,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             if hasSampleRateMismatch {
                 showError(.sampleRateSyncFailed(sampleRateStatusDetail))
             } else {
-                setStatusMessage("Hardware sample rate set to \(SampleRatePresenter.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
+                applyStatusPresentation(
+                    statusPresenter.presentInfo(
+                        message: "Hardware sample rate set to \(SampleRatePresenter.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)"
+                    )
+                )
             }
         } catch let error as PlaybackError {
             showError(error)
@@ -514,7 +520,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
                     let audioInfo = self.engine.markFinished()
                     self.transitionToFinishedPlayback(audioInfo)
                     self.currentTime = self.duration
-                    self.setStatusMessage("Playback finished")
+                    self.applyStatusPresentation(
+                        self.statusPresenter.presentInfo(message: "Playback finished")
+                    )
                 }
             },
             onPeriodicUpdate: { [weak self] in
@@ -540,6 +548,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func beginLoading(
+        loadingState: LoadingPresentationState,
         with message: String,
         cancelCurrentLoad: Bool = true,
         advanceGeneration: Bool = true
@@ -549,8 +558,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         transitionToLoadingPlayback(preserving: preservedAudioInfo)
         progressTracker.stopTracking()
         currentTime = 0
-        screenState.loading = message == "Scanning folder..." ? .scanningFolder : .loadingTrack
-        setStatusMessage(message)
+        applyStatusPresentation(
+            statusPresenter.presentLoading(
+                state: loadingState,
+                message: message
+            )
+        )
 
         if cancelCurrentLoad {
             loadingTask?.cancel()
@@ -568,11 +581,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         operation: @escaping @MainActor (Int) async throws -> Void
     ) {
         beginLoading(
+            loadingState: loadingState,
             with: message,
             cancelCurrentLoad: cancelCurrentLoad,
             advanceGeneration: advanceGeneration
         )
-        screenState.loading = loadingState
 
         let generation = loadGeneration
         loadingTask = Task { @MainActor [weak self] in
@@ -659,11 +672,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             : "Loading file..."
 
         beginLoading(
+            loadingState: .loadingTrack,
             with: loadingMessage,
             cancelCurrentLoad: false,
             advanceGeneration: false
         )
-        screenState.loading = .loadingTrack
 
         try await finishLoadingTrack(
             from: trackURL,
@@ -694,7 +707,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private func handleLoadCancellation(generation: Int) {
         guard generation == loadGeneration else { return }
-        setStatusMessage("Loading cancelled")
+        applyStatusPresentation(
+            statusPresenter.presentInfo(
+                message: "Loading cancelled",
+                loading: .cancelled
+            )
+        )
     }
 
     private func handleLoadFailure(_ error: PlaybackError, generation: Int) {
@@ -742,57 +760,55 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func showReadyStatus(for audioInfo: AudioInfo) {
-        screenState.loading = .idle
-        let prefix = playlistSession?.trackCount ?? 0 > 1
-            ? "Track \(playlistSession?.positionDescription ?? "") ready"
-            : "Ready to play"
-
-        if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
-        } else {
-            setStatusMessage("\(prefix) at \(SampleRatePresenter.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
-        }
+        applyStatusPresentation(
+            statusPresenter.presentReady(
+                PlayerStatusReadyInput(
+                    hasPlaylist: playlistSession?.trackCount ?? 0 > 1,
+                    playlistTrackPosition: playlistSession?.positionDescription,
+                    sampleRate: audioInfo.sampleRate,
+                    hardwareDeviceName: hardwareDeviceDisplayName,
+                    hasSampleRateMismatch: hasSampleRateMismatch,
+                    sampleRateStatusDetail: sampleRateStatusDetail
+                )
+            )
+        )
     }
 
     private func showPlayingStatus() {
-        screenState.loading = .idle
-        let prefix = playlistSession?.trackCount ?? 0 > 1
-            ? "Playing track \(playlistSession?.positionDescription ?? "")"
-            : "Playing"
-
-        if hasSampleRateMismatch {
-            setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
-        } else {
-            setStatusMessage("\(prefix) at \(SampleRatePresenter.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
-        }
+        applyStatusPresentation(
+            statusPresenter.presentPlaying(
+                PlayerStatusPlayingInput(
+                    hasPlaylist: playlistSession?.trackCount ?? 0 > 1,
+                    playlistTrackPosition: playlistSession?.positionDescription,
+                    sampleRate: fileSampleRate,
+                    hardwareDeviceName: hardwareDeviceDisplayName,
+                    hasSampleRateMismatch: hasSampleRateMismatch,
+                    sampleRateStatusDetail: sampleRateStatusDetail
+                )
+            )
+        )
     }
 
     private func showError(_ error: PlaybackError) {
-        if currentAudioInfo == nil {
-            screenState.playback = .unavailable
-        }
-        screenState.loading = .failed
-        screenState.status = StatusPresentationState(kind: .error, message: error.localizedDescription)
-    }
-
-    private func setStatusMessage(_ message: String) {
-        if message == "Loading cancelled" {
-            screenState.loading = .cancelled
-            screenState.status = StatusPresentationState(kind: .info, message: message)
-            return
-        }
-
-        if screenState.loading.isActive {
-            screenState.status = StatusPresentationState(kind: .info, message: message)
-            return
-        }
-
-        screenState.loading = .idle
-        screenState.status = StatusPresentationState(kind: message.isEmpty ? .neutral : .info, message: message)
+        applyStatusPresentation(
+            statusPresenter.presentError(
+                error,
+                hasCurrentAudio: currentAudioInfo != nil
+            )
+        )
     }
 
     private var currentAudioInfo: AudioInfo? {
         screenState.playback.audioInfo
+    }
+
+    private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
+        screenState.loading = output.loading
+        screenState.status = output.status
+
+        if let playbackOverride = output.playbackOverride {
+            screenState.playback = playbackOverride
+        }
     }
 
     private func transitionToLoadingPlayback(preserving audioInfo: AudioInfo?) {

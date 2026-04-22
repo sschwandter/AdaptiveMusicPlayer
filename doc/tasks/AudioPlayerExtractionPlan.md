@@ -12,12 +12,6 @@ Working rules:
 
 ## Backlog
 
-- [ ] Extract `PlayerStatusPresenter`
-  Exit criteria:
-  - Status and error message policy no longer lives in `AudioPlayer`.
-  - String literals do not control loading-state transitions.
-  - Dedicated unit tests cover ready, playing, cancelled, and error states.
-
 - [ ] Extract `AudioPlayerLoadCoordinator`
   Exit criteria:
   - File and folder loading workflow no longer lives in `AudioPlayer`.
@@ -67,6 +61,14 @@ Working rules:
   - `AudioPlayer` now delegates playlist-derived view state and `contentViewState` construction to the presenter.
   - Added isolated presenter tests in `AdaptiveMusicPlayerTests/ContentViewStatePresenterTests.swift`.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests`.
+
+- [x] Extract `PlayerStatusPresenter`
+  Notes:
+  - Status message policy and error presentation moved to `Playback/UI/Presentation/PlayerStatusPresenter.swift`.
+  - `AudioPlayer` now applies presenter outputs instead of mutating status/loading state through string-driven helper logic.
+  - Removed string literal checks that previously decided loading-state transitions for scanning and cancellation.
+  - Added isolated presenter tests in `AdaptiveMusicPlayerTests/PlayerStatusPresenterTests.swift`.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests`.
 
 ## Risks / Decisions
 
