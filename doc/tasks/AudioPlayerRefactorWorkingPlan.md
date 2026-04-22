@@ -410,21 +410,7 @@ Update this section during implementation.
 
 ### In Progress
 
-- Phase 6: Final facade cleanup
-  Notes:
-  - Phase 5 is complete and committed. Phase 6 is now limited to facade cleanup only.
-  - Collapsed repeated load-time closure wiring behind a typed `AudioPlayerLoadWorkflow.Callbacks` bundle.
-  - `AudioPlayer.swift` is down to 276 lines after the latest pass, but it has not reached the target size or boundary clarity yet.
-  - Remaining responsibilities still under review in `AudioPlayer`:
-    - duplicated error-presentation policy that is also implemented in playback workflow
-    - direct access to playlist session only to support Finder reveal
-    - adapter glue between load workflow and playback workflow (`loadWorkflowCallbacks`, `startPlaybackAfterLoad`, `loadAdjacentTrack`)
-  - Next cleanup target:
-    - move load-related error presentation out of `AudioPlayer`
-    - remove the direct `playlistSession` proxy from `AudioPlayer` if Finder reveal can read from store or a tiny helper
-    - evaluate whether workflow bridge closures should become a stored bridge/helper instead of facade-local glue
-  - Focused verification remains green:
-    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+- No task currently in progress
 
 ### Deferred Decisions
 
@@ -474,18 +460,27 @@ Update this section during implementation.
   - Verified with:
     `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
 
+- [x] Phase 6: Final facade cleanup
+  Notes:
+  - Collapsed repeated load-time closure wiring behind a typed `AudioPlayerLoadWorkflow.Callbacks` bundle.
+  - Removed facade-local error presentation and direct playlist-session access for Finder reveal.
+  - Replaced the remaining private load/playback adapter methods with stored bridge closures marked `@ObservationIgnored`.
+  - Kept the workflow bridge closures on `AudioPlayer` because they still read as legitimate facade wiring rather than a separate ownership boundary.
+  - Kept the flat forwarded presentation properties because they are the existing UI-facing contract; grouping them further would mostly be an API-shape change rather than a responsibility cleanup.
+  - `AudioPlayer.swift` is down to 255 lines. This does not meet the original 120-180 line target, but the remaining code is now mostly facade wiring and public surface rather than mixed workflow logic.
+  - Verified with:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
 ## First Concrete Task
 
-Next implementation target is Phase 6 only.
+No immediate implementation target is required to complete the current refactor plan.
 
 Implementation target:
 
-- reduce `AudioPlayer.swift` to facade wiring, public properties, and public intent methods
-- remove duplicated error-presentation policy from the facade
-- remove or justify direct playlist-session access in the facade
-- reduce workflow-to-workflow adapter glue that currently lives in private facade helpers
+- If follow-up cleanup is desired later, prefer treating it as optional polish rather than part of the core refactor sequence.
+- Any further reduction in `AudioPlayer.swift` should justify API-shape churn or additional helper types with a clear ownership benefit, not just file length reduction.
 
-Do not broaden Phase 6 into domain changes outside the playback UI layer. Keep it focused on facade cleanup only.
+Do not broaden follow-up cleanup into domain changes outside the playback UI layer unless a new task explicitly opts into API restructuring.
 
 ## Open Questions
 
@@ -503,11 +498,15 @@ Do not broaden Phase 6 into domain changes outside the playback UI layer. Keep i
 
 - Should Finder reveal stay as a facade responsibility or move behind a tiny helper/store accessor?
   Current leaning:
-  keep the public intent on `AudioPlayer`, but avoid keeping raw playlist-session access on the facade just to resolve the current track URL.
+  keep the public intent on `AudioPlayer`, but avoid keeping raw playlist-session access on the facade just to resolve the current track URL. Implemented via `AudioPlayerStateStore.currentTrackURL`.
 
 - Should the load/playback bridge remain as callback closures on the facade or become a dedicated helper?
-  Current leaning:
-  the current callback bundle was a useful intermediate step, but Phase 6 should revisit whether a dedicated bridge/helper would make ownership clearer than private facade glue.
+  Answer:
+  keep the bridge closures on `AudioPlayer` for now. They are acceptable facade wiring, and extracting them further would currently hide glue more than it would clarify ownership.
+
+- Should the public forwarded presentation properties be grouped more narrowly?
+  Answer:
+  keep them flat for now. They are part of the existing UI-facing contract, and grouping them further would mostly be an API-shape change rather than a responsibility cleanup.
 
 ## Notes
 

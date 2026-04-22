@@ -3,7 +3,6 @@ import Foundation
 @MainActor
 final class AudioPlayerLoadWorkflow {
     struct Callbacks {
-        let handleError: @MainActor (PlaybackError) -> Void
         let cancelPendingPlaybackStart: @MainActor () -> Bool
         let stopProgressTracking: @MainActor () -> Void
         let startPlayback: @MainActor () -> Void
@@ -35,6 +34,10 @@ final class AudioPlayerLoadWorkflow {
 
     func waitForCurrentLoad() async {
         await loadCoordinator.waitForCurrentLoad()
+    }
+
+    func reportFileSelectionError(_ message: String) {
+        presentError(.loadFailed(message))
     }
 
     func loadFile(
@@ -151,14 +154,14 @@ final class AudioPlayerLoadWorkflow {
                     callbacks: callbacks
                 )
             } catch let error as PlaybackError {
-                callbacks.handleError(error)
+                presentError(error)
             } catch {
-                callbacks.handleError(.loadFailed(error.localizedDescription))
+                presentError(.loadFailed(error.localizedDescription))
             }
         case .cancelled:
             handleLoadCancellation(callbacks: callbacks)
         case .failed(let error):
-            callbacks.handleError(error)
+            presentError(error)
         }
     }
 
@@ -230,6 +233,15 @@ final class AudioPlayerLoadWorkflow {
 
     private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
         stateStore.applyStatusPresentation(output)
+    }
+
+    private func presentError(_ error: PlaybackError) {
+        applyStatusPresentation(
+            statusPresenter.presentError(
+                error,
+                hasCurrentAudio: stateStore.currentAudioInfo != nil
+            )
+        )
     }
 
     private func applyScreenStateAction(_ action: PlayerScreenStateReducer.Action) {

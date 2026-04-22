@@ -21,6 +21,7 @@ final class AudioPlayerStateStore {
         get { screenState.playlist.session }
         set { screenState.playlist.session = newValue }
     }
+    var currentTrackURL: URL? { screenState.playlist.session?.currentTrackURL }
     var currentAudioInfo: AudioInfo? { screenState.playback.audioInfo }
 
     func recordLoadedTrack(_ audioInfo: AudioInfo, for trackURL: URL) {

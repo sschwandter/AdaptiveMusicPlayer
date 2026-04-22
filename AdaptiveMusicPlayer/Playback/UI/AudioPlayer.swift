@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 import Observation
 
 /// Observable playback view model used by SwiftUI
@@ -52,8 +51,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
     }
 
-    private let statusPresenter = PlayerStatusPresenter()
-
     var playlistTrackPosition: String? { contentViewPresentation.playlistTrackPosition }
     var playlistTracks: [PlaylistTrackRow] { contentViewPresentation.playlistTracks }
     var hasPlaylist: Bool { contentViewPresentation.hasPlaylist }
@@ -104,10 +101,32 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let hardwareMonitor: AudioPlayerHardwareMonitor
     private let loadWorkflow: AudioPlayerLoadWorkflow
     private let playbackWorkflow: AudioPlayerPlaybackWorkflow
-    private var playlistSession: PlaylistSession? {
-        get { stateStore.playlistSession }
-        set { stateStore.playlistSession = newValue }
+    @ObservationIgnored
+    private lazy var loadAdjacentTrackAction: @MainActor (Bool, Bool) -> Bool = { [weak self] next, autoplay in
+        guard let self else { return false }
+
+        return self.loadWorkflow.loadAdjacentTrack(
+            next: next,
+            autoplay: autoplay,
+            callbacks: self.loadWorkflowCallbacks
+        )
     }
+    @ObservationIgnored
+    private lazy var loadWorkflowCallbacks = AudioPlayerLoadWorkflow.Callbacks(
+        cancelPendingPlaybackStart: { [weak self] in
+            self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false
+        },
+        stopProgressTracking: { [engine, progressTracker] in
+            engine.stopProgressTracking(using: progressTracker)
+        },
+        startPlayback: { [weak self] in
+            guard let self else { return }
+            self.playbackWorkflow.startPlayback(loadAdjacentTrack: self.loadAdjacentTrackAction)
+        },
+        currentVolume: { [weak self] in
+            self?.volume ?? 1
+        }
+    )
 
     // MARK: - Initialization
 
@@ -152,24 +171,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
-    private var loadWorkflowCallbacks: AudioPlayerLoadWorkflow.Callbacks {
-        AudioPlayerLoadWorkflow.Callbacks(
-            handleError: { [weak self] error in self?.presentError(error) },
-            cancelPendingPlaybackStart: { [weak self] in
-                self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false
-            },
-            stopProgressTracking: { [engine, progressTracker] in
-                engine.stopProgressTracking(using: progressTracker)
-            },
-            startPlayback: { [weak self] in
-                self?.startPlaybackAfterLoad()
-            },
-            currentVolume: { [weak self] in
-                self?.volume ?? 1
-            }
-        )
-    }
-
     // MARK: - File Loading
 
     /// Starts a file load and enters loading state immediately.
@@ -192,7 +193,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     /// Report a file selection error from the file picker
     func reportFileSelectionError(_ message: String) {
-        presentError(.loadFailed(message))
+        loadWorkflow.reportFileSelectionError(message)
     }
 
     func waitForCurrentLoad() async {
@@ -201,11 +202,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func playNextTrack() {
-        _ = loadAdjacentTrack(next: true, autoplay: true)
+        _ = loadAdjacentTrackAction(true, true)
     }
 
     func playPreviousTrack() {
-        _ = loadAdjacentTrack(next: false, autoplay: true)
+        _ = loadAdjacentTrackAction(false, true)
     }
 
     func selectPlaylistTrack(at index: Int) {
@@ -217,26 +218,14 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func showCurrentTrackInFinder() {
-        guard let currentTrackURL = playlistSession?.currentTrackURL else { return }
+        guard let currentTrackURL = stateStore.currentTrackURL else { return }
         finderItemRevealer.revealItem(at: currentTrackURL)
     }
 
     // MARK: - Playback Control
 
     func togglePlayPause() {
-        playbackWorkflow.togglePlayPause(loadAdjacentTrack: loadAdjacentTrack)
-    }
-
-    private func startPlaybackAfterLoad() {
-        playbackWorkflow.startPlayback(loadAdjacentTrack: loadAdjacentTrack)
-    }
-
-    private func loadAdjacentTrack(next: Bool, autoplay: Bool) -> Bool {
-        loadWorkflow.loadAdjacentTrack(
-            next: next,
-            autoplay: autoplay,
-            callbacks: loadWorkflowCallbacks
-        )
+        playbackWorkflow.togglePlayPause(loadAdjacentTrack: loadAdjacentTrackAction)
     }
 
     func stop() {
@@ -261,16 +250,5 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     func synchronizeSampleRates() async {
         await playbackWorkflow.synchronizeSampleRates()
-    }
-
-    // MARK: - Private Methods
-
-    private func presentError(_ error: PlaybackError) {
-        stateStore.applyStatusPresentation(
-            statusPresenter.presentError(
-                error,
-                hasCurrentAudio: stateStore.currentAudioInfo != nil
-            )
-        )
     }
 }
