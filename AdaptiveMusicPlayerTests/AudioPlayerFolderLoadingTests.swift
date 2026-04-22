@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Observation
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlayer Folder Loading Tests", .serialized)
@@ -154,5 +155,35 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.isLoading == false)
         #expect(player.hasError == false)
         #expect(player.statusMessage.contains("Ready to play"))
+    }
+
+    @Test("Loading a folder invalidates observation for playlist UI state")
+    func loadFolderTriggersObservationUpdates() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/track.wav"))
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        var didObserveChange = false
+        withObservationTracking {
+            _ = player.contentViewState
+            _ = player.playlistTrackPosition
+            _ = player.playlistTracks
+        } onChange: {
+            didObserveChange = true
+        }
+
+        player.loadFolder(url: rootFolder)
+        await player.waitForCurrentLoad()
+
+        #expect(didObserveChange)
+        #expect(player.playlistTrackPosition == "1 of 1")
+        #expect(player.playlistTracks.count == 1)
     }
 }
