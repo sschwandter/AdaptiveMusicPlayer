@@ -11,12 +11,6 @@ Working rules:
 
 ## Backlog
 
-- [ ] Extract `ContentViewStateBuilder`
-  Exit criteria:
-  - `AudioPlayer.swift` no longer assembles `ContentViewState` directly.
-  - Playlist row mapping and transport-button enablement rules live outside `AudioPlayer`.
-  - Dedicated unit tests cover unloaded, single-track, multi-track, and loading states.
-
 - [ ] Extract `PlayerStatusPresenter`
   Exit criteria:
   - Status and error message policy no longer lives in `AudioPlayer`.
@@ -65,6 +59,13 @@ Working rules:
   - `AudioPlayer` now delegates sample-rate presentation queries to the presenter.
   - Added isolated presenter tests in `AdaptiveMusicPlayerTests/SampleRatePresenterTests.swift`.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests`.
+
+- [x] Extract `ContentViewStatePresenter`
+  Notes:
+  - `ContentViewState` assembly, playlist row mapping, and transport enablement rules moved to `Playback/UI/Presentation/ContentViewStatePresenter.swift`.
+  - `AudioPlayer` now delegates playlist-derived view state and `contentViewState` construction to the presenter.
+  - Added isolated presenter tests in `AdaptiveMusicPlayerTests/ContentViewStatePresenterTests.swift`.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests`.
 
 ## Risks / Decisions
 

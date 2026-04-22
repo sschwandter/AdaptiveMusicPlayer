@@ -160,22 +160,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var hasError: Bool { screenState.status.kind == .error }
     var currentFileName: String? { screenState.playback.audioInfo?.fileName }
     var currentDisplayTitle: String? { screenState.playback.audioInfo?.displayTitle }
-    var playlistTrackPosition: String? { playlistSession?.positionDescription }
-    var playlistTracks: [PlaylistTrackRow] {
-        guard let playlistSession else { return [] }
-
-        return playlistSession.playlist.tracks.enumerated().map { index, url in
-            PlaylistTrackRow(
-                url: url,
-                index: index,
-                isCurrent: index == playlistSession.currentIndex,
-                displayTitle: displayTitlesByTrackURL[url] ?? url.lastPathComponent
-            )
-        }
-    }
-    var hasPlaylist: Bool { playlistSession?.trackCount ?? 0 > 1 }
-    var canPlayPreviousTrack: Bool { playlistSession?.canMoveToPreviousTrack ?? false }
-    var canPlayNextTrack: Bool { playlistSession?.canMoveToNextTrack ?? false }
     var fileSampleRate: Double { screenState.playback.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double { screenState.hardware.currentSampleRate }
     var hardwareDeviceName: String { screenState.hardware.deviceName }
@@ -204,38 +188,27 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
     }
 
-    var contentViewState: ContentViewState {
-        let hasLoadedFile = currentDisplayTitle != nil
-        let transport = TransportControlsPresentation(
-            canPlayPreviousTrack: canPlayPreviousTrack && !isLoading,
-            canPlayPause: hasLoadedFile && !isLoading,
-            canSkip: hasLoadedFile && !isLoading,
-            canPlayNextTrack: canPlayNextTrack && !isLoading,
-            canStop: hasLoadedFile && !isLoading,
-            canAdjustVolume: !isLoading,
-            playPauseSymbolName: isPlaying ? "pause.fill" : "play.fill",
-            playPauseHelp: isPlaying ? "Pause (Space)" : "Play (Space)"
+    private var contentViewPresentation: ContentViewStatePresentationOutput {
+        ContentViewStatePresenter().present(
+            input: ContentViewStatePresentationInput(
+                playback: screenState.playback,
+                loading: screenState.loading,
+                currentTime: currentTime,
+                playlistSession: playlistSession,
+                displayTitlesByTrackURL: displayTitlesByTrackURL,
+                sampleRateBanner: sampleRateBannerPresentation
+            )
         )
-        let playlist = PlaylistBrowserPresentation(
-            isVisible: hasPlaylist && hasLoadedFile,
-            positionDescription: playlistTrackPosition,
-            tracks: playlistTracks
-        )
+    }
 
-        return ContentViewState(
-            currentTrackTitle: currentDisplayTitle,
-            playlistTrackPosition: playlistTrackPosition,
-            duration: duration,
-            currentTime: currentTime,
-            isLoading: isLoading,
-            isPlaying: isPlaying,
-            hasLoadedFile: hasLoadedFile,
-            sliderIsEnabled: hasLoadedFile && !isLoading,
-            sliderOpacity: hasLoadedFile ? (isLoading ? 0.7 : 1.0) : 0.45,
-            sampleRateBanner: sampleRateBannerPresentation,
-            transport: transport,
-            playlist: playlist
-        )
+    var playlistTrackPosition: String? { contentViewPresentation.playlistTrackPosition }
+    var playlistTracks: [PlaylistTrackRow] { contentViewPresentation.playlistTracks }
+    var hasPlaylist: Bool { contentViewPresentation.hasPlaylist }
+    var canPlayPreviousTrack: Bool { contentViewPresentation.canPlayPreviousTrack }
+    var canPlayNextTrack: Bool { contentViewPresentation.canPlayNextTrack }
+
+    var contentViewState: ContentViewState {
+        contentViewPresentation.contentViewState
     }
 
     var hasSampleRateMismatch: Bool {
