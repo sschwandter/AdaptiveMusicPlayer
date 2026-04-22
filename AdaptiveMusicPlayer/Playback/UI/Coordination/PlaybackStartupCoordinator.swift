@@ -10,76 +10,48 @@ final class PlaybackStartupCoordinator {
         case staleStartupFinished
     }
 
-    private var playbackStartupTask: Task<Void, Never>?
-    private var activePlaybackStartupGeneration: Int?
-    private var playbackStartupGeneration: Int = 0
+    private let latestStartup = LatestAsyncRequestCoordinator()
 
     var isStartingPlayback: Bool {
-        playbackStartupTask != nil
+        latestStartup.hasActiveRun
     }
 
     func waitForCurrentStartup() async {
-        await playbackStartupTask?.value
+        await latestStartup.waitForCurrentRun()
     }
 
     func startPlayback(
         play: @escaping @MainActor () async throws -> AudioInfo,
         handleEvent: @escaping @MainActor (Event) async -> Void
     ) {
-        guard playbackStartupTask == nil else { return }
+        guard latestStartup.startRunIfIdle(operation: { run in
 
-        playbackStartupGeneration += 1
-        let generation = playbackStartupGeneration
-        activePlaybackStartupGeneration = generation
-
-        Task { @MainActor in
             await handleEvent(.startupBegan)
-        }
-
-        playbackStartupTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            defer {
-                if self.activePlaybackStartupGeneration == generation {
-                    self.activePlaybackStartupGeneration = nil
-                    self.playbackStartupTask = nil
-                }
-            }
 
             do {
                 let audioInfo = try await play()
 
-                guard self.playbackStartupRemainsCurrent(generation) else {
+                guard run.isCurrent() else {
                     await handleEvent(.staleStartupFinished)
                     return
                 }
 
                 await handleEvent(.startupFinished(audioInfo: audioInfo))
             } catch is CancellationError {
-                guard self.playbackStartupRemainsCurrent(generation) else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.startupCancelled)
             } catch let error as PlaybackError {
-                guard self.playbackStartupRemainsCurrent(generation) else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.startupFailed(error))
             } catch {
-                guard self.playbackStartupRemainsCurrent(generation) else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.startupFailed(.notReady))
             }
-        }
+        }) else { return }
     }
 
     @discardableResult
     func cancelStartup() -> Bool {
-        guard playbackStartupTask != nil else { return false }
-
-        playbackStartupGeneration += 1
-        activePlaybackStartupGeneration = nil
-        playbackStartupTask?.cancel()
-        playbackStartupTask = nil
-        return true
-    }
-
-    private func playbackStartupRemainsCurrent(_ generation: Int) -> Bool {
-        activePlaybackStartupGeneration == generation && !Task.isCancelled
+        latestStartup.cancelCurrentRun()
     }
 }

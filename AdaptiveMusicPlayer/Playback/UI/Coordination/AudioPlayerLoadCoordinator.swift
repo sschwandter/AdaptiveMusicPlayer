@@ -18,15 +18,14 @@ final class AudioPlayerLoadCoordinator {
     }
 
     private let folderScanner: AudioPlaylistFolderScanning
-    private var loadingTask: Task<Void, Never>?
-    private var loadGeneration: Int = 0
+    private let latestLoad = LatestAsyncRequestCoordinator()
 
     init(folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner()) {
         self.folderScanner = folderScanner
     }
 
     func waitForCurrentLoad() async {
-        await loadingTask?.value
+        await latestLoad.waitForCurrentRun()
     }
 
     func loadFile(
@@ -37,7 +36,7 @@ final class AudioPlayerLoadCoordinator {
         loadTrack: @escaping @MainActor (URL) async throws -> AudioInfo,
         handleEvent: @escaping @MainActor (Event) async -> Void
     ) {
-        startNewLoad(handleEvent: handleEvent) { generation in
+        startNewLoad(handleEvent: handleEvent) { run in
             await handleEvent(.playlistSessionUpdated(playlistSession))
             await handleEvent(
                 .beginLoading(
@@ -48,11 +47,11 @@ final class AudioPlayerLoadCoordinator {
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
-                generation: generation
+                run: run
             )
 
             let audioInfo = try await loadTrack(url)
-            try self.ensureLoadRemainsCurrent(generation)
+            try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
                     url: url,
@@ -72,7 +71,7 @@ final class AudioPlayerLoadCoordinator {
     ) {
         let trackURL = playlistSession.currentTrackURL
 
-        startNewLoad(handleEvent: handleEvent) { generation in
+        startNewLoad(handleEvent: handleEvent) { run in
             await handleEvent(.playlistSessionUpdated(playlistSession))
             await handleEvent(
                 .beginLoading(
@@ -83,11 +82,11 @@ final class AudioPlayerLoadCoordinator {
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
-                generation: generation
+                run: run
             )
 
             let audioInfo = try await loadTrack(trackURL)
-            try self.ensureLoadRemainsCurrent(generation)
+            try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
                     url: trackURL,
@@ -104,7 +103,7 @@ final class AudioPlayerLoadCoordinator {
         loadTrack: @escaping @MainActor (URL) async throws -> AudioInfo,
         handleEvent: @escaping @MainActor (Event) async -> Void
     ) {
-        startNewLoad(handleEvent: handleEvent) { generation in
+        startNewLoad(handleEvent: handleEvent) { run in
             await handleEvent(
                 .beginLoading(
                     loadingState: .scanningFolder,
@@ -114,7 +113,7 @@ final class AudioPlayerLoadCoordinator {
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
-                generation: generation
+                run: run
             )
 
             guard let folderAccess = ScopedFolderAccess(folderURL: url) else {
@@ -126,7 +125,7 @@ final class AudioPlayerLoadCoordinator {
                 try folderScanner.scan(folderURL: url)
             }.value
 
-            try self.ensureLoadRemainsCurrent(generation)
+            try self.ensureLoadRemainsCurrent(run)
 
             guard let playlistSession = PlaylistSession.folderPlaylist(
                 tracks: tracks,
@@ -144,7 +143,7 @@ final class AudioPlayerLoadCoordinator {
             )
 
             let audioInfo = try await loadTrack(playlistSession.currentTrackURL)
-            try self.ensureLoadRemainsCurrent(generation)
+            try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
                     url: playlistSession.currentTrackURL,
@@ -157,47 +156,43 @@ final class AudioPlayerLoadCoordinator {
 
     private func startNewLoad(
         handleEvent: @escaping @MainActor (Event) async -> Void,
-        operation: @escaping @MainActor (Int) async throws -> Void
+        operation: @escaping @MainActor (LatestAsyncRequestCoordinator.Run) async throws -> Void
     ) {
-        loadingTask?.cancel()
-        loadGeneration += 1
-        let generation = loadGeneration
-
-        loadingTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
+        latestLoad.replaceCurrentRun { run in
             do {
-                try await operation(generation)
+                try await operation(run)
             } catch is CancellationError {
-                guard generation == self.loadGeneration else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.cancelled)
             } catch let error as PlaybackError {
-                guard generation == self.loadGeneration else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.failed(error))
             } catch {
-                guard generation == self.loadGeneration else { return }
+                guard run.isCurrent() else { return }
                 await handleEvent(.failed(.loadFailed(error.localizedDescription)))
             }
         }
     }
 
-    private func waitForImporterDismissal(_ delay: Duration, generation: Int) async throws {
+    private func waitForImporterDismissal(
+        _ delay: Duration,
+        run: LatestAsyncRequestCoordinator.Run
+    ) async throws {
         guard delay > .zero else { return }
 
         do {
             try await Task.sleep(for: delay)
         } catch is CancellationError {
-            guard generation == loadGeneration else { throw CancellationError() }
             throw CancellationError()
         } catch {
             throw CancellationError()
         }
+
+        try run.ensureCurrent()
     }
 
-    private func ensureLoadRemainsCurrent(_ generation: Int) throws {
-        guard generation == loadGeneration, !Task.isCancelled else {
-            throw CancellationError()
-        }
+    private func ensureLoadRemainsCurrent(_ run: LatestAsyncRequestCoordinator.Run) throws {
+        try run.ensureCurrent()
     }
 
     private static func loadingMessage(for playlistSession: PlaylistSession) -> String {
