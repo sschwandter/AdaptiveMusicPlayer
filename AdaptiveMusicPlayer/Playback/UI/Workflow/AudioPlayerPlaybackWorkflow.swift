@@ -9,16 +9,16 @@ final class AudioPlayerPlaybackWorkflow {
     private let stateStore: AudioPlayerStateStore
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
-    private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let startupCoordinator: PlaybackStartupCoordinator
     private let statusPresenter: PlayerStatusPresenter
     private let screenStateReducer: PlayerScreenStateReducer
+    private let refreshHardwareInfo: @MainActor () async -> Void
 
     init(
         stateStore: AudioPlayerStateStore,
         engine: AudioPlaybackEngine,
         progressTracker: PlaybackProgressTracking,
-        hardwareInfoProvider: AudioHardwareInfoProviding,
+        refreshHardwareInfo: @escaping @MainActor () async -> Void,
         startupCoordinator: PlaybackStartupCoordinator = PlaybackStartupCoordinator(),
         statusPresenter: PlayerStatusPresenter = PlayerStatusPresenter(),
         screenStateReducer: PlayerScreenStateReducer = PlayerScreenStateReducer()
@@ -26,7 +26,7 @@ final class AudioPlayerPlaybackWorkflow {
         self.stateStore = stateStore
         self.engine = engine
         self.progressTracker = progressTracker
-        self.hardwareInfoProvider = hardwareInfoProvider
+        self.refreshHardwareInfo = refreshHardwareInfo
         self.startupCoordinator = startupCoordinator
         self.statusPresenter = statusPresenter
         self.screenStateReducer = screenStateReducer
@@ -227,12 +227,6 @@ final class AudioPlayerPlaybackWorkflow {
     private func stopProgressTracking() {
         engine.stopProgressTracking(using: progressTracker)
     }
-
-    private func refreshHardwareInfo() async {
-        let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo()
-        stateStore.setHardwareInfo(deviceInfo)
-    }
-
     private func showPlayingStatus() {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: isStartingPlayback

@@ -5,22 +5,22 @@ final class AudioPlayerLoadWorkflow {
     private let stateStore: AudioPlayerStateStore
     private let engine: AudioPlaybackEngine
     private let loadCoordinator: AudioPlayerLoadCoordinator
-    private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let statusPresenter: PlayerStatusPresenter
     private let screenStateReducer: PlayerScreenStateReducer
+    private let refreshHardwareInfo: @MainActor () async -> Void
 
     init(
         stateStore: AudioPlayerStateStore,
         engine: AudioPlaybackEngine,
         loadCoordinator: AudioPlayerLoadCoordinator,
-        hardwareInfoProvider: AudioHardwareInfoProviding,
+        refreshHardwareInfo: @escaping @MainActor () async -> Void,
         statusPresenter: PlayerStatusPresenter = PlayerStatusPresenter(),
         screenStateReducer: PlayerScreenStateReducer = PlayerScreenStateReducer()
     ) {
         self.stateStore = stateStore
         self.engine = engine
         self.loadCoordinator = loadCoordinator
-        self.hardwareInfoProvider = hardwareInfoProvider
+        self.refreshHardwareInfo = refreshHardwareInfo
         self.statusPresenter = statusPresenter
         self.screenStateReducer = screenStateReducer
     }
@@ -278,12 +278,6 @@ final class AudioPlayerLoadWorkflow {
             )
         )
     }
-
-    private func refreshHardwareInfo() async {
-        let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo()
-        stateStore.setHardwareInfo(deviceInfo)
-    }
-
     private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
         stateStore.applyStatusPresentation(output)
     }

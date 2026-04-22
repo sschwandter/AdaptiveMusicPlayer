@@ -100,9 +100,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
-    private let hardwareObserver: AudioHardwareObserving
-    private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let finderItemRevealer: FinderItemRevealing
+    private let hardwareMonitor: AudioPlayerHardwareMonitor
     private let loadWorkflow: AudioPlayerLoadWorkflow
     private let playbackWorkflow: AudioPlayerPlaybackWorkflow
     private var playlistSession: PlaylistSession? {
@@ -122,31 +121,34 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
-        self.hardwareObserver = hardwareObserver
-        self.hardwareInfoProvider = hardwareInfoProvider
         self.finderItemRevealer = finderItemRevealer
+        self.hardwareMonitor = AudioPlayerHardwareMonitor(
+            stateStore: stateStore,
+            hardwareObserver: hardwareObserver,
+            hardwareInfoProvider: hardwareInfoProvider
+        )
         let loadCoordinator = AudioPlayerLoadCoordinator(folderScanner: folderScanner)
         self.loadWorkflow = AudioPlayerLoadWorkflow(
             stateStore: stateStore,
             engine: engine,
             loadCoordinator: loadCoordinator,
-            hardwareInfoProvider: hardwareInfoProvider
+            refreshHardwareInfo: { [hardwareMonitor] in
+                await hardwareMonitor.refreshHardwareInfo()
+            }
         )
         self.playbackWorkflow = AudioPlayerPlaybackWorkflow(
             stateStore: stateStore,
             engine: engine,
             progressTracker: progressTracker,
-            hardwareInfoProvider: hardwareInfoProvider
+            refreshHardwareInfo: { [hardwareMonitor] in
+                await hardwareMonitor.refreshHardwareInfo()
+            }
         )
 
-        hardwareObserver.startObserving { [weak self] in
-            Task { @MainActor [weak self] in
-                await self?.refreshHardwareInfo()
-            }
-        }
+        hardwareMonitor.startObserving()
 
-        Task {
-            await refreshHardwareInfo()
+        Task { @MainActor [hardwareMonitor] in
+            await hardwareMonitor.refreshHardwareInfo()
         }
     }
 
@@ -275,13 +277,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     func synchronizeSampleRates() async {
         await playbackWorkflow.synchronizeSampleRates()
     }
-
     // MARK: - Private Methods
-
-    private func refreshHardwareInfo() async {
-        let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo()
-        stateStore.setHardwareInfo(deviceInfo)
-    }
 
     private func playbackWorkflowStopProgressTracking() {
         engine.stopProgressTracking(using: progressTracker)

@@ -448,18 +448,25 @@ Update this section during implementation.
   - Verified with:
     `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
 
+- [x] Phase 5: Extract hardware monitor
+  Notes:
+  - Added `Playback/UI/Workflow/AudioPlayerHardwareMonitor.swift`.
+  - Moved hardware observer startup and hardware-info refresh logic out of `AudioPlayer` and into the dedicated monitor.
+  - Updated load and playback workflows to request hardware refresh through an injected closure instead of depending on the hardware provider directly.
+  - Verified with:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
 ## First Concrete Task
 
-Next implementation target is Phase 5 only.
+Next implementation target is Phase 6 only.
 
 Implementation target:
 
-- create `AudioPlayerHardwareMonitor`
-- move hardware observer startup logic out of `AudioPlayer.init`
-- move `refreshHardwareInfo`
-- wire periodic refreshes and startup refreshes through the hardware monitor
+- reduce `AudioPlayer.swift` to facade wiring, public properties, and public intent methods
+- remove remaining duplicated transition and error-presentation helpers where it improves ownership clarity
+- confirm the remaining non-workflow responsibilities in `AudioPlayer` are intentional
 
-Do not combine Phase 5 with final facade cleanup. That would widen the failure surface too much.
+Do not broaden Phase 6 into domain changes outside the playback UI layer. Keep it focused on facade cleanup only.
 
 ## Open Questions
 
