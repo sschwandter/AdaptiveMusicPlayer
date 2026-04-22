@@ -36,7 +36,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var isPlaying: Bool { stateStore.isPlaying }
 
     private var isAttemptingPlaybackStart: Bool {
-        playbackWorkflow.isStartingPlayback
+        sessionController.isStartingPlayback
     }
 
     private var sampleRatePresentation: SampleRatePresentationOutput {
@@ -97,36 +97,25 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private let engine: AudioPlaybackEngine
     private let progressTracker: PlaybackProgressTracking
+    private let folderScanner: AudioPlaylistFolderScanning
     private let finderItemRevealer: FinderItemRevealing
     private let hardwareMonitor: AudioPlayerHardwareMonitor
-    private let loadWorkflow: AudioPlayerLoadWorkflow
-    private let playbackWorkflow: AudioPlayerPlaybackWorkflow
     @ObservationIgnored
-    private lazy var loadAdjacentTrackAction: @MainActor (Bool, Bool) -> Bool = { [weak self] next, autoplay in
-        guard let self else { return false }
-
-        return self.loadWorkflow.loadAdjacentTrack(
-            next: next,
-            autoplay: autoplay,
-            callbacks: self.loadWorkflowCallbacks
+    private lazy var sessionController: AudioPlayerSessionController = {
+        let loadCoordinator = AudioPlayerLoadCoordinator(folderScanner: folderScanner)
+        return AudioPlayerSessionController(
+            stateStore: stateStore,
+            engine: engine,
+            progressTracker: progressTracker,
+            loadCoordinator: loadCoordinator,
+            refreshHardwareInfo: { [hardwareMonitor] in
+                await hardwareMonitor.refreshHardwareInfo()
+            },
+            currentVolume: { [weak self] in
+                self?.volume ?? 1
+            }
         )
-    }
-    @ObservationIgnored
-    private lazy var loadWorkflowCallbacks = AudioPlayerLoadWorkflow.Callbacks(
-        cancelPendingPlaybackStart: { [weak self] in
-            self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false
-        },
-        stopProgressTracking: { [engine, progressTracker] in
-            engine.stopProgressTracking(using: progressTracker)
-        },
-        startPlayback: { [weak self] in
-            guard let self else { return }
-            self.playbackWorkflow.startPlayback(loadAdjacentTrack: self.loadAdjacentTrackAction)
-        },
-        currentVolume: { [weak self] in
-            self?.volume ?? 1
-        }
-    )
+    }()
 
     // MARK: - Initialization
 
@@ -140,28 +129,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     ) {
         self.engine = engine
         self.progressTracker = progressTracker
+        self.folderScanner = folderScanner
         self.finderItemRevealer = finderItemRevealer
         self.hardwareMonitor = AudioPlayerHardwareMonitor(
             stateStore: stateStore,
             hardwareObserver: hardwareObserver,
             hardwareInfoProvider: hardwareInfoProvider
-        )
-        let loadCoordinator = AudioPlayerLoadCoordinator(folderScanner: folderScanner)
-        self.loadWorkflow = AudioPlayerLoadWorkflow(
-            stateStore: stateStore,
-            engine: engine,
-            loadCoordinator: loadCoordinator,
-            refreshHardwareInfo: { [hardwareMonitor] in
-                await hardwareMonitor.refreshHardwareInfo()
-            }
-        )
-        self.playbackWorkflow = AudioPlayerPlaybackWorkflow(
-            stateStore: stateStore,
-            engine: engine,
-            progressTracker: progressTracker,
-            refreshHardwareInfo: { [hardwareMonitor] in
-                await hardwareMonitor.refreshHardwareInfo()
-            }
         )
 
         hardwareMonitor.startObserving()
@@ -176,44 +149,34 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// Starts a file load and enters loading state immediately.
     /// A short delay can be requested to let the file importer dismiss first.
     func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
-        loadWorkflow.loadFile(
-            url: url,
-            importerDismissalDelay: importerDismissalDelay,
-            callbacks: loadWorkflowCallbacks
-        )
+        sessionController.loadFile(url: url, importerDismissalDelay: importerDismissalDelay)
     }
 
     func loadFolder(url: URL, importerDismissalDelay: Duration = .zero) {
-        loadWorkflow.loadFolder(
-            url: url,
-            importerDismissalDelay: importerDismissalDelay,
-            callbacks: loadWorkflowCallbacks
-        )
+        sessionController.loadFolder(url: url, importerDismissalDelay: importerDismissalDelay)
     }
 
     /// Report a file selection error from the file picker
     func reportFileSelectionError(_ message: String) {
-        loadWorkflow.reportFileSelectionError(message)
+        sessionController.reportFileSelectionError(message)
     }
 
     func waitForCurrentLoad() async {
-        await loadWorkflow.waitForCurrentLoad()
-        await playbackWorkflow.waitForCurrentStartup()
+        await sessionController.waitForCurrentActivity()
     }
 
     func playNextTrack() {
-        _ = loadAdjacentTrackAction(true, true)
+        _ = sessionController.loadAdjacentTrack(next: true, autoplay: true)
     }
 
     func playPreviousTrack() {
-        _ = loadAdjacentTrackAction(false, true)
+        _ = sessionController.loadAdjacentTrack(next: false, autoplay: true)
     }
 
     func selectPlaylistTrack(at index: Int) {
-        loadWorkflow.selectPlaylistTrack(
+        sessionController.selectPlaylistTrack(
             at: index,
-            shouldAutoplay: isPlaying || playbackWorkflow.isStartingPlayback,
-            callbacks: loadWorkflowCallbacks
+            shouldAutoplay: isPlaying || sessionController.isStartingPlayback
         )
     }
 
@@ -225,30 +188,30 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Playback Control
 
     func togglePlayPause() {
-        playbackWorkflow.togglePlayPause(loadAdjacentTrack: loadAdjacentTrackAction)
+        sessionController.togglePlayPause()
     }
 
     func stop() {
-        playbackWorkflow.stop()
+        sessionController.stop()
     }
 
     // MARK: - Seeking
 
     func seek(to time: Double) {
-        playbackWorkflow.seek(to: time)
+        sessionController.seek(to: time)
     }
 
     func skipForward() {
-        playbackWorkflow.skipForward()
+        sessionController.skipForward()
     }
 
     func skipBackward() {
-        playbackWorkflow.skipBackward()
+        sessionController.skipBackward()
     }
 
     // MARK: - Sample Rate Management
 
     func synchronizeSampleRates() async {
-        await playbackWorkflow.synchronizeSampleRates()
+        await sessionController.synchronizeSampleRates()
     }
 }
