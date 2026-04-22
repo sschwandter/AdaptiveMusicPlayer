@@ -163,7 +163,7 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    Label(timeString(displayedPlaybackTime), systemImage: "playhead")
+                    Label(timeString(displayedPlaybackTime), systemImage: "clock")
                         .contentTransition(.numericText())
                     Spacer()
                     HStack(spacing: 10) {
