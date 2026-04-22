@@ -12,13 +12,6 @@ Working rules:
 
 ## Backlog
 
-- [ ] Extract `PlaybackStartupCoordinator`
-  Exit criteria:
-  - Playback-start task and startup-generation bookkeeping no longer live in `AudioPlayer`.
-  - Start, pause, and stop startup flow is coordinated outside `AudioPlayer`.
-  - The coordinator reports typed events back to `AudioPlayer`.
-  - Tests cover startup success, cancellation, and stale-result handling.
-
 - [ ] Extract `PlayerScreenStateReducer`
   Exit criteria:
   - Screen-state transitions are centralized outside `AudioPlayer`.
@@ -70,6 +63,14 @@ Working rules:
   - `AudioPlayer` now handles typed load events instead of running the async load workflow directly.
   - Added focused coordinator tests in `AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests.swift`, including stale folder-load suppression.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests`.
+
+- [x] Extract `PlaybackStartupCoordinator`
+  Notes:
+  - Playback-start orchestration moved to `Playback/UI/Coordination/PlaybackStartupCoordinator.swift`.
+  - Startup task lifecycle, generation invalidation, cancellation, and stale-start suppression now live in the coordinator.
+  - `AudioPlayer` now handles typed startup events instead of managing startup tasks directly.
+  - Added focused coordinator tests in `AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests.swift` for success, cancellation, and stale-result handling.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests`.
 
 ## Risks / Decisions
 

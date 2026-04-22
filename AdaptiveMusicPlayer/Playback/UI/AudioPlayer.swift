@@ -170,7 +170,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     var isPlaying: Bool { screenState.playback.isPlaying }
 
     private var isAttemptingPlaybackStart: Bool {
-        playbackStartupTask != nil
+        startupCoordinator.isStartingPlayback
     }
 
     private var sampleRatePresentation: SampleRatePresentationOutput {
@@ -253,9 +253,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let finderItemRevealer: FinderItemRevealing
     private let loadCoordinator: AudioPlayerLoadCoordinator
-    private var playbackStartupTask: Task<Void, Never>?
-    private var activePlaybackStartupGeneration: Int?
-    private var playbackStartupGeneration: Int = 0
+    private let startupCoordinator = PlaybackStartupCoordinator()
     private var displayTitlesByTrackURL: [URL: String] = [:]
     private var playlistSession: PlaylistSession? {
         get { screenState.playlist.session }
@@ -330,7 +328,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     func waitForCurrentLoad() async {
         await loadCoordinator.waitForCurrentLoad()
-        await playbackStartupTask?.value
+        await startupCoordinator.waitForCurrentStartup()
     }
 
     func playNextTrack() {
@@ -342,7 +340,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func selectPlaylistTrack(at index: Int) {
-        let shouldAutoplay = isPlaying || playbackStartupTask != nil
+        let shouldAutoplay = isPlaying || startupCoordinator.isStartingPlayback
         guard let playlistSession, playlistSession.currentIndex != index else { return }
         guard let nextPlaylistSession = playlistSession.movingToTrack(at: index) else { return }
 
@@ -366,7 +364,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Playback Control
 
     func togglePlayPause() {
-        if isPlaying || playbackStartupTask != nil {
+        if isPlaying || startupCoordinator.isStartingPlayback {
             pause()
         } else {
             startPlayback()
@@ -374,35 +372,30 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func startPlayback() {
-        guard playbackStartupTask == nil else { return }
-
-        playbackStartupGeneration += 1
-        let generation = playbackStartupGeneration
-        activePlaybackStartupGeneration = generation
-        screenState.loading = .startingPlayback
-        playbackStartupTask = Task { @MainActor [weak self] in
-            await self?.play(generation: generation)
-        }
+        startupCoordinator.startPlayback(
+            play: { [engine] in
+                try await engine.play()
+            },
+            handleEvent: { [weak self] event in
+                await self?.handlePlaybackStartupEvent(event)
+            }
+        )
     }
 
-    private func play(generation: Int) async {
-        defer {
-            if activePlaybackStartupGeneration == generation {
-                activePlaybackStartupGeneration = nil
-                playbackStartupTask = nil
-            }
-        }
-
-        do {
-            let audioInfo = try await engine.play()
-
-            try await finishSuccessfulPlaybackStart(generation: generation, audioInfo: audioInfo)
-        } catch is CancellationError {
-            handlePlaybackStartupCancellation(generation: generation)
-        } catch let error as PlaybackError {
-            handlePlaybackStartupFailure(error, generation: generation)
-        } catch {
-            handlePlaybackStartupFailure(.notReady, generation: generation)
+    private func handlePlaybackStartupEvent(_ event: PlaybackStartupCoordinator.Event) async {
+        switch event {
+        case .startupBegan:
+            screenState.loading = .startingPlayback
+        case .startupCancelled:
+            screenState.loading = .idle
+        case .startupFinished(let audioInfo):
+            await finishSuccessfulPlaybackStart(audioInfo: audioInfo)
+        case .startupFailed(let error):
+            showError(error)
+        case .staleStartupFinished:
+            let preservedAudioInfo = engine.stop()
+            transitionToStoppedPlayback(preserving: preservedAudioInfo)
+            currentTime = 0
         }
     }
 
@@ -580,17 +573,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func cancelPendingPlaybackStart() -> Bool {
-        guard playbackStartupTask != nil else { return false }
-
-        playbackStartupGeneration += 1
-        activePlaybackStartupGeneration = nil
-        playbackStartupTask?.cancel()
-        playbackStartupTask = nil
-        return true
-    }
-
-    private func playbackStartupRemainsCurrent(_ generation: Int) -> Bool {
-        activePlaybackStartupGeneration == generation && !Task.isCancelled
+        startupCoordinator.cancelStartup()
     }
 
     private func handleLoadCancellation() {
@@ -602,28 +585,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
     }
 
-    private func finishSuccessfulPlaybackStart(generation: Int, audioInfo: AudioInfo) async throws {
-        guard playbackStartupRemainsCurrent(generation) else {
-            let preservedAudioInfo = engine.stop()
-            transitionToStoppedPlayback(preserving: preservedAudioInfo)
-            currentTime = 0
-            return
-        }
-
+    private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
         transitionToPlayingPlayback(audioInfo)
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()
-    }
-
-    private func handlePlaybackStartupCancellation(generation: Int) {
-        guard playbackStartupRemainsCurrent(generation) else { return }
-        screenState.loading = .idle
-    }
-
-    private func handlePlaybackStartupFailure(_ error: PlaybackError, generation: Int) {
-        guard playbackStartupRemainsCurrent(generation) else { return }
-        showError(error)
     }
 
     @discardableResult
