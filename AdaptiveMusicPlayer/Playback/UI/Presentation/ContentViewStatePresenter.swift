@@ -1,11 +1,7 @@
 import Foundation
 
 struct ContentViewStatePresentationInput {
-    let playback: PlaybackPresentationState
-    let loading: LoadingPresentationState
-    let currentTime: Double
-    let playlistSession: PlaylistSession?
-    let displayTitlesByTrackURL: [URL: String]
+    let sessionState: AudioPlayerSessionState
     let sampleRateBanner: SampleRateBannerPresentation
 }
 
@@ -21,18 +17,18 @@ struct ContentViewStatePresentationOutput {
 @MainActor
 struct ContentViewStatePresenter {
     func present(input: ContentViewStatePresentationInput) -> ContentViewStatePresentationOutput {
-        let playlistTrackPosition = input.playlistSession?.positionDescription
+        let playlistTrackPosition = input.sessionState.playlistSession?.positionDescription
         let playlistTracks = playlistTracks(
-            playlistSession: input.playlistSession,
-            displayTitlesByTrackURL: input.displayTitlesByTrackURL
+            playlistSession: input.sessionState.playlistSession,
+            displayTitlesByTrackURL: input.sessionState.displayTitlesByTrackURL
         )
-        let hasPlaylist = input.playlistSession?.trackCount ?? 0 > 1
-        let canPlayPreviousTrack = input.playlistSession?.canMoveToPreviousTrack ?? false
-        let canPlayNextTrack = input.playlistSession?.canMoveToNextTrack ?? false
-        let isLoading = input.loading.isActive
-        let isPlaying = input.playback.isPlaying
-        let currentTrackTitle = input.playback.audioInfo?.displayTitle
-        let duration = input.playback.audioInfo?.duration ?? 0
+        let hasPlaylist = input.sessionState.playlistSession?.trackCount ?? 0 > 1
+        let canPlayPreviousTrack = input.sessionState.playlistSession?.canMoveToPreviousTrack ?? false
+        let canPlayNextTrack = input.sessionState.playlistSession?.canMoveToNextTrack ?? false
+        let isLoading = input.sessionState.isLoading
+        let isPlaying = input.sessionState.isPlaying
+        let currentTrackTitle = input.sessionState.currentDisplayTitle
+        let duration = input.sessionState.duration
         let hasLoadedFile = currentTrackTitle != nil
 
         let transport = TransportControlsPresentation(
@@ -55,7 +51,7 @@ struct ContentViewStatePresenter {
             currentTrackTitle: currentTrackTitle,
             playlistTrackPosition: playlistTrackPosition,
             duration: duration,
-            currentTime: input.currentTime,
+            currentTime: input.sessionState.currentTime,
             isLoading: isLoading,
             isPlaying: isPlaying,
             hasLoadedFile: hasLoadedFile,

@@ -14,12 +14,14 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = PlayerScreenState(
+        let initialState = AudioPlayerSessionState(
             playback: .idle,
-            loading: .idle,
+            activity: .idle,
             status: .init(),
             playlist: .init(),
-            hardware: .init()
+            hardware: .init(),
+            currentTime: 0,
+            displayTitlesByTrackURL: [:]
         )
 
         let nextState = reducer.reduce(
@@ -43,12 +45,14 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 48_000
         )
-        let initialState = PlayerScreenState(
+        let initialState = AudioPlayerSessionState(
             playback: .playing(audioInfo),
-            loading: .idle,
+            activity: .idle,
             status: .init(),
             playlist: .init(),
-            hardware: .init()
+            hardware: .init(),
+            currentTime: 0,
+            displayTitlesByTrackURL: [:]
         )
 
         let nextState = reducer.reduce(
@@ -72,7 +76,7 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = PlayerScreenState()
+        let initialState = AudioPlayerSessionState()
 
         let readyState = reducer.reduce(
             state: initialState,
@@ -108,12 +112,14 @@ struct PlayerScreenStateReducerTests {
 
     @Test("stopped falls back to idle when no audio remains")
     func stoppedWithoutAudio() {
-        let initialState = PlayerScreenState(
+        let initialState = AudioPlayerSessionState(
             playback: .idle,
-            loading: .idle,
+            activity: .idle,
             status: .init(),
             playlist: .init(),
-            hardware: .init()
+            hardware: .init(),
+            currentTime: 0,
+            displayTitlesByTrackURL: [:]
         )
 
         let nextState = reducer.reduce(
@@ -136,12 +142,14 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = PlayerScreenState(
+        let initialState = AudioPlayerSessionState(
             playback: .playing(audioInfo),
-            loading: .idle,
+            activity: .idle,
             status: .init(),
             playlist: .init(),
-            hardware: .init()
+            hardware: .init(),
+            currentTime: 0,
+            displayTitlesByTrackURL: [:]
         )
 
         let finishedState = reducer.reduce(

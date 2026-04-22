@@ -11,9 +11,9 @@ struct PlayerScreenStateReducer {
     }
 
     func reduce(
-        state: PlayerScreenState,
+        state: AudioPlayerSessionState,
         action: Action
-    ) -> PlayerScreenState {
+    ) -> AudioPlayerSessionState {
         var nextState = state
 
         switch action {

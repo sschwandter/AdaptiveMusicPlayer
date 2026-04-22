@@ -11,11 +11,7 @@ struct ContentViewStatePresenterTests {
     func unloadedState() {
         let output = presenter.present(
             input: ContentViewStatePresentationInput(
-                playback: .idle,
-                loading: .idle,
-                currentTime: 0,
-                playlistSession: nil,
-                displayTitlesByTrackURL: [:],
+                sessionState: AudioPlayerSessionState(),
                 sampleRateBanner: idleBanner
             )
         )
@@ -34,11 +30,17 @@ struct ContentViewStatePresenterTests {
         let audioInfo = AudioInfo(fileName: "track.wav", displayTitle: "Track", duration: 120, sampleRate: 44_100)
         let output = presenter.present(
             input: ContentViewStatePresentationInput(
-                playback: .ready(audioInfo),
-                loading: .idle,
-                currentTime: 12,
-                playlistSession: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav")),
-                displayTitlesByTrackURL: [:],
+                sessionState: AudioPlayerSessionState(
+                    playback: .ready(audioInfo),
+                    activity: .idle,
+                    status: .init(),
+                    playlist: PlaylistPresentationState(
+                        session: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav"))
+                    ),
+                    hardware: .init(),
+                    currentTime: 12,
+                    displayTitlesByTrackURL: [:]
+                ),
                 sampleRateBanner: idleBanner
             )
         )
@@ -63,11 +65,15 @@ struct ContentViewStatePresenterTests {
         let audioInfo = AudioInfo(fileName: "02-second.wav", displayTitle: "Finale", duration: 180, sampleRate: 48_000)
         let output = presenter.present(
             input: ContentViewStatePresentationInput(
-                playback: .ready(audioInfo),
-                loading: .idle,
-                currentTime: 30,
-                playlistSession: playlistSession,
-                displayTitlesByTrackURL: [secondURL: "Finale"],
+                sessionState: AudioPlayerSessionState(
+                    playback: .ready(audioInfo),
+                    activity: .idle,
+                    status: .init(),
+                    playlist: PlaylistPresentationState(session: playlistSession),
+                    hardware: .init(),
+                    currentTime: 30,
+                    displayTitlesByTrackURL: [secondURL: "Finale"]
+                ),
                 sampleRateBanner: idleBanner
             )
         )
@@ -90,11 +96,17 @@ struct ContentViewStatePresenterTests {
         let audioInfo = AudioInfo(fileName: "track.wav", displayTitle: "Track", duration: 120, sampleRate: 44_100)
         let output = presenter.present(
             input: ContentViewStatePresentationInput(
-                playback: .ready(audioInfo),
-                loading: .loadingTrack,
-                currentTime: 0,
-                playlistSession: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav")),
-                displayTitlesByTrackURL: [:],
+                sessionState: AudioPlayerSessionState(
+                    playback: .ready(audioInfo),
+                    activity: .loadingTrack,
+                    status: .init(),
+                    playlist: PlaylistPresentationState(
+                        session: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav"))
+                    ),
+                    hardware: .init(),
+                    currentTime: 0,
+                    displayTitlesByTrackURL: [:]
+                ),
                 sampleRateBanner: idleBanner
             )
         )
@@ -111,11 +123,17 @@ struct ContentViewStatePresenterTests {
         let audioInfo = AudioInfo(fileName: "track.wav", displayTitle: "Track", duration: 120, sampleRate: 44_100)
         let output = presenter.present(
             input: ContentViewStatePresentationInput(
-                playback: .playing(audioInfo),
-                loading: .idle,
-                currentTime: 40,
-                playlistSession: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav")),
-                displayTitlesByTrackURL: [:],
+                sessionState: AudioPlayerSessionState(
+                    playback: .playing(audioInfo),
+                    activity: .idle,
+                    status: .init(),
+                    playlist: PlaylistPresentationState(
+                        session: PlaylistSession.singleTrack(URL(fileURLWithPath: "/tmp/track.wav"))
+                    ),
+                    hardware: .init(),
+                    currentTime: 40,
+                    displayTitlesByTrackURL: [:]
+                ),
                 sampleRateBanner: idleBanner
             )
         )
