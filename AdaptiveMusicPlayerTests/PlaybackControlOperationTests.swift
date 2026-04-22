@@ -13,7 +13,8 @@ struct PlaybackControlOperationTests {
         let audioInfo = AudioInfo(fileName: "test.wav", displayTitle: "Test Track", duration: 1, sampleRate: 44_100)
 
         player.currentTime = 0.75
-        let newState = try useCase.play(player: player, state: .finished(audioInfo))
+        // Pass isAtEnd=true to simulate playing from finished state
+        let newState = try useCase.play(player: player, audioInfo: audioInfo, isAtEnd: true)
 
         #expect(newState == .playing(audioInfo))
         #expect(player.playCallCount == 1)
@@ -27,7 +28,7 @@ struct PlaybackControlOperationTests {
         let audioInfo = AudioInfo(fileName: "test.wav", displayTitle: "Test Track", duration: 1, sampleRate: 44_100)
 
         #expect(throws: PlaybackError.playbackStartFailed) {
-            try useCase.play(player: player, state: .ready(audioInfo))
+            try useCase.play(player: player, audioInfo: audioInfo, isAtEnd: false)
         }
         #expect(player.playCallCount == 1)
     }

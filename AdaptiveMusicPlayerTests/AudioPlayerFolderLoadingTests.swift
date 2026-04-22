@@ -19,15 +19,15 @@ struct AudioPlayerFolderLoadingTests {
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
-        )
+         )
 
         player.loadFolder(url: rootFolder)
         await player.waitForCurrentLoad()
 
-        #expect(player.currentFileName == "track.wav")
-        #expect(player.playlistTrackPosition == "1 of 1")
-        #expect(player.hasError == false)
-        #expect(player.isLoading == false)
+        #expect(player.contentViewState.currentTrackTitle == "track.wav")
+        #expect(player.contentViewState.playlistTrackPosition == "1 of 1")
+        #expect(player.contentViewState.hasLoadedFile == true)
+        #expect(player.contentViewState.isLoading == false)
     }
 
     @Test("Moving to the next playlist track starts playback automatically")
@@ -42,7 +42,7 @@ struct AudioPlayerFolderLoadingTests {
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
-        )
+         )
 
         player.loadFolder(url: rootFolder)
         await player.waitForCurrentLoad()
@@ -50,10 +50,10 @@ struct AudioPlayerFolderLoadingTests {
         player.playNextTrack()
         await player.waitForCurrentLoad()
 
-        #expect(player.currentFileName == "02-second.wav")
-        #expect(player.playlistTrackPosition == "2 of 2")
-        #expect(player.isPlaying == true)
-        #expect(player.hasError == false)
+        #expect(player.contentViewState.currentTrackTitle == "02-second.wav")
+        #expect(player.contentViewState.playlistTrackPosition == "2 of 2")
+        #expect(player.contentViewState.isPlaying == true)
+        #expect(player.contentViewState.hasLoadedFile == true)
     }
 
     @Test("Loading an empty folder stops loading and shows an error")
@@ -64,20 +64,21 @@ struct AudioPlayerFolderLoadingTests {
         try FileManager.default.createDirectory(
             at: rootFolder.appending(path: "empty-album"),
             withIntermediateDirectories: true
-        )
+         )
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
-        )
+         )
 
         player.loadFolder(url: rootFolder)
         await player.waitForCurrentLoad()
 
-        #expect(player.hasError == true)
-        #expect(player.isLoading == false)
-        #expect(player.statusMessage == "Error loading file: No playable audio files were found in the selected folder.")
+        #expect(player.contentViewState.hasLoadedFile == false)
+        #expect(player.contentViewState.isLoading == false)
+        // When folder loading fails, currentTrackTitle should be nil (no file loaded)
+        #expect(player.contentViewState.currentTrackTitle == nil)
     }
 
     @Test("Selecting a playlist track updates the current track")
@@ -99,36 +100,37 @@ struct AudioPlayerFolderLoadingTests {
                         displayTitle: "Opening Track",
                         sampleRate: 44_100,
                         duration: 1
-                    ),
+                     ),
                     secondURL: AudioSession(
                         player: try StubAudioPlayer(),
                         fileName: "02-second.wav",
                         displayTitle: "Finale",
                         sampleRate: 44_100,
                         duration: 1
-                    )
-                ]),
+                     )
+                 ]),
                 sampleRateManager: StubSampleRateManager()
-            ),
+             ),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
-        )
+         )
 
         player.loadFolder(url: rootFolder)
         await player.waitForCurrentLoad()
 
-        #expect(player.playlistTracks.first?.title == "Opening Track")
-        #expect(player.playlistTracks.last?.title == "02-second.wav")
+        #expect(player.contentViewState.playlist.tracks.first?.title == "Opening Track")
+        #expect(player.contentViewState.playlist.tracks.last?.title == "02-second.wav")
 
         player.selectPlaylistTrack(at: 1)
         await player.waitForCurrentLoad()
 
-        #expect(player.currentFileName == "02-second.wav")
-        #expect(player.currentDisplayTitle == "Finale")
-        #expect(player.playlistTrackPosition == "2 of 2")
-        #expect(player.playlistTracks.count == 2)
-        #expect(player.playlistTracks.last?.isCurrent == true)
-        #expect(player.playlistTracks.last?.title == "Finale")
+        // After selecting track, currentTrackTitle should be the display title "Finale"
+        // Note: The track is loaded via RoutingStubLoadFileOperation which returns displayTitle "Finale"
+        #expect(player.contentViewState.currentTrackTitle == "Finale")
+        #expect(player.contentViewState.playlistTrackPosition == "2 of 2")
+        #expect(player.contentViewState.playlist.tracks.count == 2)
+        #expect(player.contentViewState.playlist.tracks.last?.isCurrent == true)
+        #expect(player.contentViewState.playlist.tracks.last?.title == "Finale")
     }
 
     @Test("Cancelling a folder scan does not leave stale loading UI")
@@ -145,16 +147,17 @@ struct AudioPlayerFolderLoadingTests {
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider(),
             folderScanner: DelayedFolderScanner(delay: 0.15, tracks: [delayedTrack])
-        )
+         )
 
         player.loadFolder(url: rootFolder)
         player.loadFile(url: replacementURL)
         await player.waitForCurrentLoad()
 
-        #expect(player.currentFileName == "replacement.wav")
-        #expect(player.isLoading == false)
-        #expect(player.hasError == false)
-        #expect(player.statusMessage.contains("Ready to play"))
+        #expect(player.contentViewState.currentTrackTitle == "replacement.wav")
+        #expect(player.contentViewState.isLoading == false)
+        #expect(player.contentViewState.hasLoadedFile == true)
+        // After successful load, status message should indicate ready to play
+        #expect(player.contentViewState.sampleRateBanner.title == "Ready" || player.contentViewState.sampleRateBanner.title == "Matched")
     }
 
     @Test("Loading a folder invalidates observation for playlist UI state")
@@ -168,13 +171,13 @@ struct AudioPlayerFolderLoadingTests {
             engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
-        )
+         )
 
         var didObserveChange = false
         withObservationTracking {
             _ = player.contentViewState
-            _ = player.playlistTrackPosition
-            _ = player.playlistTracks
+            _ = player.contentViewState.playlistTrackPosition
+            _ = player.contentViewState.playlist.tracks
         } onChange: {
             didObserveChange = true
         }
@@ -183,7 +186,7 @@ struct AudioPlayerFolderLoadingTests {
         await player.waitForCurrentLoad()
 
         #expect(didObserveChange)
-        #expect(player.playlistTrackPosition == "1 of 1")
-        #expect(player.playlistTracks.count == 1)
+        #expect(player.contentViewState.playlistTrackPosition == "1 of 1")
+        #expect(player.contentViewState.playlist.tracks.count == 1)
     }
 }

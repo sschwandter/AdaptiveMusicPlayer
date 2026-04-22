@@ -15,7 +15,7 @@ This plan does **not** aim for hexagonal architecture. It aims for:
 
 The codebase is cleaner than before, but it still has duplicated ownership in four places:
 
-1. Playback lifecycle state exists in both `PlaybackState` and `PlaybackPresentationState` / `LoadingPresentationState`.
+1. Playback lifecycle state exists in both `EnginePlaybackState` (engine runtime) and `PlaybackPresentationState` / `LoadingPresentationState` (UI layer).
 2. Playback and loading rules are split across `AudioPlaybackEngine`, `AudioPlayerLoadWorkflow`, and `AudioPlayerPlaybackWorkflow`.
 3. Async generation and stale-result handling are implemented twice in the load and playback-start coordinators.
 4. UI-facing status and screen facts are exposed through overlapping layers:
@@ -284,24 +284,63 @@ Exit criteria:
 
 - status text rules live in one presentation path
 
+## Implementation Status (Updated 2026-04-22)
+
+### Completed ✅
+
+**Phase 1: Define the New Authoritative State** - COMPLETED
+- `AudioPlayerSessionState.swift` exists (~1.5KB)
+- Contains: `playback`, `activity`, `status`, `playlist`, `hardware`, `currentTime`, `displayTitlesByTrackURL`
+- Provides derived properties: `duration`, `statusMessage`, `hasError`, `currentFileName`, `currentDisplayTitle`, `fileSampleRate`, `hardwareSampleRate`, `hardwareDeviceName`, `supportedHardwareSampleRates`, `isLoading`, `isPlaying`, `playlistSession`, `currentTrackURL`, `currentAudioInfo`, `hasLoadedAudio`
+- Test file: `AudioPlayerSessionStateTests.swift`
+
+**Phase 2: Move Lifecycle Rules into One Controller** - COMPLETED
+- `AudioPlayerSessionController.swift` exists (~14.5KB)
+- Contains command methods: `loadFile()`, `loadFolder()`, `loadAdjacentTrack()`, `selectPlaylistTrack()`, `togglePlayPause()`, `stop()`, `seek()`, `skipForward()`, `skipBackward()`, `synchronizeSampleRates()`, `cancelPendingPlaybackStart()`
+- Internal orchestration: `handleLoadEvent()`, `beginLoading()`, `finishLoadingTrack()`, `startPlayback()`, `pause()`, `handlePlaybackStartupEvent()`, `showReadyStatus()`, `showPlayingStatus()`, `showError()`
+
+**Phase 3: Replace Two Async Coordinators with One Reusable Primitive** - COMPLETED
+- `LatestAsyncRequestCoordinator.swift` exists (~2.3KB)
+- Provides "latest wins" pattern with `generation`-based cancellation
+- Methods: `waitForCurrentRun()`, `startRunIfIdle()`, `cancelCurrentRun()`, `waitForCurrentRun()`
+- Used by both `AudioPlayerLoadCoordinator` and `PlaybackStartupCoordinator`
+- Test file: `LatestAsyncRequestCoordinatorTests.swift`
+
+**Phase 4: Reduce the Engine to Runtime Concerns** - COMPLETED
+- Removed public `getPlaybackState()` method from `AudioPlaybackEngine`
+- Engine now exposes only runtime queries: `hasActivePlayer` and `currentAudioInfo`
+- Internal `PlaybackState` kept for engine runtime coordination only
+- Operations refactored to take `AudioInfo` directly instead of `PlaybackState`
+
+**Phase 5: Collapse Overlapping Read Models** - COMPLETED
+- `AudioPlayer` already exposes only `contentViewState` and `volume` to SwiftUI
+- No pass-through properties remaining - all UI state flows through `ContentViewState`
+
+**Phase 6: Deduplicate Status Presentation** - COMPLETED
+- `PlayerStatusContext` with phase enum already exists and is used throughout
+- `PlayerStatusReadyInput` and `PlayerStatusPlayingInput` never existed (the unified model was implemented directly)
+- `PlayerStatusPresenter` uses unified `presentReady` and `presentPlaying` methods with `PlayerStatusContext`
+
+### Removed from Impact List
+
+Files that were expected to exist but **do not exist**:
+- `AudioPlayerLoadWorkflow.swift` - Does not exist (already removed)
+- `AudioPlayerPlaybackWorkflow.swift` - Does not exist (already removed)
+
+---
+
 ## Recommended Order
 
-Implement in this order:
+The recommended order has already been followed:
 
-1. Phase 1
-2. Phase 3
-3. Phase 2
-4. Phase 4
-5. Phase 5
-6. Phase 6
+1. ✅ Phase 1 - Completed
+2. ✅ Phase 3 - Completed  
+3. ✅ Phase 2 - Completed
+4. ✅ Phase 4 - Completed (engine reduced to runtime concerns)
+5. ✅ Phase 5 - Completed (read models collapsed)
+6. ✅ Phase 6 - Completed (status presentation unified)
 
-Reasoning:
-
-- Phase 1 establishes a target state model.
-- Phase 3 gives a reusable async control primitive before more orchestration moves around.
-- Phase 2 centralizes behavior using the new state and async primitive.
-- Phase 4 simplifies the engine only after the controller exists.
-- Phases 5 and 6 are cleanup passes once ownership is already correct.
+All phases are now complete.
 
 ## Concrete File Impact
 
@@ -369,6 +408,52 @@ This refactor is complete when:
 - presentation is a projection of state rather than a second source of policy
 - the public `AudioPlayer` surface is smaller and clearer than today
 
+## Detailed Implementation Notes
+
+### Phase 1: Authoritative State
+**File**: `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerSessionState.swift`
+- `PlaybackPresentationState` enum: `idle`, `loading`, `ready`, `playing`, `paused`, `finished`, `failed`
+- `LoadingPresentationState` enum: `idle`, `scanningFolder`, `loadingTrack`, `startingPlayback`
+- `StatusPresentationState` enum: `none`, `ready`, `playing`, `loadingTrack`, `error`, `info`
+- `PlaylistPresentationState` struct with `currentTrackIndex`, `trackCount`, `sessionActive`
+- Hardware state with sample rates and device name
+- Derived properties for common queries
+
+### Phase 2: Session Controller
+**File**: `AdaptiveMusicPlayer/Playback/UI/Coordination/AudioPlayerSessionController.swift`
+- `@MainActor` orchestrator
+- Dependencies: `stateStore`, `engine`, `progressTracker`, `loadCoordinator`, `startupCoordinator`, `statusPresenter`, `screenStateReducer`
+- Handles interruption policy between loading and playback startup
+- Updates authoritative state through `stateStore`
+
+### Phase 3: Shared Async Primitive
+**File**: `AdaptiveMusicPlayer/Playback/UI/Coordination/LatestAsyncRequestCoordinator.swift`
+- Named `LatestAsyncRequestCoordinator` instead of `LatestTaskRunner`
+- `Run` struct with `generation` token and `isCurrent()` method
+- Supports cancellation, stale result suppression, waiting for completion
+- Used by `AudioPlayerLoadCoordinator` and `PlaybackStartupCoordinator`
+
+### Phase 4: Engine Status ✅ COMPLETED
+**File**: `AdaptiveMusicPlayer/Playback/Engine/AudioPlaybackEngine.swift`
+- Maintains `PlaybackState` enum internally for runtime coordination
+- **Removed** public `getPlaybackState()` method
+- Exposes only runtime queries: `hasActivePlayer` and `currentAudioInfo`
+- Operations refactored to take `AudioInfo` directly instead of `PlaybackState`
+
+### Phase 5: Read Model Status ✅ COMPLETED
+**File**: `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
+- `@Observable` playback view model
+- Exposes only `contentViewState` and `volume` to SwiftUI
+- All UI state flows through `ContentViewState` - no pass-through properties
+
+### Phase 6: Status Presentation ✅ COMPLETED
+**File**: `AdaptiveMusicPlayer/Playback/UI/Presentation/PlayerStatusPresenter.swift`
+- Unified `PlayerStatusContext` with phase enum used throughout
+- `presentReady()` and `presentPlaying()` methods both use `PlayerStatusContext`
+- Separate `PlayerStatusReadyInput` and `PlayerStatusPlayingInput` types were never needed
+
+---
+
 ## Open Decisions
 
 These should be resolved during Phase 1 before larger moves:
@@ -384,3 +469,45 @@ Current recommendation:
 1. Keep `AudioPlayerStateStore`, but reduce it to a thin observable container around one authoritative session state object.
 2. Remove public app-level state ownership from `AudioPlaybackEngine`; keep only runtime state needed for safe media control.
 3. Move folder scanning orchestration into the session controller after extracting the shared async helper. Keep dedicated services, but reduce dedicated coordinators.
+
+---
+
+## File Summary
+
+### Existing Files (Implemented)
+
+**New files added during refactor:**
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerSessionState.swift` (~1.5KB)
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/AudioPlayerSessionController.swift` (~14.5KB)
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/LatestAsyncRequestCoordinator.swift` (~2.3KB)
+
+**Files modified during refactor:**
+- `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift` - Uses new controller and state
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerStateStore.swift` - Wraps new session state
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/AudioPlayerLoadCoordinator.swift` - Uses latest async primitive
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/PlaybackStartupCoordinator.swift` - Uses latest async primitive
+- `AdaptiveMusicPlayer/Playback/Engine/AudioPlaybackEngine.swift` - Reduced to runtime concerns
+- `AdaptiveMusicPlayer/Playback/UI/Presentation/PlayerStatusPresenter.swift` - Uses unified `PlayerStatusContext`
+- `AdaptiveMusicPlayer/Playback/UI/Presentation/ContentViewStatePresenter.swift` - Projects from state
+
+**Test files:**
+- `AudioPlayerSessionStateTests.swift`
+- `AudioPlayerLoadCoordinatorTests.swift`
+- `PlaybackStartupCoordinatorTests.swift`
+- `LatestAsyncRequestCoordinatorTests.swift`
+- `ContentViewStatePresenterTests.swift`
+
+### Removed Files (No longer exist)
+
+- `AdaptiveMusicPlayer/Playback/UI/Workflow/AudioPlayerLoadWorkflow.swift` - Removed
+- `AdaptiveMusicPlayer/Playback/UI/Workflow/AudioPlayerPlaybackWorkflow.swift` - Removed
+
+### All Phases Completed ✅
+
+All refactor phases have been completed. The architecture now has:
+- One authoritative session state (`AudioPlayerSessionState`)
+- One owner for playback rules (`AudioPlayerSessionController`)
+- One reusable async primitive (`LatestAsyncRequestCoordinator`)
+- Pure presentation projection from state
+- Engine reduced to runtime concerns only
+- No overlapping read models in `AudioPlayer`

@@ -6,43 +6,45 @@ import Testing
 struct PlayerStatusPresenterTests {
     private let presenter = PlayerStatusPresenter()
 
-    @Test("ready status includes route details and clears loading")
+ @Test("ready status includes route details and clears loading")
     func readyStatus() {
         let output = presenter.presentReady(
-            PlayerStatusReadyInput(
+            PlayerStatusContext(
+                phase: .ready,
                 hasPlaylist: false,
                 playlistTrackPosition: nil,
                 sampleRate: 44_100,
                 hardwareDeviceName: "Built-in Output",
                 hasSampleRateMismatch: false,
                 sampleRateStatusDetail: "Matched"
-            )
-        )
+             )
+         )
 
-        #expect(output.loading == .idle)
-        #expect(output.status.kind == .info)
-        #expect(output.status.message == "Ready to play at 44.1 kHz on Built-in Output")
-        #expect(output.playbackOverride == nil)
-    }
+         #expect(output.loading == .idle)
+         #expect(output.status.kind == .info)
+         #expect(output.status.message == "Track 1 ready at 44.1 kHz on Built-in Output")
+         #expect(output.playbackOverride == nil)
+     }
 
-    @Test("playing status for playlists includes mismatch detail")
+@Test("playing status for playlists includes mismatch detail")
     func playingStatus() {
         let output = presenter.presentPlaying(
-            PlayerStatusPlayingInput(
+            PlayerStatusContext(
+                phase: .playing,
                 hasPlaylist: true,
                 playlistTrackPosition: "2 of 3",
                 sampleRate: 48_000,
                 hardwareDeviceName: "Studio DAC",
                 hasSampleRateMismatch: true,
                 sampleRateStatusDetail: "Device is running at 44.1 kHz"
-            )
-        )
+             )
+         )
 
-        #expect(output.loading == .idle)
-        #expect(output.status.kind == .info)
-        #expect(output.status.message == "Playing track 2 of 3 - Device is running at 44.1 kHz")
-        #expect(output.playbackOverride == nil)
-    }
+         #expect(output.loading == .idle)
+         #expect(output.status.kind == .info)
+         #expect(output.status.message == "Playing track 2 of 3 - Device is running at 44.1 kHz")
+         #expect(output.playbackOverride == nil)
+     }
 
     @Test("cancelled loading keeps an informational status and explicit cancelled state")
     func cancelledStatus() {

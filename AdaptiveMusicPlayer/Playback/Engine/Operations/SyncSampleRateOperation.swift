@@ -4,21 +4,17 @@ import Foundation
 protocol SyncSampleRateOperationProtocol: Sendable {
     /// Synchronize hardware sample rate to match the current audio file
     /// - Parameters:
-    ///   - state: Current playback state (must have audioInfo)
+    ///   - audioInfo: Audio file information containing the target sample rate
     ///   - sampleRateManager: Manager for hardware sample rate control
-    /// - Throws: PlaybackError if no file is loaded or sync fails
-    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws
+    /// - Throws: PlaybackError if sync fails
+    func execute(audioInfo: AudioInfo, sampleRateManager: SampleRateManaging) async throws
 }
 
 /// Operation for fixing sample rate mismatches
 /// Sets hardware sample rate to match the audio file's native rate for bit-perfect playback
 final class SyncSampleRateOperation: SyncSampleRateOperationProtocol {
 
-    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
+    func execute(audioInfo: AudioInfo, sampleRateManager: SampleRateManaging) async throws {
         try await sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }

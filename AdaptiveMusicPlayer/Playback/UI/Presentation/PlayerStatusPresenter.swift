@@ -1,15 +1,17 @@
 import Foundation
 
-struct PlayerStatusReadyInput {
-    let hasPlaylist: Bool
-    let playlistTrackPosition: String?
-    let sampleRate: Double
-    let hardwareDeviceName: String
-    let hasSampleRateMismatch: Bool
-    let sampleRateStatusDetail: String
+enum PlayerStatusPhase {
+    case idle
+    case ready
+    case playing
+    case loading
+    case error
+    case info
+    case finished
 }
 
-struct PlayerStatusPlayingInput {
+struct PlayerStatusContext {
+    let phase: PlayerStatusPhase
     let hasPlaylist: Bool
     let playlistTrackPosition: String?
     let sampleRate: Double
@@ -29,77 +31,67 @@ struct PlayerStatusPresenter {
     func presentLoading(
         state: LoadingPresentationState,
         message: String
-    ) -> PlayerStatusPresentationOutput {
+     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: state,
             status: StatusPresentationState(kind: .info, message: message),
             playbackOverride: nil
-        )
-    }
+         )
+      }
 
     func presentInfo(
         message: String,
         loading: LoadingPresentationState = .idle
-    ) -> PlayerStatusPresentationOutput {
+     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: loading,
             status: StatusPresentationState(
                 kind: message.isEmpty ? .neutral : .info,
                 message: message
-            ),
+             ),
             playbackOverride: nil
-        )
-    }
+         )
+      }
 
-    func presentReady(_ input: PlayerStatusReadyInput) -> PlayerStatusPresentationOutput {
-        presentInfo(message: playbackMessage(prefix: readyPrefix(for: input), input: input))
-    }
+func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutput {
+        presentInfo(message: buildMessage(prefix: readyPrefix(for: input), context: input))
+        }
 
-    func presentPlaying(_ input: PlayerStatusPlayingInput) -> PlayerStatusPresentationOutput {
-        presentInfo(message: playbackMessage(prefix: playingPrefix(for: input), input: input))
-    }
+    func presentPlaying(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutput {
+        presentInfo(message: buildMessage(prefix: playingPrefix(for: input), context: input))
+        }
 
     func presentError(
-        _ error: PlaybackError,
+         _ error: PlaybackError,
         hasCurrentAudio: Bool
-    ) -> PlayerStatusPresentationOutput {
+     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: .failed,
             status: StatusPresentationState(
                 kind: .error,
                 message: error.localizedDescription
-            ),
+             ),
             playbackOverride: hasCurrentAudio ? nil : .unavailable
-        )
-    }
+         )
+      }
 
-    private func readyPrefix(for input: PlayerStatusReadyInput) -> String {
-        input.hasPlaylist ? "Track \(input.playlistTrackPosition ?? "") ready" : "Ready to play"
-    }
+    private func presentIdle() -> PlayerStatusPresentationOutput {
+        presentInfo(message: "", loading: .idle)
+      }
 
-    private func playingPrefix(for input: PlayerStatusPlayingInput) -> String {
-        input.hasPlaylist ? "Playing track \(input.playlistTrackPosition ?? "")" : "Playing"
-    }
+private func buildMessage(prefix: String, context: PlayerStatusContext) -> String {
+        let position = context.playlistTrackPosition ?? "1"
+        if context.hasSampleRateMismatch {
+            return "\(prefix) - \(context.sampleRateStatusDetail)"
+          }
+        return "\(prefix) at \(SampleRatePresenter.formatSampleRate(context.sampleRate)) on \(context.hardwareDeviceName)"
+       }
 
-    private func playbackMessage(
-        prefix: String,
-        input: PlayerStatusReadyInput
-    ) -> String {
-        if input.hasSampleRateMismatch {
-            return "\(prefix) - \(input.sampleRateStatusDetail)"
-        }
+    private func readyPrefix(for context: PlayerStatusContext) -> String {
+         "Track \(context.playlistTrackPosition ?? "1") ready"
+       }
 
-        return "\(prefix) at \(SampleRatePresenter.formatSampleRate(input.sampleRate)) on \(input.hardwareDeviceName)"
-    }
-
-    private func playbackMessage(
-        prefix: String,
-        input: PlayerStatusPlayingInput
-    ) -> String {
-        if input.hasSampleRateMismatch {
-            return "\(prefix) - \(input.sampleRateStatusDetail)"
-        }
-
-        return "\(prefix) at \(SampleRatePresenter.formatSampleRate(input.sampleRate)) on \(input.hardwareDeviceName)"
-    }
+    private func playingPrefix(for context: PlayerStatusContext) -> String {
+         "Playing track \(context.playlistTrackPosition ?? "1")"
+       }
 }

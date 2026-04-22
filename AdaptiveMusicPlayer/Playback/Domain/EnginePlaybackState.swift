@@ -2,8 +2,10 @@ import Foundation
 
 // MARK: - Domain State
 
-/// Represents the domain state of audio playback
-enum PlaybackState: Equatable {
+/// Represents the engine's runtime state for audio playback.
+/// This is an internal state used by AudioPlaybackEngine for runtime coordination,
+/// not the authoritative app-level state which is AudioPlayerSessionState.
+enum EnginePlaybackState: Equatable {
     case idle
     case loading(AudioInfo?)
     case ready(AudioInfo)

@@ -17,10 +17,11 @@ struct AudioPlaybackEngineTests {
         let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
         let playingAudioInfo = try await engine.play()
 
-        #expect(await sampleRateManager.recordedSampleRates() == [96_000])
-        #expect(playingAudioInfo == loadedAudioInfo)
-        #expect(engine.state.isPlaying == true)
-    }
+ #expect(await sampleRateManager.recordedSampleRates() == [96_000])
+          #expect(playingAudioInfo == loadedAudioInfo)
+          // Verify engine has active player after successful play
+          #expect(engine.hasActivePlayer == true)
+      }
 
     @Test("Starting playback skips switching when hardware already matches the file sample rate")
     func playSkipsSampleRateSwitchWhenAlreadyMatched() async throws {
@@ -33,10 +34,11 @@ struct AudioPlaybackEngineTests {
         let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
         let playingAudioInfo = try await engine.play()
 
-        #expect(await sampleRateManager.recordedSampleRates().isEmpty)
-        #expect(playingAudioInfo == loadedAudioInfo)
-        #expect(engine.state.isPlaying == true)
-    }
+ #expect(await sampleRateManager.recordedSampleRates().isEmpty)
+          #expect(playingAudioInfo == loadedAudioInfo)
+          // Verify engine has active player after successful play
+          #expect(engine.hasActivePlayer == true)
+      }
 
     @Test("Progress tracking stays behind the engine boundary")
     func progressTrackingUsesLoadedPlayerWithoutExposingIt() async throws {

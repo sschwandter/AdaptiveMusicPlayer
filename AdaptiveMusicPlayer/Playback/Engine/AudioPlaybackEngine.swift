@@ -9,10 +9,19 @@ final class AudioPlaybackEngine {
         static let sampleRateTolerance: Double = 1.0
     }
 
-    // MARK: - Properties
+// MARK: - Properties
 
-    private(set) var state: PlaybackState = .idle
-    private var player: AVAudioPlayer?
+private var playbackState: EnginePlaybackState = .idle
+private var player: AVAudioPlayer?
+
+// MARK: - Internal State Queries (for runtime coordination only)
+
+/// Returns whether the engine has an active player ready for playback.
+/// This is an internal runtime check, not the authoritative app state.
+var hasActivePlayer: Bool { player != nil }
+
+/// Returns the current audio info if a file is loaded.
+var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
 
     // MARK: - Dependencies
 
@@ -42,111 +51,113 @@ final class AudioPlaybackEngine {
 
     /// Move the engine into a loading state before async file work begins.
     func beginLoading() -> AudioInfo? {
-        let preservedAudioInfo = state.audioInfo
+        let preservedAudioInfo = playbackState.audioInfo
         if let player {
             player.stop()
             player.currentTime = 0
         }
-        state = .loading(preservedAudioInfo)
+        playbackState = .loading(preservedAudioInfo)
         return preservedAudioInfo
     }
 
     /// Load an audio file and prepare for playback
-    func loadFile(from url: URL) async throws -> AudioInfo {
-        state = .loading(state.audioInfo)
+func loadFile(from url: URL) async throws -> AudioInfo {
+        playbackState = .loading(playbackState.audioInfo)
 
         do {
             let session = try await loadFileOperation.execute(from: url)
 
             guard !Task.isCancelled else {
-                state = .idle
+                playbackState = .idle
                 throw PlaybackError.loadingCancelled
-            }
+             }
 
             let audioInfo = AudioInfo(
                 fileName: session.fileName,
                 displayTitle: session.displayTitle,
                 duration: session.duration,
                 sampleRate: session.sampleRate
-            )
+             )
 
             player = session.player
-            state = .ready(audioInfo)
+            playbackState = .ready(audioInfo)
 
             return audioInfo
 
-        } catch is CancellationError {
-            state = .idle
+         } catch is CancellationError {
+            playbackState = .idle
             throw PlaybackError.loadingCancelled
-        } catch let error as PlaybackError {
-            state = .error(error)
+         } catch let error as PlaybackError {
+            playbackState = .error(error)
             throw error
-        } catch {
+         } catch {
             let playbackError = PlaybackError.loadFailed(error.localizedDescription)
-            state = .error(playbackError)
+            playbackState = .error(playbackError)
             throw playbackError
-        }
+         }
     }
 
     // MARK: - Playback Control
 
     /// Start or resume playback
-    func play() async throws -> AudioInfo {
+ func play() async throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
-        let requestedAudioInfo = state.audioInfo
+        guard let requestedAudioInfo = playbackState.audioInfo else {
+            throw PlaybackError.noFileLoaded
+        }
 
-        if let targetSampleRate = requestedAudioInfo?.sampleRate {
+        let targetSampleRate = requestedAudioInfo.sampleRate
+        if targetSampleRate > 0 {
             let currentSampleRate = await getCurrentHardwareSampleRate()
             if currentSampleRate <= 0 ||
                 abs(currentSampleRate - targetSampleRate) > Constants.sampleRateTolerance
-            {
+             {
                 do {
-                    try await syncSampleRateOperation.execute(state: state, sampleRateManager: sampleRateManager)
-                } catch {
+                    try await syncSampleRateOperation.execute(audioInfo: requestedAudioInfo, sampleRateManager: sampleRateManager)
+                 } catch {
                     // Playback should still start even if the device refuses the requested rate.
-                }
-            }
-        }
+                 }
+             }
+         }
 
         try Task.checkCancellation()
-        guard self.player === player, self.state.audioInfo == requestedAudioInfo else {
+        guard self.player === player, self.playbackState.audioInfo == requestedAudioInfo else {
             throw CancellationError()
-        }
+         }
 
-        state = try playbackControlOperation.play(player: player, state: state)
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.notReady
-        }
-        return audioInfo
+        let isAtEnd = if case .finished = playbackState { true } else { false }
+        playbackState = try playbackControlOperation.play(player: player, audioInfo: requestedAudioInfo, isAtEnd: isAtEnd)
+        return requestedAudioInfo
     }
 
     /// Pause playback
-    func pause() throws -> AudioInfo {
+ func pause() throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
-
-        state = try playbackControlOperation.pause(player: player, state: state)
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.notReady
+        guard let audioInfo = playbackState.audioInfo else {
+            throw PlaybackError.noFileLoaded
         }
+
+        playbackState = try playbackControlOperation.pause(player: player, audioInfo: audioInfo)
         return audioInfo
     }
 
     /// Stop playback and reset to beginning
     func stop() -> AudioInfo? {
         guard let player = player else { return nil }
+        guard let audioInfo = playbackState.audioInfo else { return nil }
 
-        state = playbackControlOperation.stop(player: player, state: state)
-        return state.audioInfo
+        playbackState = playbackControlOperation.stop(player: player, audioInfo: audioInfo)
+        return audioInfo
     }
 
     /// Mark playback as finished
     func markFinished() -> AudioInfo? {
-        guard let audioInfo = state.audioInfo else { return nil }
-        state = .finished(audioInfo)
+        guard let audioInfo = playbackState.audioInfo else { return nil }
+        playbackState = .finished(audioInfo)
         return audioInfo
     }
 
@@ -159,38 +170,50 @@ final class AudioPlaybackEngine {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
-
-        return try seekingOperation.seek(to: time, player: player, state: state)
-    }
-
-    /// Skip forward by the configured interval
-    /// - Parameter currentTime: Current playback time
-    /// - Returns: New time after skipping
-    func skipForward(from currentTime: Double) throws -> Double {
-        guard let player = player else {
+        guard let audioInfo = playbackState.audioInfo else {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingOperation.skipForward(from: currentTime, player: player, state: state)
+        return try seekingOperation.seek(to: time, player: player, audioInfo: audioInfo)
     }
 
-    /// Skip backward by the configured interval
-    /// - Parameter currentTime: Current playback time
-    /// - Returns: New time after skipping
-    func skipBackward(from currentTime: Double) throws -> Double {
-        guard let player = player else {
-            throw PlaybackError.noFileLoaded
-        }
+/// Skip forward by the configured interval
+      /// - Parameter currentTime: Current playback time
+      /// - Returns: New time after skipping
+     func skipForward(from currentTime: Double) throws -> Double {
+         guard let player = player else {
+             throw PlaybackError.noFileLoaded
+          }
+         guard let audioInfo = playbackState.audioInfo else {
+             throw PlaybackError.noFileLoaded
+          }
 
-        return try seekingOperation.skipBackward(from: currentTime, player: player, state: state)
-    }
+         return try seekingOperation.skipForward(from: currentTime, player: player, audioInfo: audioInfo)
+      }
+
+      /// Skip backward by the configured interval
+      /// - Parameter currentTime: Current playback time
+      /// - Returns: New time after skipping
+     func skipBackward(from currentTime: Double) throws -> Double {
+         guard let player = player else {
+             throw PlaybackError.noFileLoaded
+          }
+         guard let audioInfo = playbackState.audioInfo else {
+             throw PlaybackError.noFileLoaded
+          }
+
+         return try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
+      }
 
     // MARK: - Sample Rate Management
 
     /// Synchronize hardware sample rate to match current audio file.
     /// The sample-rate manager owns the concurrency boundary for Core Audio access.
     func synchronizeSampleRates() async throws {
-        try await syncSampleRateOperation.execute(state: state, sampleRateManager: sampleRateManager)
+        guard let audioInfo = playbackState.audioInfo else {
+            throw PlaybackError.noFileLoaded
+        }
+        try await syncSampleRateOperation.execute(audioInfo: audioInfo, sampleRateManager: sampleRateManager)
     }
 
     // MARK: - Volume Control

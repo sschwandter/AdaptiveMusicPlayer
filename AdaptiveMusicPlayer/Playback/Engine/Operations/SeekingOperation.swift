@@ -7,28 +7,28 @@ protocol SeekingOperationProtocol: Sendable {
     /// - Parameters:
     ///   - time: Target time in seconds
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information for bounds checking
     /// - Returns: Actual time seeked to (clamped to valid range)
-    /// - Throws: PlaybackError if seeking is not allowed in current state
-    func seek(to time: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double
+    /// - Throws: PlaybackError if seeking fails
+    func seek(to time: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double
 
     /// Skip forward by configured interval
     /// - Parameters:
     ///   - currentTime: Current playback time
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information for bounds checking
     /// - Returns: New time after skipping
     /// - Throws: PlaybackError if operation fails
-    func skipForward(from currentTime: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double
+    func skipForward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double
 
     /// Skip backward by configured interval
     /// - Parameters:
     ///   - currentTime: Current playback time
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information for bounds checking
     /// - Returns: New time after skipping
     /// - Throws: PlaybackError if operation fails
-    func skipBackward(from currentTime: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double
+    func skipBackward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double
 }
 
 /// Operation for seeking and navigation within audio tracks
@@ -44,35 +44,19 @@ final class SeekingOperation: SeekingOperationProtocol {
 
     // MARK: - Public Methods
 
-    func seek(to time: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double {
-        guard state.canSeek else {
-            throw PlaybackError.notReady
-        }
-
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
+    func seek(to time: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let clampedTime = audioInfo.clampSeekTime(time)
         player.currentTime = clampedTime
         return clampedTime
     }
 
-    func skipForward(from currentTime: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double {
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
+    func skipForward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let newTime = audioInfo.skipForward(from: currentTime, by: Constants.skipInterval)
-        return try seek(to: newTime, player: player, state: state)
+        return try seek(to: newTime, player: player, audioInfo: audioInfo)
     }
 
-    func skipBackward(from currentTime: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double {
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
+    func skipBackward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let newTime = audioInfo.skipBackward(from: currentTime, by: Constants.skipInterval)
-        return try seek(to: newTime, player: player, state: state)
+        return try seek(to: newTime, player: player, audioInfo: audioInfo)
     }
 }

@@ -6,25 +6,26 @@ protocol PlaybackControlOperationProtocol: Sendable {
     /// Start or resume playback
     /// - Parameters:
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information
+    ///   - isAtEnd: Whether playback is at the end (finished state)
     /// - Returns: New playback state after starting playback
     /// - Throws: PlaybackError if playback cannot be started
-    func play(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState
+    func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState
 
     /// Pause playback
     /// - Parameters:
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information
     /// - Returns: New playback state after pausing
     /// - Throws: PlaybackError if playback cannot be paused
-    func pause(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState
+    func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState
 
     /// Stop playback and reset to beginning
     /// - Parameters:
     ///   - player: The audio player instance
-    ///   - state: Current playback state
+    ///   - audioInfo: Audio file information
     /// - Returns: New playback state after stopping
-    func stop(player: AVAudioPlayer, state: PlaybackState) -> PlaybackState
+    func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState
 }
 
 /// Operation for controlling playback state
@@ -32,16 +33,8 @@ protocol PlaybackControlOperationProtocol: Sendable {
 /// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
 final class PlaybackControlOperation: PlaybackControlOperationProtocol {
 
-    func play(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState {
-        guard state.canPlay else {
-            throw state.isPlaying ? PlaybackError.alreadyPlaying : PlaybackError.notReady
-        }
-
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
-        if case .finished = state {
+    func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
+        if isAtEnd {
             player.currentTime = 0
         }
 
@@ -52,24 +45,12 @@ final class PlaybackControlOperation: PlaybackControlOperationProtocol {
         return .playing(audioInfo)
     }
 
-    func pause(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState {
-        guard state.canPause else {
-            throw PlaybackError.notPlaying
-        }
-
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-
+    func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState {
         player.pause()
         return .paused(audioInfo)
     }
 
-    func stop(player: AVAudioPlayer, state: PlaybackState) -> PlaybackState {
-        guard let audioInfo = state.audioInfo else {
-            return state
-        }
-
+    func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState {
         player.stop()
         player.currentTime = 0
         return .ready(audioInfo)

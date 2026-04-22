@@ -150,12 +150,9 @@ struct RoutingStubLoadFileOperation: LoadFileOperationProtocol, @unchecked Senda
 struct DelayedSyncSampleRateOperation: SyncSampleRateOperationProtocol {
     let delay: Duration
 
-    func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {
+    func execute(audioInfo: AudioInfo, sampleRateManager: SampleRateManaging) async throws {
         try await Task.sleep(for: delay)
         try Task.checkCancellation()
-        guard let audioInfo = state.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
         try await sampleRateManager.setSampleRate(audioInfo.sampleRate)
     }
 }

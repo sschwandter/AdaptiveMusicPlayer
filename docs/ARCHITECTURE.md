@@ -24,8 +24,8 @@ The project is organized by feature area under `Playback/`, with a small app she
 
 ### Playback Domain
 
-- `AdaptiveMusicPlayer/Playback/Domain/PlaybackState.swift`
-  Defines the playback state enum, `AudioInfo`, and typed `PlaybackError` values.
+- `AdaptiveMusicPlayer/Playback/Domain/EnginePlaybackState.swift`
+   Defines the engine's runtime state enum (`EnginePlaybackState`), `AudioInfo`, and typed `PlaybackError` values.
 - `AdaptiveMusicPlayer/Playback/Domain/PlaybackPlaylist.swift`
   Defines playlist data structures used by folder-based playback.
 - `AdaptiveMusicPlayer/Playback/Domain/PlaylistSession.swift`

@@ -10,88 +10,37 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private let stateStore = AudioPlayerStateStore()
 
-    // MARK: - Domain State (exposed to UI)
+// MARK: - Domain State (exposed to UI)
 
-    var currentTime: Double {
-        get { stateStore.currentTime }
-        set { stateStore.currentTime = newValue }
-    }
-    var duration: Double { stateStore.duration }
-    var volume: Double = 1 {
+var volume: Double = 1 {
         didSet {
             engine.setVolume(volume)
-        }
-    }
-    var statusMessage: String { stateStore.statusMessage }
-    var hasError: Bool { stateStore.hasError }
-    var currentFileName: String? { stateStore.currentFileName }
-    var currentDisplayTitle: String? { stateStore.currentDisplayTitle }
-    var fileSampleRate: Double { stateStore.fileSampleRate }
-    var hardwareSampleRate: Double { stateStore.hardwareSampleRate }
-    var hardwareDeviceName: String { stateStore.hardwareDeviceName }
-    var supportedHardwareSampleRates: [Double] { stateStore.supportedHardwareSampleRates }
+         }
+     }
 
-    var isLoading: Bool { stateStore.isLoading }
-
-    var isPlaying: Bool { stateStore.isPlaying }
-
-    private var isAttemptingPlaybackStart: Bool {
+private var isAttemptingPlaybackStart: Bool {
         sessionController.isStartingPlayback
-    }
+     }
 
-    private var sampleRatePresentation: SampleRatePresentationOutput {
-        stateStore.sampleRatePresentation(
-            isAttemptingPlaybackStart: isAttemptingPlaybackStart
-        )
-    }
-
-    private var contentViewPresentation: ContentViewStatePresentationOutput {
+private var contentViewPresentation: ContentViewStatePresentationOutput {
         stateStore.contentViewPresentation(
             sampleRateBanner: sampleRateBannerPresentation
-        )
-    }
+         )
+     }
 
-    var playlistTrackPosition: String? { contentViewPresentation.playlistTrackPosition }
-    var playlistTracks: [PlaylistTrackRow] { contentViewPresentation.playlistTracks }
-    var hasPlaylist: Bool { contentViewPresentation.hasPlaylist }
-    var canPlayPreviousTrack: Bool { contentViewPresentation.canPlayPreviousTrack }
-    var canPlayNextTrack: Bool { contentViewPresentation.canPlayNextTrack }
-
-    var contentViewState: ContentViewState {
+var contentViewState: ContentViewState {
         contentViewPresentation.contentViewState
-    }
+     }
 
-    var hasSampleRateMismatch: Bool {
-        sampleRatePresentation.hasMismatch
-    }
-
-    var hardwareDeviceDisplayName: String {
-        sampleRatePresentation.hardwareDeviceDisplayName
-    }
-
-    var supportedHardwareSampleRatesDescription: String {
-        sampleRatePresentation.supportedHardwareSampleRatesDescription
-    }
-
-    var sampleRateBannerPresentation: SampleRateBannerPresentation {
+var sampleRateBannerPresentation: SampleRateBannerPresentation {
         sampleRatePresentation.banner
-    }
+     }
 
-    var sampleRateRouteDescription: String {
-        sampleRatePresentation.routeDescription
-    }
-
-    var compactSampleRateExplanation: String? {
-        sampleRatePresentation.compactExplanation
-    }
-
-    var showsSupportedRatesHint: Bool {
-        sampleRatePresentation.showsSupportedRatesHint
-    }
-
-    var sampleRateStatusDetail: String {
-        sampleRatePresentation.statusDetail
-    }
+private var sampleRatePresentation: SampleRatePresentationOutput {
+        stateStore.sampleRatePresentation(
+            isAttemptingPlaybackStart: isAttemptingPlaybackStart
+         )
+     }
 
     // MARK: - Dependencies
 
@@ -176,7 +125,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     func selectPlaylistTrack(at index: Int) {
         sessionController.selectPlaylistTrack(
             at: index,
-            shouldAutoplay: isPlaying || sessionController.isStartingPlayback
+            shouldAutoplay: contentViewState.isPlaying || sessionController.isStartingPlayback
         )
     }
 

@@ -363,41 +363,43 @@ final class AudioPlayerSessionController {
         engine.stopProgressTracking(using: progressTracker)
     }
 
-    private func showReadyStatus(for audioInfo: AudioInfo) {
+private func showReadyStatus(for audioInfo: AudioInfo) {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: false
-        )
+         )
         applyStatusPresentation(
             statusPresenter.presentReady(
-                PlayerStatusReadyInput(
+                PlayerStatusContext(
+                    phase: .ready,
                     hasPlaylist: stateStore.playlistSession?.trackCount ?? 0 > 1,
                     playlistTrackPosition: stateStore.playlistSession?.positionDescription,
                     sampleRate: audioInfo.sampleRate,
                     hardwareDeviceName: sampleRatePresentation.hardwareDeviceDisplayName,
                     hasSampleRateMismatch: sampleRatePresentation.hasMismatch,
                     sampleRateStatusDetail: sampleRatePresentation.statusDetail
-                )
-            )
-        )
-    }
+                 )
+             )
+         )
+       }
 
-    private func showPlayingStatus() {
+private func showPlayingStatus() {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: isStartingPlayback
-        )
+         )
         applyStatusPresentation(
             statusPresenter.presentPlaying(
-                PlayerStatusPlayingInput(
+                PlayerStatusContext(
+                    phase: .playing,
                     hasPlaylist: stateStore.playlistSession?.trackCount ?? 0 > 1,
                     playlistTrackPosition: stateStore.playlistSession?.positionDescription,
                     sampleRate: stateStore.fileSampleRate,
                     hardwareDeviceName: sampleRatePresentation.hardwareDeviceDisplayName,
                     hasSampleRateMismatch: sampleRatePresentation.hasMismatch,
                     sampleRateStatusDetail: sampleRatePresentation.statusDetail
-                )
-            )
-        )
-    }
+                 )
+             )
+         )
+       }
 
     private func showError(_ error: PlaybackError) {
         applyStatusPresentation(
