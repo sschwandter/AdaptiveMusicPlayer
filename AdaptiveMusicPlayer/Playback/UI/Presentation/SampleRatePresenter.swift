@@ -15,7 +15,7 @@ struct SampleRatePresentationOutput {
     let hasMismatch: Bool
     let hardwareDeviceDisplayName: String
     let supportedHardwareSampleRatesDescription: String
-    let banner: AudioPlayer.SampleRateBannerPresentation
+    let banner: SampleRateBannerPresentation
     let routeDescription: String
     let compactExplanation: String?
     let showsSupportedRatesHint: Bool
@@ -85,9 +85,9 @@ struct SampleRatePresenter {
         statusDetail: String,
         routeDescription: String,
         hasMismatch: Bool
-    ) -> AudioPlayer.SampleRateBannerPresentation {
+    ) -> SampleRateBannerPresentation {
         if input.hasError {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "Playback Error",
                 detail: nil,
                 iconName: "exclamationmark.triangle.fill",
@@ -97,7 +97,7 @@ struct SampleRatePresenter {
         }
 
         guard input.fileSampleRate > 0 else {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "No File Loaded",
                 detail: nil,
                 iconName: "waveform",
@@ -107,7 +107,7 @@ struct SampleRatePresenter {
         }
 
         guard input.hardwareSampleRate > 0 else {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "Output Unknown",
                 detail: Self.formatSampleRate(input.fileSampleRate),
                 iconName: "speaker.slash.fill",
@@ -117,7 +117,7 @@ struct SampleRatePresenter {
         }
 
         if !input.isPlaying && !input.isAttemptingPlaybackStart && hasMismatch {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "Ready",
                 detail: Self.formatSampleRate(input.fileSampleRate),
                 iconName: "waveform",
@@ -127,7 +127,7 @@ struct SampleRatePresenter {
         }
 
         if !hasMismatch {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "Matched",
                 detail: Self.formatSampleRate(input.fileSampleRate),
                 iconName: "checkmark.circle.fill",
@@ -137,7 +137,7 @@ struct SampleRatePresenter {
         }
 
         if deviceSupportsFileSampleRate(for: input) {
-            return AudioPlayer.SampleRateBannerPresentation(
+            return SampleRateBannerPresentation(
                 title: "Switching",
                 detail: routeDescription,
                 iconName: "arrow.triangle.2.circlepath.circle.fill",
@@ -146,7 +146,7 @@ struct SampleRatePresenter {
             )
         }
 
-        return AudioPlayer.SampleRateBannerPresentation(
+        return SampleRateBannerPresentation(
             title: "Unsupported Rate",
             detail: routeDescription,
             iconName: "exclamationmark.triangle.fill",

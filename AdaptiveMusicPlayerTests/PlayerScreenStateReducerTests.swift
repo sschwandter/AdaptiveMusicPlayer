@@ -14,7 +14,7 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = AudioPlayer.PlayerScreenState(
+        let initialState = PlayerScreenState(
             playback: .idle,
             loading: .idle,
             status: .init(),
@@ -43,7 +43,7 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 48_000
         )
-        let initialState = AudioPlayer.PlayerScreenState(
+        let initialState = PlayerScreenState(
             playback: .playing(audioInfo),
             loading: .idle,
             status: .init(),
@@ -72,7 +72,7 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = AudioPlayer.PlayerScreenState()
+        let initialState = PlayerScreenState()
 
         let readyState = reducer.reduce(
             state: initialState,
@@ -108,7 +108,7 @@ struct PlayerScreenStateReducerTests {
 
     @Test("stopped falls back to idle when no audio remains")
     func stoppedWithoutAudio() {
-        let initialState = AudioPlayer.PlayerScreenState(
+        let initialState = PlayerScreenState(
             playback: .idle,
             loading: .idle,
             status: .init(),
@@ -136,7 +136,7 @@ struct PlayerScreenStateReducerTests {
             duration: 1,
             sampleRate: 44_100
         )
-        let initialState = AudioPlayer.PlayerScreenState(
+        let initialState = PlayerScreenState(
             playback: .playing(audioInfo),
             loading: .idle,
             status: .init(),

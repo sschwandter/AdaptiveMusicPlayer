@@ -4,7 +4,7 @@ import Foundation
 final class AudioPlayerLoadCoordinator {
     enum Event {
         case beginLoading(
-            loadingState: AudioPlayer.LoadingPresentationState,
+            loadingState: LoadingPresentationState,
             message: String
         )
         case playlistSessionUpdated(PlaylistSession)

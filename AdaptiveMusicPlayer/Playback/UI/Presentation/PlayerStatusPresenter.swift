@@ -19,31 +19,31 @@ struct PlayerStatusPlayingInput {
 }
 
 struct PlayerStatusPresentationOutput {
-    let loading: AudioPlayer.LoadingPresentationState
-    let status: AudioPlayer.StatusPresentationState
-    let playbackOverride: AudioPlayer.PlaybackPresentationState?
+    let loading: LoadingPresentationState
+    let status: StatusPresentationState
+    let playbackOverride: PlaybackPresentationState?
 }
 
 @MainActor
 struct PlayerStatusPresenter {
     func presentLoading(
-        state: AudioPlayer.LoadingPresentationState,
+        state: LoadingPresentationState,
         message: String
     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: state,
-            status: AudioPlayer.StatusPresentationState(kind: .info, message: message),
+            status: StatusPresentationState(kind: .info, message: message),
             playbackOverride: nil
         )
     }
 
     func presentInfo(
         message: String,
-        loading: AudioPlayer.LoadingPresentationState = .idle
+        loading: LoadingPresentationState = .idle
     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: loading,
-            status: AudioPlayer.StatusPresentationState(
+            status: StatusPresentationState(
                 kind: message.isEmpty ? .neutral : .info,
                 message: message
             ),
@@ -65,7 +65,7 @@ struct PlayerStatusPresenter {
     ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: .failed,
-            status: AudioPlayer.StatusPresentationState(
+            status: StatusPresentationState(
                 kind: .error,
                 message: error.localizedDescription
             ),

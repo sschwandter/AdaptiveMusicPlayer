@@ -11,9 +11,9 @@ struct PlayerScreenStateReducer {
     }
 
     func reduce(
-        state: AudioPlayer.PlayerScreenState,
+        state: PlayerScreenState,
         action: Action
-    ) -> AudioPlayer.PlayerScreenState {
+    ) -> PlayerScreenState {
         var nextState = state
 
         switch action {
@@ -44,8 +44,8 @@ struct PlayerScreenStateReducer {
 
     private func loadingPlaybackState(
         preservedAudioInfo: AudioInfo?,
-        currentPlayback: AudioPlayer.PlaybackPresentationState
-    ) -> AudioPlayer.PlaybackPresentationState {
+        currentPlayback: PlaybackPresentationState
+    ) -> PlaybackPresentationState {
         if let preservedAudioInfo {
             return .ready(preservedAudioInfo)
         }
@@ -59,8 +59,8 @@ struct PlayerScreenStateReducer {
 
     private func stoppedPlaybackState(
         preservedAudioInfo: AudioInfo?,
-        currentPlayback: AudioPlayer.PlaybackPresentationState
-    ) -> AudioPlayer.PlaybackPresentationState {
+        currentPlayback: PlaybackPresentationState
+    ) -> PlaybackPresentationState {
         if let preservedAudioInfo {
             return .ready(preservedAudioInfo)
         }

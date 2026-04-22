@@ -125,8 +125,8 @@ struct ContentViewStatePresenterTests {
         #expect(output.contentViewState.transport.playPauseHelp == "Pause (Space)")
     }
 
-    private var idleBanner: AudioPlayer.SampleRateBannerPresentation {
-        AudioPlayer.SampleRateBannerPresentation(
+    private var idleBanner: SampleRateBannerPresentation {
+        SampleRateBannerPresentation(
             title: "No File Loaded",
             detail: nil,
             iconName: "waveform",

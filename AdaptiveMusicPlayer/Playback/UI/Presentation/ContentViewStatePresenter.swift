@@ -1,21 +1,21 @@
 import Foundation
 
 struct ContentViewStatePresentationInput {
-    let playback: AudioPlayer.PlaybackPresentationState
-    let loading: AudioPlayer.LoadingPresentationState
+    let playback: PlaybackPresentationState
+    let loading: LoadingPresentationState
     let currentTime: Double
     let playlistSession: PlaylistSession?
     let displayTitlesByTrackURL: [URL: String]
-    let sampleRateBanner: AudioPlayer.SampleRateBannerPresentation
+    let sampleRateBanner: SampleRateBannerPresentation
 }
 
 struct ContentViewStatePresentationOutput {
     let playlistTrackPosition: String?
-    let playlistTracks: [AudioPlayer.PlaylistTrackRow]
+    let playlistTracks: [PlaylistTrackRow]
     let hasPlaylist: Bool
     let canPlayPreviousTrack: Bool
     let canPlayNextTrack: Bool
-    let contentViewState: AudioPlayer.ContentViewState
+    let contentViewState: ContentViewState
 }
 
 @MainActor
@@ -35,7 +35,7 @@ struct ContentViewStatePresenter {
         let duration = input.playback.audioInfo?.duration ?? 0
         let hasLoadedFile = currentTrackTitle != nil
 
-        let transport = AudioPlayer.TransportControlsPresentation(
+        let transport = TransportControlsPresentation(
             canPlayPreviousTrack: canPlayPreviousTrack && !isLoading,
             canPlayPause: hasLoadedFile && !isLoading,
             canSkip: hasLoadedFile && !isLoading,
@@ -45,13 +45,13 @@ struct ContentViewStatePresenter {
             playPauseSymbolName: isPlaying ? "pause.fill" : "play.fill",
             playPauseHelp: isPlaying ? "Pause (Space)" : "Play (Space)"
         )
-        let playlist = AudioPlayer.PlaylistBrowserPresentation(
+        let playlist = PlaylistBrowserPresentation(
             isVisible: hasPlaylist && hasLoadedFile,
             positionDescription: playlistTrackPosition,
             tracks: playlistTracks
         )
 
-        let contentViewState = AudioPlayer.ContentViewState(
+        let contentViewState = ContentViewState(
             currentTrackTitle: currentTrackTitle,
             playlistTrackPosition: playlistTrackPosition,
             duration: duration,
@@ -79,11 +79,11 @@ struct ContentViewStatePresenter {
     private func playlistTracks(
         playlistSession: PlaylistSession?,
         displayTitlesByTrackURL: [URL: String]
-    ) -> [AudioPlayer.PlaylistTrackRow] {
+    ) -> [PlaylistTrackRow] {
         guard let playlistSession else { return [] }
 
         return playlistSession.playlist.tracks.enumerated().map { index, url in
-            AudioPlayer.PlaylistTrackRow(
+            PlaylistTrackRow(
                 url: url,
                 index: index,
                 isCurrent: index == playlistSession.currentIndex,

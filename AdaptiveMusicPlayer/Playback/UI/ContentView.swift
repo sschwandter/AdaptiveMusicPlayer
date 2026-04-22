@@ -23,7 +23,7 @@ struct ContentView: View {
     @State private var sliderPosition: Double = 0
     @State private var isEditingSlider = false
 
-    private var viewState: AudioPlayer.ContentViewState {
+    private var viewState: ContentViewState {
         player.contentViewState
     }
 
@@ -573,7 +573,7 @@ struct ContentView: View {
         }
     }
 
-    private func playlistTrackRow(_ track: AudioPlayer.PlaylistTrackRow) -> some View {
+    private func playlistTrackRow(_ track: PlaylistTrackRow) -> some View {
         Button(action: { player.selectPlaylistTrack(at: track.index) }) {
             HStack(spacing: 12) {
                 Text("\(track.index + 1)")
