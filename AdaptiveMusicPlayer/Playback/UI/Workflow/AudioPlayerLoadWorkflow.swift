@@ -2,6 +2,14 @@ import Foundation
 
 @MainActor
 final class AudioPlayerLoadWorkflow {
+    struct Callbacks {
+        let handleError: @MainActor (PlaybackError) -> Void
+        let cancelPendingPlaybackStart: @MainActor () -> Bool
+        let stopProgressTracking: @MainActor () -> Void
+        let startPlayback: @MainActor () -> Void
+        let currentVolume: @MainActor () -> Double
+    }
+
     private let stateStore: AudioPlayerStateStore
     private let engine: AudioPlaybackEngine
     private let loadCoordinator: AudioPlayerLoadCoordinator
@@ -32,11 +40,7 @@ final class AudioPlayerLoadWorkflow {
     func loadFile(
         url: URL,
         importerDismissalDelay: Duration = .zero,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) {
         guard let playlistSession = PlaylistSession.singleTrack(url) else { return }
 
@@ -48,14 +52,7 @@ final class AudioPlayerLoadWorkflow {
                 try await engine.loadFile(from: trackURL)
             },
             handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(
-                    event,
-                    handleError: handleError,
-                    cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-                    stopProgressTracking: stopProgressTracking,
-                    startPlayback: startPlayback,
-                    currentVolume: currentVolume
-                )
+                await self?.handleLoadEvent(event, callbacks: callbacks)
             }
         )
     }
@@ -63,11 +60,7 @@ final class AudioPlayerLoadWorkflow {
     func loadFolder(
         url: URL,
         importerDismissalDelay: Duration = .zero,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) {
         loadCoordinator.loadFolder(
             url: url,
@@ -76,14 +69,7 @@ final class AudioPlayerLoadWorkflow {
                 try await engine.loadFile(from: trackURL)
             },
             handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(
-                    event,
-                    handleError: handleError,
-                    cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-                    stopProgressTracking: stopProgressTracking,
-                    startPlayback: startPlayback,
-                    currentVolume: currentVolume
-                )
+                await self?.handleLoadEvent(event, callbacks: callbacks)
             }
         )
     }
@@ -92,11 +78,7 @@ final class AudioPlayerLoadWorkflow {
     func loadAdjacentTrack(
         next: Bool,
         autoplay: Bool = false,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) -> Bool {
         guard let playlistSession = stateStore.playlistSession else { return false }
 
@@ -109,11 +91,7 @@ final class AudioPlayerLoadWorkflow {
         loadPlaylistTrack(
             playlistSession: nextPlaylistSession,
             autoplayOnSuccess: autoplay,
-            handleError: handleError,
-            cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-            stopProgressTracking: stopProgressTracking,
-            startPlayback: startPlayback,
-            currentVolume: currentVolume
+            callbacks: callbacks
         )
         return true
     }
@@ -121,11 +99,7 @@ final class AudioPlayerLoadWorkflow {
     func selectPlaylistTrack(
         at index: Int,
         shouldAutoplay: Bool,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) {
         guard let playlistSession = stateStore.playlistSession,
               playlistSession.currentIndex != index,
@@ -134,22 +108,14 @@ final class AudioPlayerLoadWorkflow {
         loadPlaylistTrack(
             playlistSession: nextPlaylistSession,
             autoplayOnSuccess: shouldAutoplay,
-            handleError: handleError,
-            cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-            stopProgressTracking: stopProgressTracking,
-            startPlayback: startPlayback,
-            currentVolume: currentVolume
+            callbacks: callbacks
         )
     }
 
     private func loadPlaylistTrack(
         playlistSession: PlaylistSession,
         autoplayOnSuccess: Bool,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) {
         loadCoordinator.loadPlaylistTrack(
             playlistSession: playlistSession,
@@ -158,33 +124,21 @@ final class AudioPlayerLoadWorkflow {
                 try await engine.loadFile(from: trackURL)
             },
             handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(
-                    event,
-                    handleError: handleError,
-                    cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-                    stopProgressTracking: stopProgressTracking,
-                    startPlayback: startPlayback,
-                    currentVolume: currentVolume
-                )
+                await self?.handleLoadEvent(event, callbacks: callbacks)
             }
         )
     }
 
     private func handleLoadEvent(
         _ event: AudioPlayerLoadCoordinator.Event,
-        handleError: @escaping @MainActor (PlaybackError) -> Void,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) async {
         switch event {
         case .beginLoading(let loadingState, let message):
             beginLoading(
                 loadingState: loadingState,
                 message: message,
-                cancelPendingPlaybackStart: cancelPendingPlaybackStart,
-                stopProgressTracking: stopProgressTracking
+                callbacks: callbacks
             )
         case .playlistSessionUpdated(let playlistSession):
             stateStore.playlistSession = playlistSession
@@ -194,31 +148,29 @@ final class AudioPlayerLoadWorkflow {
                     from: url,
                     audioInfo: audioInfo,
                     autoplayOnSuccess: autoplayOnSuccess,
-                    startPlayback: startPlayback,
-                    currentVolume: currentVolume
+                    callbacks: callbacks
                 )
             } catch let error as PlaybackError {
-                handleError(error)
+                callbacks.handleError(error)
             } catch {
-                handleError(.loadFailed(error.localizedDescription))
+                callbacks.handleError(.loadFailed(error.localizedDescription))
             }
         case .cancelled:
-            handleLoadCancellation(stopProgressTracking: stopProgressTracking)
+            handleLoadCancellation(callbacks: callbacks)
         case .failed(let error):
-            handleError(error)
+            callbacks.handleError(error)
         }
     }
 
     private func beginLoading(
         loadingState: LoadingPresentationState,
         message: String,
-        cancelPendingPlaybackStart: @escaping @MainActor () -> Bool,
-        stopProgressTracking: @escaping @MainActor () -> Void
+        callbacks: Callbacks
     ) {
-        _ = cancelPendingPlaybackStart()
+        _ = callbacks.cancelPendingPlaybackStart()
         let preservedAudioInfo = engine.beginLoading()
         applyScreenStateAction(.beginLoading(preservedAudioInfo: preservedAudioInfo))
-        stopProgressTracking()
+        callbacks.stopProgressTracking()
         stateStore.currentTime = 0
         applyStatusPresentation(
             statusPresenter.presentLoading(
@@ -232,26 +184,23 @@ final class AudioPlayerLoadWorkflow {
         from trackURL: URL,
         audioInfo: AudioInfo,
         autoplayOnSuccess: Bool,
-        startPlayback: @escaping @MainActor () -> Void,
-        currentVolume: @escaping @MainActor () -> Double
+        callbacks: Callbacks
     ) async throws {
         applyScreenStateAction(.ready(audioInfo))
         stateStore.recordLoadedTrack(audioInfo, for: trackURL)
 
         stateStore.currentTime = 0
-        engine.setVolume(currentVolume())
+        engine.setVolume(callbacks.currentVolume())
         await refreshHardwareInfo()
         showReadyStatus(for: audioInfo)
 
         if autoplayOnSuccess {
-            startPlayback()
+            callbacks.startPlayback()
         }
     }
 
-    private func handleLoadCancellation(
-        stopProgressTracking: @escaping @MainActor () -> Void
-    ) {
-        stopProgressTracking()
+    private func handleLoadCancellation(callbacks: Callbacks) {
+        callbacks.stopProgressTracking()
         stateStore.currentTime = 0
         applyStatusPresentation(
             statusPresenter.presentInfo(
@@ -278,6 +227,7 @@ final class AudioPlayerLoadWorkflow {
             )
         )
     }
+
     private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
         stateStore.applyStatusPresentation(output)
     }

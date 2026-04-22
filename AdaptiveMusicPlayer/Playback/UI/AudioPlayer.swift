@@ -152,6 +152,24 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         }
     }
 
+    private var loadWorkflowCallbacks: AudioPlayerLoadWorkflow.Callbacks {
+        AudioPlayerLoadWorkflow.Callbacks(
+            handleError: { [weak self] error in self?.presentError(error) },
+            cancelPendingPlaybackStart: { [weak self] in
+                self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false
+            },
+            stopProgressTracking: { [engine, progressTracker] in
+                engine.stopProgressTracking(using: progressTracker)
+            },
+            startPlayback: { [weak self] in
+                self?.startPlaybackAfterLoad()
+            },
+            currentVolume: { [weak self] in
+                self?.volume ?? 1
+            }
+        )
+    }
+
     // MARK: - File Loading
 
     /// Starts a file load and enters loading state immediately.
@@ -160,11 +178,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         loadWorkflow.loadFile(
             url: url,
             importerDismissalDelay: importerDismissalDelay,
-            handleError: { [weak self] error in self?.showError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
+            callbacks: loadWorkflowCallbacks
         )
     }
 
@@ -172,17 +186,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         loadWorkflow.loadFolder(
             url: url,
             importerDismissalDelay: importerDismissalDelay,
-            handleError: { [weak self] error in self?.showError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
+            callbacks: loadWorkflowCallbacks
         )
     }
 
     /// Report a file selection error from the file picker
     func reportFileSelectionError(_ message: String) {
-        showError(.loadFailed(message))
+        presentError(.loadFailed(message))
     }
 
     func waitForCurrentLoad() async {
@@ -191,39 +201,18 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func playNextTrack() {
-        _ = loadWorkflow.loadAdjacentTrack(
-            next: true,
-            autoplay: true,
-            handleError: { [weak self] error in self?.showError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
-        )
+        _ = loadAdjacentTrack(next: true, autoplay: true)
     }
 
     func playPreviousTrack() {
-        _ = loadWorkflow.loadAdjacentTrack(
-            next: false,
-            autoplay: true,
-            handleError: { [weak self] error in self?.showError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
-        )
+        _ = loadAdjacentTrack(next: false, autoplay: true)
     }
 
     func selectPlaylistTrack(at index: Int) {
-        let shouldAutoplay = isPlaying || playbackWorkflow.isStartingPlayback
         loadWorkflow.selectPlaylistTrack(
             at: index,
-            shouldAutoplay: shouldAutoplay,
-            handleError: { [weak self] error in self?.playbackWorkflowShowError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
+            shouldAutoplay: isPlaying || playbackWorkflow.isStartingPlayback,
+            callbacks: loadWorkflowCallbacks
         )
     }
 
@@ -238,7 +227,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         playbackWorkflow.togglePlayPause(loadAdjacentTrack: loadAdjacentTrack)
     }
 
-    private func playbackWorkflowStartPlayback() {
+    private func startPlaybackAfterLoad() {
         playbackWorkflow.startPlayback(loadAdjacentTrack: loadAdjacentTrack)
     }
 
@@ -246,11 +235,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         loadWorkflow.loadAdjacentTrack(
             next: next,
             autoplay: autoplay,
-            handleError: { [weak self] error in self?.playbackWorkflowShowError(error) },
-            cancelPendingPlaybackStart: { [weak self] in self?.playbackWorkflow.cancelPendingPlaybackStart() ?? false },
-            stopProgressTracking: { [weak self] in self?.playbackWorkflowStopProgressTracking() },
-            startPlayback: { [weak self] in self?.playbackWorkflowStartPlayback() },
-            currentVolume: { [weak self] in self?.volume ?? 1 }
+            callbacks: loadWorkflowCallbacks
         )
     }
 
@@ -277,30 +262,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     func synchronizeSampleRates() async {
         await playbackWorkflow.synchronizeSampleRates()
     }
+
     // MARK: - Private Methods
 
-    private func playbackWorkflowStopProgressTracking() {
-        engine.stopProgressTracking(using: progressTracker)
-    }
-
-    private func playbackWorkflowShowError(_ error: PlaybackError) {
-        applyStatusPresentation(
+    private func presentError(_ error: PlaybackError) {
+        stateStore.applyStatusPresentation(
             statusPresenter.presentError(
                 error,
-                hasCurrentAudio: currentAudioInfo != nil
+                hasCurrentAudio: stateStore.currentAudioInfo != nil
             )
         )
-    }
-
-    private var currentAudioInfo: AudioInfo? {
-        stateStore.currentAudioInfo
-    }
-
-    private func showError(_ error: PlaybackError) {
-        playbackWorkflowShowError(error)
-    }
-
-    private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
-        stateStore.applyStatusPresentation(output)
     }
 }

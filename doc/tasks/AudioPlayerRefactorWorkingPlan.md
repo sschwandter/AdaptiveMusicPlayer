@@ -410,7 +410,12 @@ Update this section during implementation.
 
 ### In Progress
 
-- No task currently in progress
+- Phase 6: Final facade cleanup
+  Notes:
+  - Collapsed repeated load-time closure wiring behind a typed `AudioPlayerLoadWorkflow.Callbacks` bundle.
+  - Reduced duplicated error-presentation helpers in `AudioPlayer` so load entry points read more like facade methods.
+  - Focused verification remains green:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
 
 ### Done
 
