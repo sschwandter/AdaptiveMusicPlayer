@@ -358,8 +358,9 @@ Objective:
 Tasks:
 
 - reduce `AudioPlayer.swift` to wiring, public properties, and public intent methods
-- remove any remaining duplicated transition logic
+- remove any remaining duplicated transition and error-presentation logic
 - confirm all collaborators have tight ownership boundaries
+- trim any facade-only adapter glue that exists only to translate between workflows
 
 Success criteria:
 
@@ -404,7 +405,6 @@ Update this section during implementation.
 
 ### Backlog
 
-- Evaluate whether `FinderItemRevealing` should stay on `AudioPlayer` or move to a tiny navigation helper
 - Decide whether sample-rate synchronization should remain in playback workflow or get its own action type
 - Consider renaming `State` vs `Model` folder once the extraction settles
 
@@ -412,10 +412,23 @@ Update this section during implementation.
 
 - Phase 6: Final facade cleanup
   Notes:
+  - Phase 5 is complete and committed. Phase 6 is now limited to facade cleanup only.
   - Collapsed repeated load-time closure wiring behind a typed `AudioPlayerLoadWorkflow.Callbacks` bundle.
-  - Reduced duplicated error-presentation helpers in `AudioPlayer` so load entry points read more like facade methods.
+  - `AudioPlayer.swift` is down to 276 lines after the latest pass, but it has not reached the target size or boundary clarity yet.
+  - Remaining responsibilities still under review in `AudioPlayer`:
+    - duplicated error-presentation policy that is also implemented in playback workflow
+    - direct access to playlist session only to support Finder reveal
+    - adapter glue between load workflow and playback workflow (`loadWorkflowCallbacks`, `startPlaybackAfterLoad`, `loadAdjacentTrack`)
+  - Next cleanup target:
+    - move load-related error presentation out of `AudioPlayer`
+    - remove the direct `playlistSession` proxy from `AudioPlayer` if Finder reveal can read from store or a tiny helper
+    - evaluate whether workflow bridge closures should become a stored bridge/helper instead of facade-local glue
   - Focused verification remains green:
     `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
+### Deferred Decisions
+
+- Decide whether `FinderItemRevealing` should stay on `AudioPlayer` or move to a tiny navigation helper once Phase 6 boundaries are finalized
 
 ### Done
 
@@ -468,8 +481,9 @@ Next implementation target is Phase 6 only.
 Implementation target:
 
 - reduce `AudioPlayer.swift` to facade wiring, public properties, and public intent methods
-- remove remaining duplicated transition and error-presentation helpers where it improves ownership clarity
-- confirm the remaining non-workflow responsibilities in `AudioPlayer` are intentional
+- remove duplicated error-presentation policy from the facade
+- remove or justify direct playlist-session access in the facade
+- reduce workflow-to-workflow adapter glue that currently lives in private facade helpers
 
 Do not broaden Phase 6 into domain changes outside the playback UI layer. Keep it focused on facade cleanup only.
 
@@ -486,6 +500,14 @@ Do not broaden Phase 6 into domain changes outside the playback UI layer. Keep i
 - Should `synchronizeSampleRates()` be treated as playback workflow or hardware monitor behavior?
   Answer:
   keep it in playback workflow because it is initiated as a playback action and depends on loaded-file context. Implemented in Phase 4.
+
+- Should Finder reveal stay as a facade responsibility or move behind a tiny helper/store accessor?
+  Current leaning:
+  keep the public intent on `AudioPlayer`, but avoid keeping raw playlist-session access on the facade just to resolve the current track URL.
+
+- Should the load/playback bridge remain as callback closures on the facade or become a dedicated helper?
+  Current leaning:
+  the current callback bundle was a useful intermediate step, but Phase 6 should revisit whether a dedicated bridge/helper would make ownership clearer than private facade glue.
 
 ## Notes
 
