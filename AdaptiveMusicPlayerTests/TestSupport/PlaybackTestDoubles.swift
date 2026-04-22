@@ -108,7 +108,7 @@ final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
     }
 }
 
-struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
+struct StubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
     let sampleRate: Double
     let player: AVAudioPlayer
     let displayTitle: String?
@@ -130,7 +130,7 @@ struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
     }
 }
 
-struct RoutingStubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
+struct RoutingStubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
     let sessionsByURL: [URL: AudioSession]
 
     init(sessionsByURL: [URL: AudioSession]) {
@@ -147,7 +147,7 @@ struct RoutingStubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable 
     }
 }
 
-struct DelayedSyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
+struct DelayedSyncSampleRateOperation: SyncSampleRateOperationProtocol {
     let delay: Duration
 
     func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {

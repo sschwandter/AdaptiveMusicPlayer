@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Protocol for controlling playback state
-protocol PlaybackControlUseCaseProtocol: Sendable {
+protocol PlaybackControlOperationProtocol: Sendable {
     /// Start or resume playback
     /// - Parameters:
     ///   - player: The audio player instance
@@ -27,10 +27,10 @@ protocol PlaybackControlUseCaseProtocol: Sendable {
     func stop(player: AVAudioPlayer, state: PlaybackState) -> PlaybackState
 }
 
-/// Use case for controlling playback state
+/// Operation for controlling playback state
 /// Handles play, pause, and stop operations with state validation
 /// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
-final class PlaybackControlUseCase: PlaybackControlUseCaseProtocol {
+final class PlaybackControlOperation: PlaybackControlOperationProtocol {
 
     func play(player: AVAudioPlayer, state: PlaybackState) throws -> PlaybackState {
         guard state.canPlay else {

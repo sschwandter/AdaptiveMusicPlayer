@@ -57,12 +57,12 @@ Playback coordination is intentionally split between the engine and the view mod
 - `AdaptiveMusicPlayer/Playback/Services/ScopedFolderAccess.swift`
   Manages security-scoped folder access.
 
-### Use Cases
+### Operations
 
-- `AdaptiveMusicPlayer/Playback/UseCases/LoadFileUseCase.swift`
-- `AdaptiveMusicPlayer/Playback/UseCases/PlaybackControlUseCase.swift`
-- `AdaptiveMusicPlayer/Playback/UseCases/SeekingUseCase.swift`
-- `AdaptiveMusicPlayer/Playback/UseCases/SyncSampleRateUseCase.swift`
+- `AdaptiveMusicPlayer/Playback/Engine/Operations/LoadFileOperation.swift`
+- `AdaptiveMusicPlayer/Playback/Engine/Operations/PlaybackControlOperation.swift`
+- `AdaptiveMusicPlayer/Playback/Engine/Operations/SeekingOperation.swift`
+- `AdaptiveMusicPlayer/Playback/Engine/Operations/SyncSampleRateOperation.swift`
 
 These files hold smaller units of playback behavior, but the codebase is not a strict clean-architecture implementation. Important orchestration still lives in the engine and the view model.
 
@@ -100,7 +100,7 @@ Tests live in:
 The unit tests currently cover:
 
 - Basic `AudioPlayer` behavior
-- `PlaybackControlUseCase`
+- `PlaybackControlOperation`
 - `PlaybackProgressTracker`
 - `SampleRateManager` helper logic
 - `TimeFormatter`

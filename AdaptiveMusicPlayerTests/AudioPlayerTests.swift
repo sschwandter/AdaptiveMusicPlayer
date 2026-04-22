@@ -193,7 +193,7 @@ struct AudioPlayerTests {
     func displayTitleUsesResolvedMetadataTitle() async throws {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(
+                loadFileOperation: StubLoadFileOperation(
                     sampleRate: 44_100,
                     displayTitle: "Tagged Song"
                 ),
@@ -217,7 +217,7 @@ struct AudioPlayerTests {
         let url = URL(fileURLWithPath: "/tmp/tagged-song.mp3")
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(
+                loadFileOperation: StubLoadFileOperation(
                     sampleRate: 44_100,
                     displayTitle: "Tagged Song"
                 ),
@@ -251,7 +251,7 @@ struct AudioPlayerTests {
         let finderItemRevealer = RecordingFinderItemRevealer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
                     firstURL: AudioSession(player: try StubAudioPlayer(), fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
                     secondURL: AudioSession(player: try StubAudioPlayer(), fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                 ]),
@@ -292,7 +292,7 @@ struct AudioPlayerTests {
     func sampleRateBannerMatchedState() async throws {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),
@@ -311,7 +311,7 @@ struct AudioPlayerTests {
     func sampleRateBannerNeutralStateBeforeSupportedMismatchPlayback() async throws {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 96_000),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),
@@ -336,8 +336,8 @@ struct AudioPlayerTests {
     func sampleRateBannerSwitchingStateDuringStartup() async throws {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
-                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 96_000),
+                syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),
@@ -365,7 +365,7 @@ struct AudioPlayerTests {
     func sampleRateBannerUnsupportedState() async throws {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 96_000),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),
@@ -394,11 +394,11 @@ struct AudioPlayerTests {
         let secondPlayer = try StubAudioPlayer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
                     firstURL: AudioSession(player: firstPlayer, fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
                     secondURL: AudioSession(player: secondPlayer, fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                 ]),
-                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: .milliseconds(200)),
+                syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),
@@ -431,7 +431,7 @@ struct AudioPlayerTests {
         let failingPlayer = try StubAudioPlayer(playResult: false)
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100, player: failingPlayer),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: failingPlayer),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),

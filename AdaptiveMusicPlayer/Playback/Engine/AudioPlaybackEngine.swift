@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Stateful playback coordinator around AVAudioPlayer
-/// Owns playback state and delegates smaller operations to use cases
+/// Owns playback state and delegates smaller operations to focused operation types
 @MainActor
 final class AudioPlaybackEngine {
     private enum Constants {
@@ -16,26 +16,26 @@ final class AudioPlaybackEngine {
 
     // MARK: - Dependencies
 
-    private let loadFileUseCase: LoadFileUseCaseProtocol
-    private let playbackControlUseCase: PlaybackControlUseCaseProtocol
-    private let seekingUseCase: SeekingUseCaseProtocol
-    private let syncSampleRateUseCase: SyncSampleRateUseCaseProtocol
+    private let loadFileOperation: LoadFileOperationProtocol
+    private let playbackControlOperation: PlaybackControlOperationProtocol
+    private let seekingOperation: SeekingOperationProtocol
+    private let syncSampleRateOperation: SyncSampleRateOperationProtocol
     private let sampleRateManager: SampleRateManaging
 
     // MARK: - Initialization
 
     init(
-        loadFileUseCase: LoadFileUseCaseProtocol? = nil,
-        playbackControlUseCase: PlaybackControlUseCaseProtocol = PlaybackControlUseCase(),
-        seekingUseCase: SeekingUseCaseProtocol = SeekingUseCase(),
-        syncSampleRateUseCase: SyncSampleRateUseCaseProtocol = SyncSampleRateUseCase(),
+        loadFileOperation: LoadFileOperationProtocol? = nil,
+        playbackControlOperation: PlaybackControlOperationProtocol = PlaybackControlOperation(),
+        seekingOperation: SeekingOperationProtocol = SeekingOperation(),
+        syncSampleRateOperation: SyncSampleRateOperationProtocol = SyncSampleRateOperation(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
         self.sampleRateManager = sampleRateManager
-        self.loadFileUseCase = loadFileUseCase ?? LoadFileUseCase(sessionManager: AudioSessionManager())
-        self.playbackControlUseCase = playbackControlUseCase
-        self.seekingUseCase = seekingUseCase
-        self.syncSampleRateUseCase = syncSampleRateUseCase
+        self.loadFileOperation = loadFileOperation ?? LoadFileOperation(sessionManager: AudioSessionManager())
+        self.playbackControlOperation = playbackControlOperation
+        self.seekingOperation = seekingOperation
+        self.syncSampleRateOperation = syncSampleRateOperation
     }
 
     // MARK: - File Loading
@@ -56,7 +56,7 @@ final class AudioPlaybackEngine {
         state = .loading(state.audioInfo)
 
         do {
-            let session = try await loadFileUseCase.execute(from: url)
+            let session = try await loadFileOperation.execute(from: url)
 
             guard !Task.isCancelled else {
                 state = .idle
@@ -103,7 +103,7 @@ final class AudioPlaybackEngine {
                 abs(currentSampleRate - targetSampleRate) > Constants.sampleRateTolerance
             {
                 do {
-                    try await syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
+                    try await syncSampleRateOperation.execute(state: state, sampleRateManager: sampleRateManager)
                 } catch {
                     // Playback should still start even if the device refuses the requested rate.
                 }
@@ -115,7 +115,7 @@ final class AudioPlaybackEngine {
             throw CancellationError()
         }
 
-        state = try playbackControlUseCase.play(player: player, state: state)
+        state = try playbackControlOperation.play(player: player, state: state)
         guard let audioInfo = state.audioInfo else {
             throw PlaybackError.notReady
         }
@@ -128,7 +128,7 @@ final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        state = try playbackControlUseCase.pause(player: player, state: state)
+        state = try playbackControlOperation.pause(player: player, state: state)
         guard let audioInfo = state.audioInfo else {
             throw PlaybackError.notReady
         }
@@ -139,7 +139,7 @@ final class AudioPlaybackEngine {
     func stop() -> AudioInfo? {
         guard let player = player else { return nil }
 
-        state = playbackControlUseCase.stop(player: player, state: state)
+        state = playbackControlOperation.stop(player: player, state: state)
         return state.audioInfo
     }
 
@@ -160,7 +160,7 @@ final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingUseCase.seek(to: time, player: player, state: state)
+        return try seekingOperation.seek(to: time, player: player, state: state)
     }
 
     /// Skip forward by the configured interval
@@ -171,7 +171,7 @@ final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingUseCase.skipForward(from: currentTime, player: player, state: state)
+        return try seekingOperation.skipForward(from: currentTime, player: player, state: state)
     }
 
     /// Skip backward by the configured interval
@@ -182,7 +182,7 @@ final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingUseCase.skipBackward(from: currentTime, player: player, state: state)
+        return try seekingOperation.skipBackward(from: currentTime, player: player, state: state)
     }
 
     // MARK: - Sample Rate Management
@@ -190,7 +190,7 @@ final class AudioPlaybackEngine {
     /// Synchronize hardware sample rate to match current audio file.
     /// The sample-rate manager owns the concurrency boundary for Core Audio access.
     func synchronizeSampleRates() async throws {
-        try await syncSampleRateUseCase.execute(state: state, sampleRateManager: sampleRateManager)
+        try await syncSampleRateOperation.execute(state: state, sampleRateManager: sampleRateManager)
     }
 
     // MARK: - Volume Control

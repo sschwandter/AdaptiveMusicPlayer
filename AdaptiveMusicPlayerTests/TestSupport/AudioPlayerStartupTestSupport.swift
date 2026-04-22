@@ -48,8 +48,8 @@ struct StartupTestContext {
 
         player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: sessionsByURL),
-                syncSampleRateUseCase: DelayedSyncSampleRateUseCase(delay: syncDelay),
+                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: sessionsByURL),
+                syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: syncDelay),
                 sampleRateManager: StubSampleRateManager()
             ),
             hardwareObserver: StubAudioHardwareObserver(),

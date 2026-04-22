@@ -10,7 +10,7 @@ struct AudioPlaybackEngineTests {
     func playRequestsFileSampleRateBeforeStartingPlayback() async throws {
         let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 44_100)
         let engine = AudioPlaybackEngine(
-            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            loadFileOperation: StubLoadFileOperation(sampleRate: 96_000),
             sampleRateManager: sampleRateManager
         )
 
@@ -26,7 +26,7 @@ struct AudioPlaybackEngineTests {
     func playSkipsSampleRateSwitchWhenAlreadyMatched() async throws {
         let sampleRateManager = RecordingSampleRateManager(currentSampleRate: 96_000)
         let engine = AudioPlaybackEngine(
-            loadFileUseCase: StubLoadFileUseCase(sampleRate: 96_000),
+            loadFileOperation: StubLoadFileOperation(sampleRate: 96_000),
             sampleRateManager: sampleRateManager
         )
 
@@ -43,7 +43,7 @@ struct AudioPlaybackEngineTests {
         let stubPlayer = try StubAudioPlayer()
         let tracker = RecordingPlaybackProgressTracker()
         let engine = AudioPlaybackEngine(
-            loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100, player: stubPlayer),
+            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: stubPlayer),
             sampleRateManager: StubSampleRateManager()
         )
 
@@ -64,7 +64,7 @@ struct AudioPlaybackEngineTests {
     @Test("Stopping progress tracking delegates to the tracker")
     func stopProgressTrackingDelegatesToTracker() async throws {
         let engine = AudioPlaybackEngine(
-            loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100),
+            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
             sampleRateManager: StubSampleRateManager()
         )
         let tracker = RecordingPlaybackProgressTracker()

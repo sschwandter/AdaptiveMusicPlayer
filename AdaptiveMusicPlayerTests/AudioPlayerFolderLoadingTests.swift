@@ -92,7 +92,7 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileUseCase: RoutingStubLoadFileUseCase(sessionsByURL: [
+                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
                     firstURL: AudioSession(
                         player: try StubAudioPlayer(),
                         fileName: "01-first.wav",

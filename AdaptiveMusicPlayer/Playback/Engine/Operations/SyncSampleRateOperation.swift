@@ -1,7 +1,7 @@
 import Foundation
 
 /// Protocol for synchronizing hardware sample rate to match audio file
-protocol SyncSampleRateUseCaseProtocol: Sendable {
+protocol SyncSampleRateOperationProtocol: Sendable {
     /// Synchronize hardware sample rate to match the current audio file
     /// - Parameters:
     ///   - state: Current playback state (must have audioInfo)
@@ -10,9 +10,9 @@ protocol SyncSampleRateUseCaseProtocol: Sendable {
     func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws
 }
 
-/// Use case for fixing sample rate mismatches
+/// Operation for fixing sample rate mismatches
 /// Sets hardware sample rate to match the audio file's native rate for bit-perfect playback
-final class SyncSampleRateUseCase: SyncSampleRateUseCaseProtocol {
+final class SyncSampleRateOperation: SyncSampleRateOperationProtocol {
 
     func execute(state: PlaybackState, sampleRateManager: SampleRateManaging) async throws {
         guard let audioInfo = state.audioInfo else {

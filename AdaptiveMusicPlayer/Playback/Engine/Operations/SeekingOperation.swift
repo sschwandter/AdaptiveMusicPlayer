@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Protocol for seeking and navigation within audio tracks
-protocol SeekingUseCaseProtocol: Sendable {
+protocol SeekingOperationProtocol: Sendable {
     /// Seek to a specific time position
     /// - Parameters:
     ///   - time: Target time in seconds
@@ -31,10 +31,10 @@ protocol SeekingUseCaseProtocol: Sendable {
     func skipBackward(from currentTime: Double, player: AVAudioPlayer, state: PlaybackState) throws -> Double
 }
 
-/// Use case for seeking and navigation within audio tracks
+/// Operation for seeking and navigation within audio tracks
 /// Handles seeking to specific positions and skip forward/backward operations
 /// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
-final class SeekingUseCase: SeekingUseCaseProtocol {
+final class SeekingOperation: SeekingOperationProtocol {
 
     // MARK: - Constants
 

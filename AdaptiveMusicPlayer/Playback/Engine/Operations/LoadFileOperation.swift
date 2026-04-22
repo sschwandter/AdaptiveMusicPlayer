@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Protocol for loading audio files
-protocol LoadFileUseCaseProtocol: Sendable {
+protocol LoadFileOperationProtocol: Sendable {
     /// Load an audio file and prepare it for playback
     /// - Parameter url: URL of the audio file to load
     /// - Returns: AudioSession containing player and metadata
@@ -10,9 +10,9 @@ protocol LoadFileUseCaseProtocol: Sendable {
     func execute(from url: URL) async throws -> AudioSession
 }
 
-/// Use case for loading audio files
+/// Operation for loading audio files
 /// Coordinates file access, player creation, and sample rate detection
-final class LoadFileUseCase: LoadFileUseCaseProtocol {
+final class LoadFileOperation: LoadFileOperationProtocol {
 
     private let sessionManager: AudioSessionManaging
 
