@@ -15,59 +15,46 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     // MARK: - Presentation State
 
-    private var screenState = PlayerScreenState()
+    private let stateStore = AudioPlayerStateStore()
 
     // MARK: - Domain State (exposed to UI)
 
-    var currentTime: Double = 0
-    var duration: Double { screenState.playback.audioInfo?.duration ?? 0 }
+    var currentTime: Double {
+        get { stateStore.currentTime }
+        set { stateStore.currentTime = newValue }
+    }
+    var duration: Double { stateStore.duration }
     var volume: Double = 1 {
         didSet {
             engine.setVolume(volume)
         }
     }
-    var statusMessage: String { screenState.status.message }
-    var hasError: Bool { screenState.status.kind == .error }
-    var currentFileName: String? { screenState.playback.audioInfo?.fileName }
-    var currentDisplayTitle: String? { screenState.playback.audioInfo?.displayTitle }
-    var fileSampleRate: Double { screenState.playback.audioInfo?.sampleRate ?? 0 }
-    var hardwareSampleRate: Double { screenState.hardware.currentSampleRate }
-    var hardwareDeviceName: String { screenState.hardware.deviceName }
-    var supportedHardwareSampleRates: [Double] { screenState.hardware.supportedSampleRates }
+    var statusMessage: String { stateStore.statusMessage }
+    var hasError: Bool { stateStore.hasError }
+    var currentFileName: String? { stateStore.currentFileName }
+    var currentDisplayTitle: String? { stateStore.currentDisplayTitle }
+    var fileSampleRate: Double { stateStore.fileSampleRate }
+    var hardwareSampleRate: Double { stateStore.hardwareSampleRate }
+    var hardwareDeviceName: String { stateStore.hardwareDeviceName }
+    var supportedHardwareSampleRates: [Double] { stateStore.supportedHardwareSampleRates }
 
-    var isLoading: Bool { screenState.loading.isActive }
+    var isLoading: Bool { stateStore.isLoading }
 
-    var isPlaying: Bool { screenState.playback.isPlaying }
+    var isPlaying: Bool { stateStore.isPlaying }
 
     private var isAttemptingPlaybackStart: Bool {
         startupCoordinator.isStartingPlayback
     }
 
     private var sampleRatePresentation: SampleRatePresentationOutput {
-        SampleRatePresenter().build(
-            from: SampleRatePresentationInput(
-                fileSampleRate: fileSampleRate,
-                hardwareSampleRate: hardwareSampleRate,
-                hardwareDeviceName: hardwareDeviceName,
-                supportedHardwareSampleRates: supportedHardwareSampleRates,
-                hasError: hasError,
-                statusMessage: statusMessage,
-                isPlaying: isPlaying,
-                isAttemptingPlaybackStart: isAttemptingPlaybackStart
-            )
+        stateStore.sampleRatePresentation(
+            isAttemptingPlaybackStart: isAttemptingPlaybackStart
         )
     }
 
     private var contentViewPresentation: ContentViewStatePresentationOutput {
-        ContentViewStatePresenter().present(
-            input: ContentViewStatePresentationInput(
-                playback: screenState.playback,
-                loading: screenState.loading,
-                currentTime: currentTime,
-                playlistSession: playlistSession,
-                displayTitlesByTrackURL: displayTitlesByTrackURL,
-                sampleRateBanner: sampleRateBannerPresentation
-            )
+        stateStore.contentViewPresentation(
+            sampleRateBanner: sampleRateBannerPresentation
         )
     }
 
@@ -122,13 +109,12 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private let hardwareObserver: AudioHardwareObserving
     private let hardwareInfoProvider: AudioHardwareInfoProviding
     private let finderItemRevealer: FinderItemRevealing
-    private let loadCoordinator: AudioPlayerLoadCoordinator
+    private let loadWorkflow: AudioPlayerLoadWorkflow
     private let startupCoordinator = PlaybackStartupCoordinator()
     private let screenStateReducer = PlayerScreenStateReducer()
-    private var displayTitlesByTrackURL: [URL: String] = [:]
     private var playlistSession: PlaylistSession? {
-        get { screenState.playlist.session }
-        set { screenState.playlist.session = newValue }
+        get { stateStore.playlistSession }
+        set { stateStore.playlistSession = newValue }
     }
 
     // MARK: - Initialization
@@ -146,7 +132,13 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         self.hardwareObserver = hardwareObserver
         self.hardwareInfoProvider = hardwareInfoProvider
         self.finderItemRevealer = finderItemRevealer
-        self.loadCoordinator = AudioPlayerLoadCoordinator(folderScanner: folderScanner)
+        let loadCoordinator = AudioPlayerLoadCoordinator(folderScanner: folderScanner)
+        self.loadWorkflow = AudioPlayerLoadWorkflow(
+            stateStore: stateStore,
+            engine: engine,
+            loadCoordinator: loadCoordinator,
+            hardwareInfoProvider: hardwareInfoProvider
+        )
 
         hardwareObserver.startObserving { [weak self] in
             Task { @MainActor [weak self] in
@@ -164,31 +156,26 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     /// Starts a file load and enters loading state immediately.
     /// A short delay can be requested to let the file importer dismiss first.
     func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
-        guard let playlistSession = PlaylistSession.singleTrack(url) else { return }
-
-        loadCoordinator.loadFile(
+        loadWorkflow.loadFile(
             url: url,
-            playlistSession: playlistSession,
             importerDismissalDelay: importerDismissalDelay,
-            loadTrack: { [engine] trackURL in
-                try await engine.loadFile(from: trackURL)
-            },
-            handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(event)
-            }
+            handleError: { [weak self] error in self?.showError(error) },
+            cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+            stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+            startPlayback: { [weak self] in self?.startPlayback() },
+            currentVolume: { [weak self] in self?.volume ?? 1 }
         )
     }
 
     func loadFolder(url: URL, importerDismissalDelay: Duration = .zero) {
-        loadCoordinator.loadFolder(
+        loadWorkflow.loadFolder(
             url: url,
             importerDismissalDelay: importerDismissalDelay,
-            loadTrack: { [engine] trackURL in
-                try await engine.loadFile(from: trackURL)
-            },
-            handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(event)
-            }
+            handleError: { [weak self] error in self?.showError(error) },
+            cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+            stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+            startPlayback: { [weak self] in self?.startPlayback() },
+            currentVolume: { [weak self] in self?.volume ?? 1 }
         )
     }
 
@@ -198,32 +185,44 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     func waitForCurrentLoad() async {
-        await loadCoordinator.waitForCurrentLoad()
+        await loadWorkflow.waitForCurrentLoad()
         await startupCoordinator.waitForCurrentStartup()
     }
 
     func playNextTrack() {
-        moveToAdjacentTrack(next: true, autoplay: true)
+        _ = loadWorkflow.loadAdjacentTrack(
+            next: true,
+            autoplay: true,
+            handleError: { [weak self] error in self?.showError(error) },
+            cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+            stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+            startPlayback: { [weak self] in self?.startPlayback() },
+            currentVolume: { [weak self] in self?.volume ?? 1 }
+        )
     }
 
     func playPreviousTrack() {
-        moveToAdjacentTrack(next: false, autoplay: true)
+        _ = loadWorkflow.loadAdjacentTrack(
+            next: false,
+            autoplay: true,
+            handleError: { [weak self] error in self?.showError(error) },
+            cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+            stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+            startPlayback: { [weak self] in self?.startPlayback() },
+            currentVolume: { [weak self] in self?.volume ?? 1 }
+        )
     }
 
     func selectPlaylistTrack(at index: Int) {
         let shouldAutoplay = isPlaying || startupCoordinator.isStartingPlayback
-        guard let playlistSession, playlistSession.currentIndex != index else { return }
-        guard let nextPlaylistSession = playlistSession.movingToTrack(at: index) else { return }
-
-        loadCoordinator.loadPlaylistTrack(
-            playlistSession: nextPlaylistSession,
-            autoplayOnSuccess: shouldAutoplay,
-            loadTrack: { [engine] trackURL in
-                try await engine.loadFile(from: trackURL)
-            },
-            handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(event)
-            }
+        loadWorkflow.selectPlaylistTrack(
+            at: index,
+            shouldAutoplay: shouldAutoplay,
+            handleError: { [weak self] error in self?.showError(error) },
+            cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+            stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+            startPlayback: { [weak self] in self?.startPlayback() },
+            currentVolume: { [weak self] in self?.volume ?? 1 }
         )
     }
 
@@ -256,9 +255,9 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     private func handlePlaybackStartupEvent(_ event: PlaybackStartupCoordinator.Event) async {
         switch event {
         case .startupBegan:
-            screenState.loading = .startingPlayback
+            stateStore.setLoadingState(.startingPlayback)
         case .startupCancelled:
-            screenState.loading = .idle
+            stateStore.setLoadingState(.idle)
         case .startupFinished(let audioInfo):
             await finishSuccessfulPlaybackStart(audioInfo: audioInfo)
         case .startupFailed(let error):
@@ -374,7 +373,15 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             },
             onPlaybackFinished: { [weak self] in
                 guard let self else { return }
-                if !self.moveToAdjacentTrack(next: true, autoplay: true) {
+                if !self.loadWorkflow.loadAdjacentTrack(
+                    next: true,
+                    autoplay: true,
+                    handleError: { [weak self] error in self?.showError(error) },
+                    cancelPendingPlaybackStart: { [weak self] in self?.cancelPendingPlaybackStart() ?? false },
+                    stopProgressTracking: { [weak self] in self?.stopProgressTracking() },
+                    startPlayback: { [weak self] in self?.startPlayback() },
+                    currentVolume: { [weak self] in self?.volume ?? 1 }
+                ) {
                     let audioInfo = self.engine.markFinished()
                     self.applyScreenStateAction(.finished(audioInfo))
                     self.currentTime = self.duration
@@ -398,50 +405,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Private Methods
 
     private func refreshHardwareInfo() async {
-        if let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo() {
-            screenState.hardware = HardwarePresentationState(
-                deviceName: deviceInfo.name,
-                currentSampleRate: deviceInfo.currentSampleRate,
-                supportedSampleRates: deviceInfo.supportedSampleRates
-            )
-        } else {
-            screenState.hardware = HardwarePresentationState()
-        }
-    }
-
-    private func beginLoading(
-        loadingState: LoadingPresentationState,
-        with message: String
-    ) {
-        _ = cancelPendingPlaybackStart()
-        let preservedAudioInfo = engine.beginLoading()
-        applyScreenStateAction(.beginLoading(preservedAudioInfo: preservedAudioInfo))
-        stopProgressTracking()
-        currentTime = 0
-        applyStatusPresentation(
-            statusPresenter.presentLoading(
-                state: loadingState,
-                message: message
-            )
-        )
-    }
-
-    private func finishLoadingTrack(
-        from trackURL: URL,
-        audioInfo: AudioInfo,
-        autoplayOnSuccess: Bool = false
-    ) async throws {
-        applyScreenStateAction(.ready(audioInfo))
-        displayTitlesByTrackURL[trackURL] = audioInfo.displayTitle
-
-        currentTime = 0
-        engine.setVolume(volume)
-        await refreshHardwareInfo()
-        showReadyStatus(for: audioInfo)
-
-        if autoplayOnSuccess {
-            startPlayback()
-        }
+        let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo()
+        stateStore.setHardwareInfo(deviceInfo)
     }
 
     private func cancelPendingPlaybackStart() -> Bool {
@@ -452,85 +417,11 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         return cancelled
     }
 
-    private func handleLoadCancellation() {
-        stopProgressTracking()
-        currentTime = 0
-        applyStatusPresentation(
-            statusPresenter.presentInfo(
-                message: "Loading cancelled",
-                loading: .cancelled
-            )
-        )
-    }
-
     private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
         applyScreenStateAction(.playing(audioInfo))
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()
-    }
-
-    @discardableResult
-    private func moveToAdjacentTrack(next: Bool, autoplay: Bool = false) -> Bool {
-        guard let playlistSession else { return false }
-
-        let nextPlaylistSession = next
-            ? playlistSession.movingToNextTrack()
-            : playlistSession.movingToPreviousTrack()
-
-        guard let nextPlaylistSession else { return false }
-
-        loadCoordinator.loadPlaylistTrack(
-            playlistSession: nextPlaylistSession,
-            autoplayOnSuccess: autoplay,
-            loadTrack: { [engine] trackURL in
-                try await engine.loadFile(from: trackURL)
-            },
-            handleEvent: { [weak self] event in
-                await self?.handleLoadEvent(event)
-            }
-        )
-        return true
-    }
-
-    private func handleLoadEvent(_ event: AudioPlayerLoadCoordinator.Event) async {
-        switch event {
-        case .beginLoading(let loadingState, let message):
-            beginLoading(loadingState: loadingState, with: message)
-        case .playlistSessionUpdated(let playlistSession):
-            self.playlistSession = playlistSession
-        case .trackLoaded(let url, let audioInfo, let autoplayOnSuccess):
-            do {
-                try await finishLoadingTrack(
-                    from: url,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: autoplayOnSuccess
-                )
-            } catch let error as PlaybackError {
-                showError(error)
-            } catch {
-                showError(.loadFailed(error.localizedDescription))
-            }
-        case .cancelled:
-            handleLoadCancellation()
-        case .failed(let error):
-            showError(error)
-        }
-    }
-
-    private func showReadyStatus(for audioInfo: AudioInfo) {
-        applyStatusPresentation(
-            statusPresenter.presentReady(
-                PlayerStatusReadyInput(
-                    hasPlaylist: playlistSession?.trackCount ?? 0 > 1,
-                    playlistTrackPosition: playlistSession?.positionDescription,
-                    sampleRate: audioInfo.sampleRate,
-                    hardwareDeviceName: hardwareDeviceDisplayName,
-                    hasSampleRateMismatch: hasSampleRateMismatch,
-                    sampleRateStatusDetail: sampleRateStatusDetail
-                )
-            )
-        )
     }
 
     private func showPlayingStatus() {
@@ -558,22 +449,17 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private var currentAudioInfo: AudioInfo? {
-        screenState.playback.audioInfo
+        stateStore.currentAudioInfo
     }
 
     private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
-        screenState.loading = output.loading
-        screenState.status = output.status
-
-        if let playbackOverride = output.playbackOverride {
-            screenState.playback = playbackOverride
-        }
+        stateStore.applyStatusPresentation(output)
     }
 
     private func applyScreenStateAction(_ action: PlayerScreenStateReducer.Action) {
-        screenState = screenStateReducer.reduce(
-            state: screenState,
-            action: action
+        stateStore.applyScreenStateAction(
+            action,
+            reducer: screenStateReducer
         )
     }
 }

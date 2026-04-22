@@ -422,18 +422,35 @@ Update this section during implementation.
   - Verified with:
     `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
 
+- [x] Phase 2: Introduce `AudioPlayerStateStore`
+  Notes:
+  - Added `Playback/UI/State/AudioPlayerStateStore.swift` and moved UI-facing mutable state ownership into it.
+  - `AudioPlayer` now forwards `currentTime`, playlist session, display-title mapping, and computed playback/hardware state through the store.
+  - Kept workflow logic in `AudioPlayer` for this phase so the change stayed behavioral and testable.
+  - Verified with:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
+- [x] Phase 3: Extract load workflow
+  Notes:
+  - Added `Playback/UI/Workflow/AudioPlayerLoadWorkflow.swift`.
+  - Moved file/folder load orchestration, load-event handling, adjacent-track loading, playlist-track selection, load-cancellation handling, and ready-status updates out of `AudioPlayer`.
+  - Kept `AudioPlayerLoadCoordinator` as the lower-level async coordinator underneath the workflow.
+  - Preserved explicit autoplay intent by passing `shouldAutoplay` through the workflow boundary instead of recomputing it later.
+  - Verified with:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
 ## First Concrete Task
 
-Next implementation target is Phase 2 only.
+Next implementation target is Phase 4 only.
 
 Implementation target:
 
-- create `AudioPlayerStateStore`
-- move `screenState`, `currentTime`, `playlistSession`, and `displayTitlesByTrackURL` into the store
-- forward public `AudioPlayer` properties through the store
-- keep all workflow logic in `AudioPlayer` for now
+- create `AudioPlayerPlaybackWorkflow`
+- move playback startup, pause, stop, seek, skip, progress tracking, and playback-finished behavior into it
+- keep the load workflow unchanged during this step
+- keep hardware observation in `AudioPlayer` unless it clearly becomes part of the playback extraction
 
-Do not combine Phase 2 with workflow extraction. That would widen the failure surface too much.
+Do not combine Phase 4 with the hardware-monitor extraction. That would widen the failure surface too much.
 
 ## Open Questions
 
