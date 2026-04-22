@@ -12,13 +12,6 @@ Working rules:
 
 ## Backlog
 
-- [ ] Extract `AudioPlayerLoadCoordinator`
-  Exit criteria:
-  - File and folder loading workflow no longer lives in `AudioPlayer`.
-  - Load generation and cancellation bookkeeping live outside `AudioPlayer`.
-  - The coordinator reports typed events back to `AudioPlayer`.
-  - Existing load-related unit tests still pass, and new tests cover stale-load cancellation.
-
 - [ ] Extract `PlaybackStartupCoordinator`
   Exit criteria:
   - Playback-start task and startup-generation bookkeeping no longer live in `AudioPlayer`.
@@ -69,6 +62,14 @@ Working rules:
   - Removed string literal checks that previously decided loading-state transitions for scanning and cancellation.
   - Added isolated presenter tests in `AdaptiveMusicPlayerTests/PlayerStatusPresenterTests.swift`.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests`.
+
+- [x] Extract `AudioPlayerLoadCoordinator`
+  Notes:
+  - File and folder loading orchestration moved to `Playback/UI/Coordination/AudioPlayerLoadCoordinator.swift`.
+  - Load task lifecycle, generation tracking, importer-dismissal waiting, and stale-load suppression now live in the coordinator.
+  - `AudioPlayer` now handles typed load events instead of running the async load workflow directly.
+  - Added focused coordinator tests in `AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests.swift`, including stale folder-load suppression.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests`.
 
 ## Risks / Decisions
 
