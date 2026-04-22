@@ -6,6 +6,7 @@ Working rules:
 
 - Move exactly one task into `In Progress` before starting implementation.
 - Move a task to `Done` only after code changes and relevant verification are complete.
+- Do not commit immediately after verification. Stop and let the user review the changes before creating the commit.
 - Add newly discovered follow-up work to `Backlog` instead of keeping it in chat context.
 - Keep tasks PR-sized. Split any task that grows beyond one focused change.
 
