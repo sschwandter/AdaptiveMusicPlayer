@@ -12,12 +12,6 @@ Working rules:
 
 ## Backlog
 
-- [ ] Extract `PlayerScreenStateReducer`
-  Exit criteria:
-  - Screen-state transitions are centralized outside `AudioPlayer`.
-  - Load and playback coordinators use the same transition boundary.
-  - Tests cover loading, ready, playing, paused, stopped, and finished transitions.
-
 - [ ] Revisit progress-tracking boundary
   Exit criteria:
   - Decide whether `AudioPlaybackEngine` should continue exposing `AVAudioPlayer`.
@@ -25,7 +19,7 @@ Working rules:
 
 ## In Progress
 
-- [ ] No task currently in progress
+No task currently in progress.
 
 ## Done
 
@@ -71,6 +65,13 @@ Working rules:
   - `AudioPlayer` now handles typed startup events instead of managing startup tasks directly.
   - Added focused coordinator tests in `AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests.swift` for success, cancellation, and stale-result handling.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests`.
+
+- [x] Extract `PlayerScreenStateReducer`
+  Notes:
+  - Playback screen-state transitions moved to `Playback/UI/Presentation/PlayerScreenStateReducer.swift`.
+  - `AudioPlayer` now applies typed reducer actions instead of mutating playback state through transition helpers.
+  - Added focused reducer tests in `AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests.swift` for loading, ready, playing, paused, stopped, and finished transitions.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests`.
 
 ## Risks / Decisions
 
