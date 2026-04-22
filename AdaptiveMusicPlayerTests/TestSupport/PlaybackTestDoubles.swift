@@ -86,6 +86,28 @@ final class RecordingFinderItemRevealer: FinderItemRevealing, @unchecked Sendabl
     }
 }
 
+@MainActor
+final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
+    private(set) var trackedPlayer: AVAudioPlayer?
+    private(set) var updateInterval: TimeInterval?
+    private(set) var stopCallCount = 0
+
+    func startTracking(
+        player: AVAudioPlayer,
+        updateInterval: TimeInterval,
+        onProgressUpdate: @escaping (Double) -> Void,
+        onPlaybackFinished: @escaping () -> Void,
+        onPeriodicUpdate: @escaping () -> Void
+    ) {
+        trackedPlayer = player
+        self.updateInterval = updateInterval
+    }
+
+    func stopTracking() {
+        stopCallCount += 1
+    }
+}
+
 struct StubLoadFileUseCase: LoadFileUseCaseProtocol, @unchecked Sendable {
     let sampleRate: Double
     let player: AVAudioPlayer

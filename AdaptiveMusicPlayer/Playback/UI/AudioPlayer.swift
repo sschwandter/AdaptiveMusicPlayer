@@ -402,7 +402,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private func pause() {
         if cancelPendingPlaybackStart() {
-            progressTracker.stopTracking()
+            stopProgressTracking()
             applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
             return
         }
@@ -410,7 +410,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         do {
             let audioInfo = try engine.pause()
             applyScreenStateAction(.paused(audioInfo))
-            progressTracker.stopTracking()
+            stopProgressTracking()
             applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
         } catch let error as PlaybackError {
             showError(error)
@@ -423,7 +423,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         _ = cancelPendingPlaybackStart()
         let audioInfo = engine.stop()
         applyScreenStateAction(.stopped(preservedAudioInfo: audioInfo))
-        progressTracker.stopTracking()
+        stopProgressTracking()
         currentTime = 0
         applyStatusPresentation(statusPresenter.presentInfo(message: "Stopped"))
     }
@@ -496,11 +496,8 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     // MARK: - Progress Tracking
 
     private func startProgressTracking() {
-        guard let player = engine.getPlayer() else { return }
-
-        progressTracker.startTracking(
-            player: player,
-            duration: duration,
+        engine.startProgressTracking(
+            using: progressTracker,
             updateInterval: Constants.progressUpdateInterval,
             onProgressUpdate: { [weak self] time in
                 self?.currentTime = time
@@ -524,6 +521,10 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         )
     }
 
+    private func stopProgressTracking() {
+        engine.stopProgressTracking(using: progressTracker)
+    }
+
     // MARK: - Private Methods
 
     private func refreshHardwareInfo() async {
@@ -545,7 +546,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         _ = cancelPendingPlaybackStart()
         let preservedAudioInfo = engine.beginLoading()
         applyScreenStateAction(.beginLoading(preservedAudioInfo: preservedAudioInfo))
-        progressTracker.stopTracking()
+        stopProgressTracking()
         currentTime = 0
         applyStatusPresentation(
             statusPresenter.presentLoading(
@@ -574,10 +575,16 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     private func cancelPendingPlaybackStart() -> Bool {
-        startupCoordinator.cancelStartup()
+        let cancelled = startupCoordinator.cancelStartup()
+        if cancelled {
+            stopProgressTracking()
+        }
+        return cancelled
     }
 
     private func handleLoadCancellation() {
+        stopProgressTracking()
+        currentTime = 0
         applyStatusPresentation(
             statusPresenter.presentInfo(
                 message: "Loading cancelled",

@@ -12,10 +12,7 @@ Working rules:
 
 ## Backlog
 
-- [ ] Revisit progress-tracking boundary
-  Exit criteria:
-  - Decide whether `AudioPlaybackEngine` should continue exposing `AVAudioPlayer`.
-  - Either keep the current boundary with explicit rationale, or replace it with a higher-level observation API.
+No backlog items currently tracked.
 
 ## In Progress
 
@@ -72,6 +69,13 @@ No task currently in progress.
   - `AudioPlayer` now applies typed reducer actions instead of mutating playback state through transition helpers.
   - Added focused reducer tests in `AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests.swift` for loading, ready, playing, paused, stopped, and finished transitions.
   - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests`.
+
+- [x] Revisit progress-tracking boundary
+  Notes:
+  - Removed the `AudioPlaybackEngine.getPlayer()` escape hatch so `AudioPlayer` no longer depends on the engine's internal `AVAudioPlayer`.
+  - Added engine-level `startProgressTracking` and `stopProgressTracking` entry points to keep progress observation behind the playback-engine boundary.
+  - Simplified `PlaybackProgressTracking` by removing the unused `duration` parameter and added focused engine tests for the new boundary.
+  - Verified with native `xcodebuild test -scheme AdaptiveMusicPlayer -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlaybackEngineTests -only-testing:AdaptiveMusicPlayerTests/PlaybackProgressTrackerTests`.
 
 ## Risks / Decisions
 

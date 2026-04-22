@@ -14,7 +14,6 @@ struct PlaybackProgressTrackerTests {
 
         tracker.startTracking(
             player: stalePlayer,
-            duration: 1,
             updateInterval: 1,
             onProgressUpdate: { _ in },
             onPlaybackFinished: { finishCount += 1 },
@@ -23,7 +22,6 @@ struct PlaybackProgressTrackerTests {
 
         tracker.startTracking(
             player: activePlayer,
-            duration: 1,
             updateInterval: 1,
             onProgressUpdate: { _ in },
             onPlaybackFinished: { finishCount += 1 },
@@ -44,7 +42,6 @@ struct PlaybackProgressTrackerTests {
 
         tracker.startTracking(
             player: player,
-            duration: 1,
             updateInterval: 1,
             onProgressUpdate: { _ in },
             onPlaybackFinished: { finishCount += 1 },

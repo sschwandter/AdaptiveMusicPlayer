@@ -15,7 +15,6 @@ protocol PlaybackProgressTracking {
     ///   - onPeriodicUpdate: Called periodically for other updates (e.g., sample rate display)
     func startTracking(
         player: AVAudioPlayer,
-        duration: Double,
         updateInterval: TimeInterval,
         onProgressUpdate: @escaping (Double) -> Void,
         onPlaybackFinished: @escaping () -> Void,
@@ -47,7 +46,6 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
 
     func startTracking(
         player: AVAudioPlayer,
-        duration: Double,
         updateInterval: TimeInterval,
         onProgressUpdate: @escaping (Double) -> Void,
         onPlaybackFinished: @escaping () -> Void,

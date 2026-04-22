@@ -214,9 +214,28 @@ final class AudioPlaybackEngine {
         await sampleRateManager.getCurrentDeviceInfo()
     }
 
-    /// Expose the active player to the progress tracker
-    /// This keeps progress tracking separate, but still couples the engine to AVAudioPlayer.
-    func getPlayer() -> AVAudioPlayer? {
-        player
+    // MARK: - Progress Tracking
+
+    /// Start observing playback progress through the engine boundary rather than exposing `AVAudioPlayer`.
+    func startProgressTracking(
+        using tracker: PlaybackProgressTracking,
+        updateInterval: TimeInterval,
+        onProgressUpdate: @escaping (Double) -> Void,
+        onPlaybackFinished: @escaping () -> Void,
+        onPeriodicUpdate: @escaping () -> Void
+    ) {
+        guard let player else { return }
+
+        tracker.startTracking(
+            player: player,
+            updateInterval: updateInterval,
+            onProgressUpdate: onProgressUpdate,
+            onPlaybackFinished: onPlaybackFinished,
+            onPeriodicUpdate: onPeriodicUpdate
+        )
+    }
+
+    func stopProgressTracking(using tracker: PlaybackProgressTracking) {
+        tracker.stopTracking()
     }
 }

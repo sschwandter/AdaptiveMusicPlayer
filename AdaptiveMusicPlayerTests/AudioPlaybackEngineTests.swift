@@ -37,4 +37,40 @@ struct AudioPlaybackEngineTests {
         #expect(playingAudioInfo == loadedAudioInfo)
         #expect(engine.state.isPlaying == true)
     }
+
+    @Test("Progress tracking stays behind the engine boundary")
+    func progressTrackingUsesLoadedPlayerWithoutExposingIt() async throws {
+        let stubPlayer = try StubAudioPlayer()
+        let tracker = RecordingPlaybackProgressTracker()
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100, player: stubPlayer),
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+
+        engine.startProgressTracking(
+            using: tracker,
+            updateInterval: 0.25,
+            onProgressUpdate: { _ in },
+            onPlaybackFinished: {},
+            onPeriodicUpdate: {}
+        )
+
+        #expect(tracker.trackedPlayer === stubPlayer)
+        #expect(tracker.updateInterval == 0.25)
+    }
+
+    @Test("Stopping progress tracking delegates to the tracker")
+    func stopProgressTrackingDelegatesToTracker() async throws {
+        let engine = AudioPlaybackEngine(
+            loadFileUseCase: StubLoadFileUseCase(sampleRate: 44_100),
+            sampleRateManager: StubSampleRateManager()
+        )
+        let tracker = RecordingPlaybackProgressTracker()
+
+        engine.stopProgressTracking(using: tracker)
+
+        #expect(tracker.stopCallCount == 1)
+    }
 }
