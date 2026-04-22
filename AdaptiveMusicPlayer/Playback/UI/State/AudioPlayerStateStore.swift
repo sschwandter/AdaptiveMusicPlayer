@@ -1,8 +1,6 @@
 import Foundation
-import Observation
 
 @MainActor
-@Observable
 final class AudioPlayerStateStore {
     private(set) var screenState = PlayerScreenState()
     var currentTime: Double = 0

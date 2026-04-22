@@ -439,32 +439,41 @@ Update this section during implementation.
   - Verified with:
     `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
 
+- [x] Phase 4: Extract playback workflow
+  Notes:
+  - Added `Playback/UI/Workflow/AudioPlayerPlaybackWorkflow.swift`.
+  - Moved playback startup, pause, stop, seek, skip, sample-rate sync, progress tracking, and playback-finished behavior out of `AudioPlayer`.
+  - Kept `PlaybackStartupCoordinator` as the startup lifecycle helper underneath the playback workflow.
+  - Removed `@Observable` from `AudioPlayerStateStore` so `AudioPlayer` remains the only observable public surface, matching the plan recommendation.
+  - Verified with:
+    `xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests/AudioPlayerTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerFolderLoadingTests -only-testing:AdaptiveMusicPlayerTests/AudioPlayerLoadCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/PlaybackStartupCoordinatorTests -only-testing:AdaptiveMusicPlayerTests/ContentViewStatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerStatusPresenterTests -only-testing:AdaptiveMusicPlayerTests/SampleRatePresenterTests -only-testing:AdaptiveMusicPlayerTests/PlayerScreenStateReducerTests -derivedDataPath /tmp/AdaptiveMusicPlayerDerivedData`
+
 ## First Concrete Task
 
-Next implementation target is Phase 4 only.
+Next implementation target is Phase 5 only.
 
 Implementation target:
 
-- create `AudioPlayerPlaybackWorkflow`
-- move playback startup, pause, stop, seek, skip, progress tracking, and playback-finished behavior into it
-- keep the load workflow unchanged during this step
-- keep hardware observation in `AudioPlayer` unless it clearly becomes part of the playback extraction
+- create `AudioPlayerHardwareMonitor`
+- move hardware observer startup logic out of `AudioPlayer.init`
+- move `refreshHardwareInfo`
+- wire periodic refreshes and startup refreshes through the hardware monitor
 
-Do not combine Phase 4 with the hardware-monitor extraction. That would widen the failure surface too much.
+Do not combine Phase 5 with final facade cleanup. That would widen the failure surface too much.
 
 ## Open Questions
 
 - Should `AudioPlayerStateStore` itself be `@Observable`, or should only `AudioPlayer` remain observable and forward properties from the store?
-  Current recommendation:
-  keep only `AudioPlayer` as the observable public object during the refactor.
+  Answer:
+  keep only `AudioPlayer` as the observable public object during the refactor. `@Observable` was removed from `AudioPlayerStateStore` in Phase 4.
 
 - Should adjacent-track autoplay live in load workflow or playback workflow?
-  Current recommendation:
+  Answer:
   keep track-loading mechanics in load workflow and let playback workflow own only actual playback startup and progress.
 
 - Should `synchronizeSampleRates()` be treated as playback workflow or hardware monitor behavior?
-  Current recommendation:
-  keep it in playback workflow because it is initiated as a playback action and depends on loaded-file context.
+  Answer:
+  keep it in playback workflow because it is initiated as a playback action and depends on loaded-file context. Implemented in Phase 4.
 
 ## Notes
 
