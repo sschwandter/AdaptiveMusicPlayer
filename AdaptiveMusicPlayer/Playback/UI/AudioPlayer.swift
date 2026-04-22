@@ -141,7 +141,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
     private enum Constants {
         static let progressUpdateInterval: TimeInterval = 0.1  // seconds
-        static let sampleRateTolerance: Double = 1.0  // Hz
     }
 
     // MARK: - Presentation State
@@ -190,6 +189,21 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         playbackStartupTask != nil
     }
 
+    private var sampleRatePresentation: SampleRatePresentationOutput {
+        SampleRatePresenter().build(
+            from: SampleRatePresentationInput(
+                fileSampleRate: fileSampleRate,
+                hardwareSampleRate: hardwareSampleRate,
+                hardwareDeviceName: hardwareDeviceName,
+                supportedHardwareSampleRates: supportedHardwareSampleRates,
+                hasError: hasError,
+                statusMessage: statusMessage,
+                isPlaying: isPlaying,
+                isAttemptingPlaybackStart: isAttemptingPlaybackStart
+            )
+        )
+    }
+
     var contentViewState: ContentViewState {
         let hasLoadedFile = currentDisplayTitle != nil
         let transport = TransportControlsPresentation(
@@ -225,141 +239,35 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
     }
 
     var hasSampleRateMismatch: Bool {
-        guard fileSampleRate > 0 && hardwareSampleRate > 0 else { return false }
-        return abs(fileSampleRate - hardwareSampleRate) > Constants.sampleRateTolerance
+        sampleRatePresentation.hasMismatch
     }
 
     var hardwareDeviceDisplayName: String {
-        hardwareDeviceName.isEmpty ? "Unknown output" : hardwareDeviceName
+        sampleRatePresentation.hardwareDeviceDisplayName
     }
 
     var supportedHardwareSampleRatesDescription: String {
-        guard !supportedHardwareSampleRates.isEmpty else { return "Unavailable" }
-        return supportedHardwareSampleRates
-            .map(Self.formatSampleRate)
-            .joined(separator: ", ")
+        sampleRatePresentation.supportedHardwareSampleRatesDescription
     }
 
     var sampleRateBannerPresentation: SampleRateBannerPresentation {
-        if hasError {
-            return SampleRateBannerPresentation(
-                title: "Playback Error",
-                detail: nil,
-                iconName: "exclamationmark.triangle.fill",
-                helpText: statusMessage.isEmpty ? "Playback error" : statusMessage,
-                style: .error
-            )
-        }
-
-        guard fileSampleRate > 0 else {
-            return SampleRateBannerPresentation(
-                title: "No File Loaded",
-                detail: nil,
-                iconName: "waveform",
-                helpText: "Load a file to compare its sample rate with the active output device.",
-                style: .idle
-            )
-        }
-
-        guard hardwareSampleRate > 0 else {
-            return SampleRateBannerPresentation(
-                title: "Output Unknown",
-                detail: Self.formatSampleRate(fileSampleRate),
-                iconName: "speaker.slash.fill",
-                helpText: sampleRateStatusDetail,
-                style: .switching
-            )
-        }
-
-        if !isPlaying && !isAttemptingPlaybackStart && hasSampleRateMismatch {
-            return SampleRateBannerPresentation(
-                title: "Ready",
-                detail: Self.formatSampleRate(fileSampleRate),
-                iconName: "waveform",
-                helpText: "Press play to start playback and sync the output device if needed.",
-                style: .idle
-            )
-        }
-
-        if !hasSampleRateMismatch {
-            return SampleRateBannerPresentation(
-                title: "Matched",
-                detail: Self.formatSampleRate(fileSampleRate),
-                iconName: "checkmark.circle.fill",
-                helpText: sampleRateStatusDetail,
-                style: .matched
-            )
-        }
-
-        if deviceSupportsFileSampleRate {
-            return SampleRateBannerPresentation(
-                title: "Switching",
-                detail: sampleRateRouteDescription,
-                iconName: "arrow.triangle.2.circlepath.circle.fill",
-                helpText: sampleRateStatusDetail,
-                style: .switching
-            )
-        }
-
-        return SampleRateBannerPresentation(
-            title: "Unsupported Rate",
-            detail: sampleRateRouteDescription,
-            iconName: "exclamationmark.triangle.fill",
-            helpText: sampleRateStatusDetail,
-            style: .unsupported
-        )
+        sampleRatePresentation.banner
     }
 
     var sampleRateRouteDescription: String {
-        let fileRate = fileSampleRate > 0 ? Self.formatSampleRate(fileSampleRate) : "—"
-        let hardwareRate = hardwareSampleRate > 0 ? Self.formatSampleRate(hardwareSampleRate) : "—"
-        return "\(fileRate) -> \(hardwareRate)"
+        sampleRatePresentation.routeDescription
     }
 
     var compactSampleRateExplanation: String? {
-        guard fileSampleRate > 0 else { return nil }
-        guard hardwareSampleRate > 0 else {
-            return "Could not read the current hardware sample rate."
-        }
-        guard hasSampleRateMismatch else { return nil }
-
-        if !deviceSupportsFileSampleRate {
-            return "\(hardwareDeviceDisplayName) does not advertise \(Self.formatSampleRate(fileSampleRate))."
-        }
-
-        return "\(hardwareDeviceDisplayName) supports \(Self.formatSampleRate(fileSampleRate)), but has not switched yet."
+        sampleRatePresentation.compactExplanation
     }
 
     var showsSupportedRatesHint: Bool {
-        fileSampleRate > 0 && (hasSampleRateMismatch || supportedHardwareSampleRates.isEmpty)
+        sampleRatePresentation.showsSupportedRatesHint
     }
 
     var sampleRateStatusDetail: String {
-        guard fileSampleRate > 0 else {
-            return "Load a file to compare its sample rate with the active output device."
-        }
-
-        let deviceName = hardwareDeviceDisplayName
-        guard hardwareSampleRate > 0 else {
-            return "Could not read the current sample rate for \(deviceName)."
-        }
-
-        if !hasSampleRateMismatch {
-            return "Matched on \(deviceName). Playback is running at the file's native rate."
-        }
-
-        if !supportedHardwareSampleRates.isEmpty &&
-            !Self.sampleRate(fileSampleRate, isWithin: supportedHardwareSampleRates)
-        {
-            return "\(deviceName) does not advertise support for \(Self.formatSampleRate(fileSampleRate)). Supported rates: \(supportedHardwareSampleRatesDescription)."
-        }
-
-        return "\(deviceName) supports \(Self.formatSampleRate(fileSampleRate)), but the hardware is still at \(Self.formatSampleRate(hardwareSampleRate)). Playback will be resampled until the device switches."
-    }
-
-    private var deviceSupportsFileSampleRate: Bool {
-        !supportedHardwareSampleRates.isEmpty &&
-        Self.sampleRate(fileSampleRate, isWithin: supportedHardwareSampleRates)
+        sampleRatePresentation.statusDetail
     }
 
     // MARK: - Dependencies
@@ -606,7 +514,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
             if hasSampleRateMismatch {
                 showError(.sampleRateSyncFailed(sampleRateStatusDetail))
             } else {
-                setStatusMessage("Hardware sample rate set to \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
+                setStatusMessage("Hardware sample rate set to \(SampleRatePresenter.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
             }
         } catch let error as PlaybackError {
             showError(error)
@@ -869,7 +777,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         if hasSampleRateMismatch {
             setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
+            setStatusMessage("\(prefix) at \(SampleRatePresenter.formatSampleRate(audioInfo.sampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
@@ -882,7 +790,7 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
         if hasSampleRateMismatch {
             setStatusMessage("\(prefix) — \(sampleRateStatusDetail)")
         } else {
-            setStatusMessage("\(prefix) at \(Self.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
+            setStatusMessage("\(prefix) at \(SampleRatePresenter.formatSampleRate(fileSampleRate)) on \(hardwareDeviceDisplayName)")
         }
     }
 
@@ -908,18 +816,6 @@ final class AudioPlayer: @unchecked Sendable { // Safe: all access serialized on
 
         screenState.loading = .idle
         screenState.status = StatusPresentationState(kind: message.isEmpty ? .neutral : .info, message: message)
-    }
-
-    private static func formatSampleRate(_ sampleRate: Double) -> String {
-        let kilohertz = sampleRate / 1000
-        if abs(kilohertz.rounded() - kilohertz) < 0.05 {
-            return "\(Int(kilohertz.rounded())) kHz"
-        }
-        return String(format: "%.1f kHz", kilohertz)
-    }
-
-    private static func sampleRate(_ target: Double, isWithin supportedRates: [Double]) -> Bool {
-        supportedRates.contains { abs($0 - target) <= Constants.sampleRateTolerance }
     }
 
     private var currentAudioInfo: AudioInfo? {
