@@ -91,6 +91,7 @@ final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
     private(set) var trackedPlayer: AVAudioPlayer?
     private(set) var updateInterval: TimeInterval?
     private(set) var stopCallCount = 0
+    private(set) var streamContinuation: AsyncStream<ProgressEvent>.Continuation?
 
     func startTracking(
         player: AVAudioPlayer,
@@ -105,6 +106,23 @@ final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
 
     func stopTracking() {
         stopCallCount += 1
+    }
+
+    func trackProgressStream(
+        player: AVAudioPlayer?,
+        updateInterval: TimeInterval,
+        continuation: AsyncStream<ProgressEvent>.Continuation
+    ) async {
+        trackedPlayer = player
+        self.updateInterval = updateInterval
+        streamContinuation = continuation
+        
+        // Keep the stream alive until cancelled
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        
+        continuation.finish()
     }
 }
 

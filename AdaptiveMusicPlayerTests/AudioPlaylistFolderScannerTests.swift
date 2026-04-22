@@ -6,7 +6,7 @@ import Foundation
 struct AudioPlaylistFolderScannerTests {
 
     @Test("Recursively scans folders, keeps playable files, and sorts by full path")
-    func scansRecursivelyAndSortsByPath() throws {
+    func scansRecursivelyAndSortsByPath() async throws {
         let rootFolder = try TemporaryFolder.make()
         defer { try? TemporaryFolder.remove(rootFolder) }
 
@@ -27,7 +27,7 @@ struct AudioPlaylistFolderScannerTests {
 
         let scanner = AudioPlaylistFolderScanner()
 
-        let result = try scanner.scan(folderURL: rootFolder)
+        let result = try await scanner.scan(folderURL: rootFolder)
 
         #expect(
             result.map(canonicalTestFileURL) ==
@@ -36,7 +36,7 @@ struct AudioPlaylistFolderScannerTests {
     }
 
     @Test("Rejects file URLs instead of folders")
-    func rejectsNonDirectoryURLs() throws {
+    func rejectsNonDirectoryURLs() async throws {
         let rootFolder = try TemporaryFolder.make()
         defer { try? TemporaryFolder.remove(rootFolder) }
 
@@ -45,13 +45,13 @@ struct AudioPlaylistFolderScannerTests {
 
         let scanner = AudioPlaylistFolderScanner()
 
-        #expect(throws: AudioPlaylistFolderScannerError.notADirectory(fileURL)) {
-            try scanner.scan(folderURL: fileURL)
+        await #expect(throws: AudioPlaylistFolderScannerError.notADirectory(fileURL)) {
+            try await scanner.scan(folderURL: fileURL)
         }
     }
 
     @Test("Separates recursion from filtering so selection logic stays unit testable")
-    func supportsInjectedEnumerationAndFiltering() throws {
+    func supportsInjectedEnumerationAndFiltering() async throws {
         let rootFolder = try TemporaryFolder.make()
         defer { try? TemporaryFolder.remove(rootFolder) }
 
@@ -65,7 +65,7 @@ struct AudioPlaylistFolderScannerTests {
             audioFileClassifier: classifier
         )
 
-        let result = try scanner.scan(folderURL: rootFolder)
+        let result = try await scanner.scan(folderURL: rootFolder)
 
         #expect(
             result.map(canonicalTestFileURL) ==

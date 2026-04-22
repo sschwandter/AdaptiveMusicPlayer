@@ -1,9 +1,11 @@
 import Foundation
+import AsyncAlgorithms
 
 @MainActor
 final class AudioPlayerSessionController {
     private enum Constants {
         static let progressUpdateInterval: TimeInterval = 0.1
+        static let hardwareRefreshInterval: Duration = .seconds(5)
     }
 
     private let stateStore: AudioPlayerStateStore
@@ -15,6 +17,10 @@ final class AudioPlayerSessionController {
     private let screenStateReducer: PlayerScreenStateReducer
     private let refreshHardwareInfo: @MainActor () async -> Void
     private let currentVolume: @MainActor () -> Double
+
+    // AsyncStream progress tracking tasks
+    private var progressTrackingTask: Task<Void, Never>?
+    private var hardwareRefreshTask: Task<Void, Never>?
 
     init(
         stateStore: AudioPlayerStateStore,
@@ -334,33 +340,57 @@ final class AudioPlayerSessionController {
     }
 
     private func startProgressTracking() {
-        engine.startProgressTracking(
-            using: progressTracker,
-            updateInterval: Constants.progressUpdateInterval,
-            onProgressUpdate: { [weak self] time in
-                self?.stateStore.currentTime = time
-            },
-            onPlaybackFinished: { [weak self] in
-                guard let self else { return }
-                if !self.loadAdjacentTrack(next: true, autoplay: true) {
-                    let audioInfo = self.engine.markFinished()
-                    self.applyScreenStateAction(.finished(audioInfo))
-                    self.stateStore.currentTime = self.stateStore.duration
-                    self.applyStatusPresentation(
-                        self.statusPresenter.presentInfo(message: "Playback finished")
-                    )
-                }
-            },
-            onPeriodicUpdate: { [weak self] in
-                Task {
-                    await self?.refreshHardwareInfo()
+        // Cancel any existing tracking
+        stopProgressTracking()
+
+        // Start hardware refresh task (separate from progress tracking)
+        hardwareRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshHardwareInfo()
+                try? await Task.sleep(for: Constants.hardwareRefreshInterval)
+            }
+        }
+
+        // Start progress tracking with debounced updates using AsyncAlgorithms
+        progressTrackingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            // Use debounced progress stream for UI efficiency (500ms debounce)
+            let progressStream = self.engine.trackProgressDebounced(
+                using: self.progressTracker,
+                updateInterval: Constants.progressUpdateInterval,
+                debounceInterval: .milliseconds(500)
+            )
+
+            for await event in progressStream {
+                switch event {
+                case .progress(let time):
+                    self.stateStore.currentTime = time
+
+                case .finished:
+                    await self.handlePlaybackFinished()
                 }
             }
-        )
+        }
     }
 
     private func stopProgressTracking() {
-        engine.stopProgressTracking(using: progressTracker)
+        progressTrackingTask?.cancel()
+        progressTrackingTask = nil
+        hardwareRefreshTask?.cancel()
+        hardwareRefreshTask = nil
+        progressTracker.stopTracking()
+    }
+
+    private func handlePlaybackFinished() async {
+        if !loadAdjacentTrack(next: true, autoplay: true) {
+            let audioInfo = engine.markFinished()
+            applyScreenStateAction(.finished(audioInfo))
+            stateStore.currentTime = stateStore.duration
+            applyStatusPresentation(
+                statusPresenter.presentInfo(message: "Playback finished")
+            )
+        }
     }
 
 private func showReadyStatus(for audioInfo: AudioInfo) {

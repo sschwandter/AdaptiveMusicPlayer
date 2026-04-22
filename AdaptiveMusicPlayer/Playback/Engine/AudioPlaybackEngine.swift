@@ -1,5 +1,12 @@
 import Foundation
 import AVFoundation
+import AsyncAlgorithms
+
+/// Events emitted during playback progress tracking
+enum ProgressEvent: Sendable {
+    case progress(Double)  // Current playback time
+    case finished          // Playback reached end
+}
 
 /// Stateful playback coordinator around AVAudioPlayer
 /// Owns playback state and delegates smaller operations to focused operation types
@@ -239,26 +246,59 @@ func loadFile(from url: URL) async throws -> AudioInfo {
 
     // MARK: - Progress Tracking
 
-    /// Start observing playback progress through the engine boundary rather than exposing `AVAudioPlayer`.
-    func startProgressTracking(
+    /// Returns an AsyncStream of progress events for the current playback.
+    /// The stream yields `.progress` events at the specified interval and a `.finished` event when playback completes.
+    /// - Parameters:
+    ///   - tracker: The progress tracker to use
+    ///   - updateInterval: How often to check progress (in seconds)
+    ///   - debounceInterval: Optional debounce interval for progress updates (defaults to 0.5s for UI efficiency)
+    /// - Returns: An AsyncStream of ProgressEvent values
+    func trackProgress(
         using tracker: PlaybackProgressTracking,
         updateInterval: TimeInterval,
-        onProgressUpdate: @escaping (Double) -> Void,
-        onPlaybackFinished: @escaping () -> Void,
-        onPeriodicUpdate: @escaping () -> Void
-    ) {
-        guard let player else { return }
+        debounceInterval: Duration = .milliseconds(500)
+    ) -> AsyncStream<ProgressEvent> {
+        AsyncStream { continuation in
+            let task = Task { @MainActor in
+                await tracker.trackProgressStream(
+                    player: self.player,
+                    updateInterval: updateInterval,
+                    continuation: continuation
+                )
+            }
 
-        tracker.startTracking(
-            player: player,
-            updateInterval: updateInterval,
-            onProgressUpdate: onProgressUpdate,
-            onPlaybackFinished: onPlaybackFinished,
-            onPeriodicUpdate: onPeriodicUpdate
-        )
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 
-    func stopProgressTracking(using tracker: PlaybackProgressTracking) {
-        tracker.stopTracking()
+    /// Returns a debounced AsyncStream of progress events for UI updates.
+    /// Use this for UI-bound progress updates to reduce re-renders.
+    func trackProgressDebounced(
+        using tracker: PlaybackProgressTracking,
+        updateInterval: TimeInterval = 0.1,
+        debounceInterval: Duration = .milliseconds(500)
+    ) -> AsyncStream<ProgressEvent> {
+        let baseStream = trackProgress(using: tracker, updateInterval: updateInterval)
+
+        return AsyncStream { continuation in
+            let task = Task { @MainActor in
+                // Use AsyncAlgorithms debounce for efficient UI updates
+                let debounced = baseStream.debounce(for: debounceInterval)
+
+                for await event in debounced {
+                    continuation.yield(event)
+                    if case .finished = event {
+                        continuation.finish()
+                        break
+                    }
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 }

@@ -23,6 +23,17 @@ protocol PlaybackProgressTracking {
 
     /// Stop tracking playback progress
     func stopTracking()
+
+    /// Track progress as an AsyncStream for modern Swift concurrency.
+    /// - Parameters:
+    ///   - player: The AVAudioPlayer to track
+    ///   - updateInterval: How often to check progress (in seconds)
+    ///   - continuation: The AsyncStream continuation to yield events to
+    func trackProgressStream(
+        player: AVAudioPlayer?,
+        updateInterval: TimeInterval,
+        continuation: AsyncStream<ProgressEvent>.Continuation
+    ) async
 }
 
 /// Tracks audio playback progress using timer-based polling and delegate for finish detection
@@ -89,6 +100,70 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         trackedPlayer?.delegate = nil
         trackedPlayer = nil
         trackedPlayerID = nil
+    }
+
+    func trackProgressStream(
+        player: AVAudioPlayer?,
+        updateInterval: TimeInterval,
+        continuation: AsyncStream<ProgressEvent>.Continuation
+    ) async {
+        guard let player else {
+            continuation.finish()
+            return
+        }
+
+        // Weak reference to avoid retention cycles
+        weak var weakPlayer = player
+
+        // Use Timer.publish as an AsyncSequence for modern Swift concurrency
+        let timerSequence = Timer.publish(every: updateInterval, on: .main, in: .common)
+            .autoconnect()
+            .values
+
+        // Track if we've already finished to avoid duplicate events
+        var hasFinished = false
+
+        // Create a detached task to handle finish detection via delegate
+        let finishTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled && !hasFinished {
+                // Check if playback finished naturally (via currentTime >= duration)
+                if let p = weakPlayer, p.currentTime >= p.duration - 0.1 && p.currentTime > 0 {
+                    hasFinished = true
+                    continuation.yield(.finished)
+                    continuation.finish()
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
+        // Process timer updates
+        for await _ in timerSequence {
+            guard !Task.isCancelled, !hasFinished else { break }
+
+            guard let currentPlayer = weakPlayer else {
+                break
+            }
+
+            // Update current time from player
+            let currentTime = currentPlayer.currentTime
+            continuation.yield(.progress(currentTime))
+
+            // Trigger periodic updates (e.g., for hardware sample rate display)
+            timerTickCount += 1
+            if timerTickCount >= Constants.periodicUpdateTicks {
+                // Note: Periodic updates are handled separately by the consumer
+                // using AsyncAlgorithms timers or Task.sleep
+                timerTickCount = 0
+            }
+        }
+
+        finishTask.cancel()
+
+        // Ensure we finish the stream
+        if !hasFinished {
+            continuation.finish()
+        }
     }
 
     // MARK: - AVAudioPlayerDelegate

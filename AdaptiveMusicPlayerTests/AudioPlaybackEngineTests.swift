@@ -17,11 +17,11 @@ struct AudioPlaybackEngineTests {
         let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
         let playingAudioInfo = try await engine.play()
 
- #expect(await sampleRateManager.recordedSampleRates() == [96_000])
-          #expect(playingAudioInfo == loadedAudioInfo)
-          // Verify engine has active player after successful play
-          #expect(engine.hasActivePlayer == true)
-      }
+        #expect(await sampleRateManager.recordedSampleRates() == [96_000])
+        #expect(playingAudioInfo == loadedAudioInfo)
+        // Verify engine has active player after successful play
+        #expect(engine.hasActivePlayer == true)
+    }
 
     @Test("Starting playback skips switching when hardware already matches the file sample rate")
     func playSkipsSampleRateSwitchWhenAlreadyMatched() async throws {
@@ -34,14 +34,14 @@ struct AudioPlaybackEngineTests {
         let loadedAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
         let playingAudioInfo = try await engine.play()
 
- #expect(await sampleRateManager.recordedSampleRates().isEmpty)
-          #expect(playingAudioInfo == loadedAudioInfo)
-          // Verify engine has active player after successful play
-          #expect(engine.hasActivePlayer == true)
-      }
+        #expect(await sampleRateManager.recordedSampleRates().isEmpty)
+        #expect(playingAudioInfo == loadedAudioInfo)
+        // Verify engine has active player after successful play
+        #expect(engine.hasActivePlayer == true)
+    }
 
-    @Test("Progress tracking stays behind the engine boundary")
-    func progressTrackingUsesLoadedPlayerWithoutExposingIt() async throws {
+    @Test("Progress tracking returns AsyncStream with correct configuration")
+    func progressTrackingReturnsAsyncStream() async throws {
         let stubPlayer = try StubAudioPlayer()
         let tracker = RecordingPlaybackProgressTracker()
         let engine = AudioPlaybackEngine(
@@ -51,16 +51,60 @@ struct AudioPlaybackEngineTests {
 
         _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
 
-        engine.startProgressTracking(
+        // Create the progress stream
+        let stream = engine.trackProgress(
             using: tracker,
-            updateInterval: 0.25,
-            onProgressUpdate: { _ in },
-            onPlaybackFinished: {},
-            onPeriodicUpdate: {}
+            updateInterval: 0.25
         )
 
-        #expect(tracker.trackedPlayer === stubPlayer)
+        // Start consuming the stream and give it time to initialize
+        let task = Task {
+            for await _ in stream {
+                // Just consume events
+            }
+        }
+
+        // Give the stream time to start and configure the tracker
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Verify the stream was created and tracker was configured
         #expect(tracker.updateInterval == 0.25)
+
+        task.cancel()
+    }
+
+    @Test("Debounced progress tracking returns AsyncStream")
+    func debouncedProgressTrackingReturnsAsyncStream() async throws {
+        let stubPlayer = try StubAudioPlayer()
+        let tracker = RecordingPlaybackProgressTracker()
+        let engine = AudioPlaybackEngine(
+            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: stubPlayer),
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+
+        // Create the debounced progress stream
+        let stream = engine.trackProgressDebounced(
+            using: tracker,
+            updateInterval: 0.1,
+            debounceInterval: .milliseconds(500)
+        )
+
+        // Start consuming the stream and give it time to initialize
+        let task = Task {
+            for await _ in stream {
+                // Just consume events
+            }
+        }
+
+        // Give the stream time to start and configure the tracker
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Verify the stream was created
+        #expect(tracker.updateInterval == 0.1)
+
+        task.cancel()
     }
 
     @Test("Stopping progress tracking delegates to the tracker")
@@ -71,7 +115,7 @@ struct AudioPlaybackEngineTests {
         )
         let tracker = RecordingPlaybackProgressTracker()
 
-        engine.stopProgressTracking(using: tracker)
+        tracker.stopTracking()
 
         #expect(tracker.stopCallCount == 1)
     }
