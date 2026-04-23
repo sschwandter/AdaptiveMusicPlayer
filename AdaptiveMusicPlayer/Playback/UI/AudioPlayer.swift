@@ -96,74 +96,19 @@ private var sampleRatePresentation: SampleRatePresentationOutput {
         }
     }
 
-    // MARK: - File Loading
+    // MARK: - Commands
 
-    /// Starts a file load and enters loading state immediately.
-    /// A short delay can be requested to let the file importer dismiss first.
-    func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
-        sessionController.loadFile(url: url, importerDismissalDelay: importerDismissalDelay)
-    }
+    func send(_ command: AudioPlayerCommand) {
+        if case .revealCurrentTrackInFinder = command {
+            guard let currentTrackURL = stateStore.currentTrackURL else { return }
+            finderItemRevealer.revealItem(at: currentTrackURL)
+            return
+        }
 
-    func loadFolder(url: URL, importerDismissalDelay: Duration = .zero) {
-        sessionController.loadFolder(url: url, importerDismissalDelay: importerDismissalDelay)
-    }
-
-    /// Report a file selection error from the file picker
-    func reportFileSelectionError(_ message: String) {
-        sessionController.reportFileSelectionError(message)
+        sessionController.send(command)
     }
 
     func waitForCurrentLoad() async {
         await sessionController.waitForCurrentActivity()
-    }
-
-    func playNextTrack() {
-        _ = sessionController.loadAdjacentTrack(next: true, autoplay: true)
-    }
-
-    func playPreviousTrack() {
-        _ = sessionController.loadAdjacentTrack(next: false, autoplay: true)
-    }
-
-    func selectPlaylistTrack(at index: Int) {
-        sessionController.selectPlaylistTrack(
-            at: index,
-            shouldAutoplay: contentViewState.isPlaying || sessionController.isStartingPlayback
-        )
-    }
-
-    func showCurrentTrackInFinder() {
-        guard let currentTrackURL = stateStore.currentTrackURL else { return }
-        finderItemRevealer.revealItem(at: currentTrackURL)
-    }
-
-    // MARK: - Playback Control
-
-    func togglePlayPause() {
-        sessionController.togglePlayPause()
-    }
-
-    func stop() {
-        sessionController.stop()
-    }
-
-    // MARK: - Seeking
-
-    func seek(to time: Double) {
-        sessionController.seek(to: time)
-    }
-
-    func skipForward() {
-        sessionController.skipForward()
-    }
-
-    func skipBackward() {
-        sessionController.skipBackward()
-    }
-
-    // MARK: - Sample Rate Management
-
-    func synchronizeSampleRates() async {
-        await sessionController.synchronizeSampleRates()
     }
 }

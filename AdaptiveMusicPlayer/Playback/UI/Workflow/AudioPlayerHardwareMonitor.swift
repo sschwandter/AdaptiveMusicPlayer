@@ -26,6 +26,6 @@ final class AudioPlayerHardwareMonitor {
 
     func refreshHardwareInfo() async {
         let deviceInfo = await hardwareInfoProvider.getCurrentAudioDeviceInfo()
-        stateStore.setHardwareInfo(deviceInfo)
+        stateStore.dispatch(.hardwareInfoChanged(deviceInfo))
     }
 }

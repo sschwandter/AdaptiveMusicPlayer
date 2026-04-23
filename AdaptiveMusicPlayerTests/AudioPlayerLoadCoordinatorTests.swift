@@ -32,7 +32,7 @@ struct AudioPlayerLoadCoordinatorTests {
         let summaries = await recorder.summaries()
         #expect(summaries == [
             "playlist:1 of 1",
-            "begin:loadingTrack:Loading file...",
+            "trackLoading:1 of 1",
             "loaded:track.wav:false"
         ])
     }
@@ -98,8 +98,10 @@ actor LoadCoordinatorEventRecorder {
 
     func record(_ event: AudioPlayerLoadCoordinator.Event) {
         switch event {
-        case .beginLoading(let loadingState, let message):
-            summariesStorage.append("begin:\(String(describing: loadingState)):\(message)")
+        case .scanningFolderStarted:
+            summariesStorage.append("scanning")
+        case .trackLoadingStarted(let playlistSession):
+            summariesStorage.append("trackLoading:\(playlistSession.positionDescription)")
         case .playlistSessionUpdated(let playlistSession):
             summariesStorage.append("playlist:\(playlistSession.positionDescription)")
         case .trackLoaded(let url, _, let autoplayOnSuccess):

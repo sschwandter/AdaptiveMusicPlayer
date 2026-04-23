@@ -58,7 +58,7 @@ struct StartupTestContext {
     }
 
     func loadFirstFile() async {
-        player.loadFile(url: firstURL)
+        player.send(.loadFile(url: firstURL, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
     }
 

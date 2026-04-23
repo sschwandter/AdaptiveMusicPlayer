@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import AsyncAlgorithms
 
 /// Events emitted during playback progress tracking
 enum ProgressEvent: Sendable {
@@ -246,17 +245,10 @@ func loadFile(from url: URL) async throws -> AudioInfo {
 
     // MARK: - Progress Tracking
 
-    /// Returns an AsyncStream of progress events for the current playback.
-    /// The stream yields `.progress` events at the specified interval and a `.finished` event when playback completes.
-    /// - Parameters:
-    ///   - tracker: The progress tracker to use
-    ///   - updateInterval: How often to check progress (in seconds)
-    ///   - debounceInterval: Optional debounce interval for progress updates (defaults to 0.5s for UI efficiency)
-    /// - Returns: An AsyncStream of ProgressEvent values
+    /// Returns raw progress events for the current playback.
     func trackProgress(
         using tracker: PlaybackProgressTracking,
-        updateInterval: TimeInterval,
-        debounceInterval: Duration = .milliseconds(500)
+        updateInterval: TimeInterval
     ) -> AsyncStream<ProgressEvent> {
         AsyncStream { continuation in
             let task = Task { @MainActor in
@@ -265,35 +257,6 @@ func loadFile(from url: URL) async throws -> AudioInfo {
                     updateInterval: updateInterval,
                     continuation: continuation
                 )
-            }
-
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
-        }
-    }
-
-    /// Returns a debounced AsyncStream of progress events for UI updates.
-    /// Use this for UI-bound progress updates to reduce re-renders.
-    func trackProgressDebounced(
-        using tracker: PlaybackProgressTracking,
-        updateInterval: TimeInterval = 0.1,
-        debounceInterval: Duration = .milliseconds(500)
-    ) -> AsyncStream<ProgressEvent> {
-        let baseStream = trackProgress(using: tracker, updateInterval: updateInterval)
-
-        return AsyncStream { continuation in
-            let task = Task { @MainActor in
-                // Use AsyncAlgorithms debounce for efficient UI updates
-                let debounced = baseStream.debounce(for: debounceInterval)
-
-                for await event in debounced {
-                    continuation.yield(event)
-                    if case .finished = event {
-                        continuation.finish()
-                        break
-                    }
-                }
             }
 
             continuation.onTermination = { _ in

@@ -21,7 +21,7 @@ struct AudioPlayerFolderLoadingTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         #expect(player.contentViewState.currentTrackTitle == "track.wav")
@@ -44,10 +44,10 @@ struct AudioPlayerFolderLoadingTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
-        player.playNextTrack()
+        player.send(.navigatePlaylist(next: true, autoplay: true))
         await player.waitForCurrentLoad()
 
         #expect(player.contentViewState.currentTrackTitle == "02-second.wav")
@@ -72,7 +72,7 @@ struct AudioPlayerFolderLoadingTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         #expect(player.contentViewState.hasLoadedFile == false)
@@ -115,13 +115,13 @@ struct AudioPlayerFolderLoadingTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         #expect(player.contentViewState.playlist.tracks.first?.title == "Opening Track")
         #expect(player.contentViewState.playlist.tracks.last?.title == "02-second.wav")
 
-        player.selectPlaylistTrack(at: 1)
+        player.send(.selectPlaylistTrack(index: 1))
         await player.waitForCurrentLoad()
 
         // After selecting track, currentTrackTitle should be the display title "Finale"
@@ -149,8 +149,8 @@ struct AudioPlayerFolderLoadingTests {
             folderScanner: DelayedFolderScanner(delay: 0.15, tracks: [delayedTrack])
          )
 
-        player.loadFolder(url: rootFolder)
-        player.loadFile(url: replacementURL)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
+        player.send(.loadFile(url: replacementURL, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         #expect(player.contentViewState.currentTrackTitle == "replacement.wav")
@@ -182,7 +182,7 @@ struct AudioPlayerFolderLoadingTests {
             didObserveChange = true
         }
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         #expect(didObserveChange)

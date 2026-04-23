@@ -23,7 +23,7 @@ enum PlaybackPresentationState {
     }
 }
 
-enum LoadingPresentationState {
+enum LoadingPresentationState: Equatable {
     case idle
     case scanningFolder
     case loadingTrack

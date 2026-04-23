@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F8F1DA2F2F9A27C50042690C /* AsyncAlgorithms in Frameworks */ = {isa = PBXBuildFile; productRef = F859F5212F9958AB0042345F /* AsyncAlgorithms */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		F8C938C32EA40C9F00E18E93 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8F1DA2F2F9A27C50042690C /* AsyncAlgorithms in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -645,7 +650,6 @@
 			productName = AsyncAlgorithms;
 		};
 /* End XCSwiftPackageProductDependency section */
-
 	};
 	rootObject = F8C938AD2EA40C9E00E18E93 /* Project object */;
 }

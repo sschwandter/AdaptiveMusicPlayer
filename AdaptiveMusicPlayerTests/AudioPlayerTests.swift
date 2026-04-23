@@ -67,7 +67,7 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.togglePlayPause()
+        player.send(.togglePlayPause)
          #expect(player.contentViewState.isPlaying == false)
      }
 
@@ -78,7 +78,7 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.stop()
+        player.send(.stop)
          #expect(player.contentViewState.isPlaying == false)
          #expect(player.contentViewState.currentTime == 0)
      }
@@ -90,8 +90,8 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.skipForward()
-        player.skipBackward()
+        player.send(.skipForward)
+        player.send(.skipBackward)
 
          #expect(player.contentViewState.currentTime == 0)
          #expect(player.contentViewState.isPlaying == false)
@@ -104,10 +104,10 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.seek(to: 10.0)
+        player.send(.seek(to: 10.0))
          #expect(player.contentViewState.currentTime == 0)
 
-        player.seek(to: -5.0)
+        player.send(.seek(to: -5.0))
          #expect(player.contentViewState.currentTime == 0)
      }
 
@@ -121,7 +121,7 @@ struct AudioPlayerTests {
          #expect(player.contentViewState.hasLoadedFile == false)
 
         let invalidURL = URL(fileURLWithPath: "/nonexistent/file.mp3")
-        player.loadFile(url: invalidURL)
+        player.send(.loadFile(url: invalidURL, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
         // After loading fails, no file should be loaded
@@ -134,8 +134,8 @@ struct AudioPlayerTests {
         let context = try StartupTestContext(syncDelay: .milliseconds(100))
         await context.loadFirstFile()
 
-         context.player.togglePlayPause()
-         context.player.togglePlayPause()
+         context.player.send(.togglePlayPause)
+         context.player.send(.togglePlayPause)
          try await context.settleStartup(after: .milliseconds(250))
 
           #expect(context.player.contentViewState.isPlaying == false)
@@ -149,8 +149,8 @@ struct AudioPlayerTests {
         let context = try StartupTestContext(syncDelay: .milliseconds(200))
         await context.loadFirstFile()
 
-         context.player.togglePlayPause()
-         context.player.stop()
+         context.player.send(.togglePlayPause)
+         context.player.send(.stop)
          try await context.settleStartup(after: .milliseconds(350))
 
           #expect(context.player.contentViewState.isPlaying == false)
@@ -169,8 +169,8 @@ struct AudioPlayerTests {
          )
         await context.loadFirstFile()
 
-         context.player.togglePlayPause()
-         context.player.loadFile(url: try #require(context.secondURL))
+         context.player.send(.togglePlayPause)
+         context.player.send(.loadFile(url: try #require(context.secondURL), importerDismissalDelay: .zero))
          try await context.settleStartup(after: .milliseconds(400))
 
          // Second file should be loaded (not the first)
@@ -195,7 +195,7 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-         player.loadFile(url: URL(fileURLWithPath: "/tmp/tagged-song.mp3"))
+         player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/tagged-song.mp3"), importerDismissalDelay: .zero))
          await player.waitForCurrentLoad()
 
          // After loading, the display title from metadata should be used
@@ -219,9 +219,9 @@ struct AudioPlayerTests {
             finderItemRevealer: finderItemRevealer
          )
 
-        player.loadFile(url: url)
+        player.send(.loadFile(url: url, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
-        player.showCurrentTrackInFinder()
+        player.send(.revealCurrentTrackInFinder)
 
          #expect(
             finderItemRevealer.revealedURLs.map(canonicalTestFileURL) ==
@@ -253,11 +253,11 @@ struct AudioPlayerTests {
             finderItemRevealer: finderItemRevealer
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
-        player.selectPlaylistTrack(at: 1)
+        player.send(.selectPlaylistTrack(index: 1))
         await player.waitForCurrentLoad()
-        player.showCurrentTrackInFinder()
+        player.send(.revealCurrentTrackInFinder)
 
          #expect(
             finderItemRevealer.revealedURLs.map(canonicalTestFileURL) ==
@@ -274,7 +274,7 @@ struct AudioPlayerTests {
             finderItemRevealer: finderItemRevealer
          )
 
-        player.showCurrentTrackInFinder()
+        player.send(.revealCurrentTrackInFinder)
 
          #expect(finderItemRevealer.revealedURLs.isEmpty)
      }
@@ -290,7 +290,7 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFile(url: URL(fileURLWithPath: "/tmp/matched.wav"))
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/matched.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
          #expect(player.contentViewState.sampleRateBanner.title == "Matched")
@@ -315,7 +315,7 @@ struct AudioPlayerTests {
               )
           )
 
-        player.loadFile(url: URL(fileURLWithPath: "/tmp/switching.wav"))
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/switching.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
          #expect(player.contentViewState.sampleRateBanner.title == "Ready")
@@ -340,10 +340,10 @@ struct AudioPlayerTests {
                  )
               )
           )
-        player.loadFile(url: URL(fileURLWithPath: "/tmp/startup-switching.wav"))
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/startup-switching.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
-        player.togglePlayPause()
+        player.send(.togglePlayPause)
         try await waitUntil {
             player.contentViewState.sampleRateBanner.title == "Switching"
          }
@@ -363,7 +363,7 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFile(url: URL(fileURLWithPath: "/tmp/unsupported.wav"))
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/unsupported.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
          #expect(player.contentViewState.sampleRateBanner.title == "Ready")
@@ -396,11 +396,11 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFolder(url: rootFolder)
+        player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
-        player.togglePlayPause()
-        player.selectPlaylistTrack(at: 1)
+        player.send(.togglePlayPause)
+        player.send(.selectPlaylistTrack(index: 1))
         await player.waitForCurrentLoad()
         try await waitUntil(timeout: .seconds(3)) {
             player.contentViewState.currentTrackTitle == "02-second.wav" &&
@@ -428,10 +428,10 @@ struct AudioPlayerTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        player.loadFile(url: URL(fileURLWithPath: "/tmp/failing.wav"))
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/failing.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
-         player.togglePlayPause()
+         player.send(.togglePlayPause)
          await player.waitForCurrentLoad()
          try await Task.sleep(for: .milliseconds(20))
 

@@ -5,11 +5,13 @@ import Observation
 @Observable
 final class AudioPlayerStateStore {
     private(set) var sessionState = AudioPlayerSessionState()
+    private let reducer: AudioPlayerSessionReducer
 
-    var currentTime: Double {
-        get { sessionState.currentTime }
-        set { sessionState.currentTime = newValue }
+    init(reducer: AudioPlayerSessionReducer = AudioPlayerSessionReducer()) {
+        self.reducer = reducer
     }
+
+    var currentTime: Double { sessionState.currentTime }
     var duration: Double { sessionState.duration }
     var statusMessage: String { sessionState.statusMessage }
     var hasError: Bool { sessionState.hasError }
@@ -21,46 +23,11 @@ final class AudioPlayerStateStore {
     var supportedHardwareSampleRates: [Double] { sessionState.supportedHardwareSampleRates }
     var isLoading: Bool { sessionState.isLoading }
     var isPlaying: Bool { sessionState.isPlaying }
-    var playlistSession: PlaylistSession? {
-        get { sessionState.playlistSession }
-        set { sessionState.playlistSession = newValue }
-    }
+    var playlistSession: PlaylistSession? { sessionState.playlistSession }
     var currentTrackURL: URL? { sessionState.currentTrackURL }
     var currentAudioInfo: AudioInfo? { sessionState.currentAudioInfo }
 
-    func recordLoadedTrack(_ audioInfo: AudioInfo, for trackURL: URL) {
-        sessionState.recordLoadedTrack(audioInfo, for: trackURL)
-    }
-
-    func setHardwareInfo(_ deviceInfo: AudioDeviceInfo?) {
-        if let deviceInfo {
-            sessionState.hardware = HardwarePresentationState(
-                deviceName: deviceInfo.name,
-                currentSampleRate: deviceInfo.currentSampleRate,
-                supportedSampleRates: deviceInfo.supportedSampleRates
-            )
-        } else {
-            sessionState.hardware = HardwarePresentationState()
-        }
-    }
-
-    func setLoadingState(_ loadingState: LoadingPresentationState) {
-        sessionState.activity = loadingState
-    }
-
-    func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
-        sessionState.activity = output.loading
-        sessionState.status = output.status
-
-        if let playbackOverride = output.playbackOverride {
-            sessionState.playback = playbackOverride
-        }
-    }
-
-    func applyScreenStateAction(
-        _ action: PlayerScreenStateReducer.Action,
-        reducer: PlayerScreenStateReducer
-    ) {
+    func dispatch(_ action: AudioPlayerAction) {
         sessionState = reducer.reduce(
             state: sessionState,
             action: action

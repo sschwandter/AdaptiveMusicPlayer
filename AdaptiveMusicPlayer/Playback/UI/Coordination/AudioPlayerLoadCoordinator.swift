@@ -3,10 +3,8 @@ import Foundation
 @MainActor
 final class AudioPlayerLoadCoordinator {
     enum Event {
-        case beginLoading(
-            loadingState: LoadingPresentationState,
-            message: String
-        )
+        case scanningFolderStarted
+        case trackLoadingStarted(PlaylistSession)
         case playlistSessionUpdated(PlaylistSession)
         case trackLoaded(
             url: URL,
@@ -38,12 +36,7 @@ final class AudioPlayerLoadCoordinator {
     ) {
         startNewLoad(handleEvent: handleEvent) { run in
             await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(
-                .beginLoading(
-                    loadingState: .loadingTrack,
-                    message: Self.loadingMessage(for: playlistSession)
-                )
-            )
+            await handleEvent(.trackLoadingStarted(playlistSession))
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
@@ -73,12 +66,7 @@ final class AudioPlayerLoadCoordinator {
 
         startNewLoad(handleEvent: handleEvent) { run in
             await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(
-                .beginLoading(
-                    loadingState: .loadingTrack,
-                    message: Self.loadingMessage(for: playlistSession)
-                )
-            )
+            await handleEvent(.trackLoadingStarted(playlistSession))
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
@@ -104,12 +92,7 @@ final class AudioPlayerLoadCoordinator {
         handleEvent: @escaping @MainActor (Event) async -> Void
     ) {
         startNewLoad(handleEvent: handleEvent) { run in
-            await handleEvent(
-                .beginLoading(
-                    loadingState: .scanningFolder,
-                    message: "Scanning folder..."
-                )
-            )
+            await handleEvent(.scanningFolderStarted)
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
@@ -133,12 +116,7 @@ final class AudioPlayerLoadCoordinator {
             }
 
             await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(
-                .beginLoading(
-                    loadingState: .loadingTrack,
-                    message: Self.loadingMessage(for: playlistSession)
-                )
-            )
+            await handleEvent(.trackLoadingStarted(playlistSession))
 
             let audioInfo = try await loadTrack(playlistSession.currentTrackURL)
             try self.ensureLoadRemainsCurrent(run)
@@ -193,9 +171,4 @@ final class AudioPlayerLoadCoordinator {
         try run.ensureCurrent()
     }
 
-    private static func loadingMessage(for playlistSession: PlaylistSession) -> String {
-        playlistSession.trackCount > 1
-            ? "Loading track \(playlistSession.positionDescription)..."
-            : "Loading file..."
-    }
 }

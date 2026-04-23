@@ -14,7 +14,6 @@ final class AudioPlayerSessionController {
     private let loadCoordinator: AudioPlayerLoadCoordinator
     private let startupCoordinator: PlaybackStartupCoordinator
     private let statusPresenter: PlayerStatusPresenter
-    private let screenStateReducer: PlayerScreenStateReducer
     private let refreshHardwareInfo: @MainActor () async -> Void
     private let currentVolume: @MainActor () -> Double
 
@@ -30,8 +29,7 @@ final class AudioPlayerSessionController {
         startupCoordinator: PlaybackStartupCoordinator = PlaybackStartupCoordinator(),
         refreshHardwareInfo: @escaping @MainActor () async -> Void,
         currentVolume: @escaping @MainActor () -> Double,
-        statusPresenter: PlayerStatusPresenter = PlayerStatusPresenter(),
-        screenStateReducer: PlayerScreenStateReducer = PlayerScreenStateReducer()
+        statusPresenter: PlayerStatusPresenter = PlayerStatusPresenter()
     ) {
         self.stateStore = stateStore
         self.engine = engine
@@ -41,7 +39,6 @@ final class AudioPlayerSessionController {
         self.refreshHardwareInfo = refreshHardwareInfo
         self.currentVolume = currentVolume
         self.statusPresenter = statusPresenter
-        self.screenStateReducer = screenStateReducer
     }
 
     var isStartingPlayback: Bool {
@@ -53,11 +50,41 @@ final class AudioPlayerSessionController {
         await startupCoordinator.waitForCurrentStartup()
     }
 
-    func reportFileSelectionError(_ message: String) {
-        presentError(.loadFailed(message))
+    func send(_ command: AudioPlayerCommand) {
+        switch command {
+        case .loadFile(let url, let importerDismissalDelay):
+            loadFile(url: url, importerDismissalDelay: importerDismissalDelay)
+        case .loadFolder(let url, let importerDismissalDelay):
+            loadFolder(url: url, importerDismissalDelay: importerDismissalDelay)
+        case .reportFileSelectionError(let message):
+            showError(.loadFailed(message))
+        case .togglePlayPause:
+            togglePlayPause()
+        case .stop:
+            stop()
+        case .seek(let time):
+            seek(to: time)
+        case .skipForward:
+            skipForward()
+        case .skipBackward:
+            skipBackward()
+        case .navigatePlaylist(let next, let autoplay):
+            _ = loadAdjacentTrack(next: next, autoplay: autoplay)
+        case .selectPlaylistTrack(let index):
+            selectPlaylistTrack(
+                at: index,
+                shouldAutoplay: stateStore.isPlaying || isStartingPlayback
+            )
+        case .revealCurrentTrackInFinder:
+            dispatch(.commandIgnored(.notReady))
+        case .synchronizeSampleRates:
+            Task { @MainActor [weak self] in
+                await self?.synchronizeSampleRates()
+            }
+        }
     }
 
-    func loadFile(url: URL, importerDismissalDelay: Duration = .zero) {
+    private func loadFile(url: URL, importerDismissalDelay: Duration) {
         guard let playlistSession = PlaylistSession.singleTrack(url) else { return }
 
         loadCoordinator.loadFile(
@@ -73,7 +100,7 @@ final class AudioPlayerSessionController {
         )
     }
 
-    func loadFolder(url: URL, importerDismissalDelay: Duration = .zero) {
+    private func loadFolder(url: URL, importerDismissalDelay: Duration) {
         loadCoordinator.loadFolder(
             url: url,
             importerDismissalDelay: importerDismissalDelay,
@@ -87,7 +114,7 @@ final class AudioPlayerSessionController {
     }
 
     @discardableResult
-    func loadAdjacentTrack(next: Bool, autoplay: Bool = false) -> Bool {
+    private func loadAdjacentTrack(next: Bool, autoplay: Bool = false) -> Bool {
         guard let playlistSession = stateStore.playlistSession else { return false }
 
         let nextPlaylistSession = next
@@ -103,7 +130,7 @@ final class AudioPlayerSessionController {
         return true
     }
 
-    func selectPlaylistTrack(at index: Int, shouldAutoplay: Bool) {
+    private func selectPlaylistTrack(at index: Int, shouldAutoplay: Bool) {
         guard let playlistSession = stateStore.playlistSession,
               playlistSession.currentIndex != index,
               let nextPlaylistSession = playlistSession.movingToTrack(at: index) else { return }
@@ -114,7 +141,7 @@ final class AudioPlayerSessionController {
         )
     }
 
-    func togglePlayPause() {
+    private func togglePlayPause() {
         if stateStore.isPlaying || isStartingPlayback {
             pause()
         } else {
@@ -122,40 +149,41 @@ final class AudioPlayerSessionController {
         }
     }
 
-    func stop() {
+    private func stop() {
         _ = cancelPendingPlaybackStart()
         let audioInfo = engine.stop()
-        applyScreenStateAction(.stopped(preservedAudioInfo: audioInfo))
         stopProgressTracking()
-        stateStore.currentTime = 0
-        applyStatusPresentation(statusPresenter.presentInfo(message: "Stopped"))
+        dispatch(.playbackStopped(preservedAudioInfo: audioInfo))
     }
 
-    func seek(to time: Double) {
+    private func seek(to time: Double) {
         do {
             let newTime = try engine.seek(to: time)
-            stateStore.currentTime = newTime
+            dispatch(.progressChanged(newTime))
         } catch {
+            dispatch(.commandIgnored(.noFileLoaded))
         }
     }
 
-    func skipForward() {
+    private func skipForward() {
         do {
             let newTime = try engine.skipForward(from: stateStore.currentTime)
-            stateStore.currentTime = newTime
+            dispatch(.progressChanged(newTime))
         } catch {
+            dispatch(.commandIgnored(.noFileLoaded))
         }
     }
 
-    func skipBackward() {
+    private func skipBackward() {
         do {
             let newTime = try engine.skipBackward(from: stateStore.currentTime)
-            stateStore.currentTime = newTime
+            dispatch(.progressChanged(newTime))
         } catch {
+            dispatch(.commandIgnored(.noFileLoaded))
         }
     }
 
-    func synchronizeSampleRates() async {
+    private func synchronizeSampleRates() async {
         do {
             try await engine.synchronizeSampleRates()
 
@@ -173,7 +201,7 @@ final class AudioPlayerSessionController {
             if sampleRatePresentation.hasMismatch {
                 showError(.sampleRateSyncFailed(sampleRatePresentation.statusDetail))
             } else {
-                applyStatusPresentation(
+                dispatchStatus(
                     statusPresenter.presentInfo(
                         message: "Hardware sample rate set to \(SampleRatePresenter.formatSampleRate(stateStore.fileSampleRate)) on \(sampleRatePresentation.hardwareDeviceDisplayName)"
                     )
@@ -213,13 +241,12 @@ final class AudioPlayerSessionController {
 
     private func handleLoadEvent(_ event: AudioPlayerLoadCoordinator.Event) async {
         switch event {
-        case .beginLoading(let loadingState, let message):
-            beginLoading(
-                loadingState: loadingState,
-                message: message
-            )
+        case .scanningFolderStarted:
+            beginLoading(phase: .scanningFolder)
+        case .trackLoadingStarted(let playlistSession):
+            beginLoading(phase: .loadingTrack(playlistSession))
         case .playlistSessionUpdated(let playlistSession):
-            stateStore.playlistSession = playlistSession
+            dispatch(.playlistSessionUpdated(playlistSession))
         case .trackLoaded(let url, let audioInfo, let autoplayOnSuccess):
             do {
                 try await finishLoadingTrack(
@@ -228,32 +255,22 @@ final class AudioPlayerSessionController {
                     autoplayOnSuccess: autoplayOnSuccess
                 )
             } catch let error as PlaybackError {
-                presentError(error)
+                showError(error)
             } catch {
-                presentError(.loadFailed(error.localizedDescription))
+                showError(.loadFailed(error.localizedDescription))
             }
         case .cancelled:
             handleLoadCancellation()
         case .failed(let error):
-            presentError(error)
+            showError(error)
         }
     }
 
-    private func beginLoading(
-        loadingState: LoadingPresentationState,
-        message: String
-    ) {
+    private func beginLoading(phase: AudioPlayerLoadPhase) {
         _ = cancelPendingPlaybackStart()
         let preservedAudioInfo = engine.beginLoading()
-        applyScreenStateAction(.beginLoading(preservedAudioInfo: preservedAudioInfo))
         stopProgressTracking()
-        stateStore.currentTime = 0
-        applyStatusPresentation(
-            statusPresenter.presentLoading(
-                state: loadingState,
-                message: message
-            )
-        )
+        dispatch(.loadStarted(preservedAudioInfo: preservedAudioInfo, phase: phase))
     }
 
     private func finishLoadingTrack(
@@ -261,10 +278,7 @@ final class AudioPlayerSessionController {
         audioInfo: AudioInfo,
         autoplayOnSuccess: Bool
     ) async throws {
-        applyScreenStateAction(.ready(audioInfo))
-        stateStore.recordLoadedTrack(audioInfo, for: trackURL)
-
-        stateStore.currentTime = 0
+        dispatch(.trackReady(url: trackURL, audioInfo: audioInfo))
         engine.setVolume(currentVolume())
         await refreshHardwareInfo()
         showReadyStatus(for: audioInfo)
@@ -276,13 +290,7 @@ final class AudioPlayerSessionController {
 
     private func handleLoadCancellation() {
         stopProgressTracking()
-        stateStore.currentTime = 0
-        applyStatusPresentation(
-            statusPresenter.presentInfo(
-                message: "Loading cancelled",
-                loading: .cancelled
-            )
-        )
+        dispatch(.loadingCancelled)
     }
 
     private func startPlayback() {
@@ -299,15 +307,14 @@ final class AudioPlayerSessionController {
     private func pause() {
         if cancelPendingPlaybackStart() {
             stopProgressTracking()
-            applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
+            dispatchStatus(statusPresenter.presentInfo(message: "Paused"))
             return
         }
 
         do {
             let audioInfo = try engine.pause()
-            applyScreenStateAction(.paused(audioInfo))
             stopProgressTracking()
-            applyStatusPresentation(statusPresenter.presentInfo(message: "Paused"))
+            dispatch(.playbackPaused(audioInfo))
         } catch let error as PlaybackError {
             showError(error)
         } catch {
@@ -318,22 +325,21 @@ final class AudioPlayerSessionController {
     private func handlePlaybackStartupEvent(_ event: PlaybackStartupCoordinator.Event) async {
         switch event {
         case .startupBegan:
-            stateStore.setLoadingState(.startingPlayback)
+            dispatch(.playbackStarting)
         case .startupCancelled:
-            stateStore.setLoadingState(.idle)
+            dispatch(.playbackStartCancelled)
         case .startupFinished(let audioInfo):
             await finishSuccessfulPlaybackStart(audioInfo: audioInfo)
         case .startupFailed(let error):
             showError(error)
         case .staleStartupFinished:
             let preservedAudioInfo = engine.stop()
-            applyScreenStateAction(.stopped(preservedAudioInfo: preservedAudioInfo))
-            stateStore.currentTime = 0
+            dispatch(.playbackStopped(preservedAudioInfo: preservedAudioInfo))
         }
     }
 
     private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
-        applyScreenStateAction(.playing(audioInfo))
+        dispatch(.playbackStarted(audioInfo))
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()
@@ -355,17 +361,15 @@ final class AudioPlayerSessionController {
         progressTrackingTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
-            // Use debounced progress stream for UI efficiency (500ms debounce)
-            let progressStream = self.engine.trackProgressDebounced(
+            let progressStream = self.engine.trackProgress(
                 using: self.progressTracker,
-                updateInterval: Constants.progressUpdateInterval,
-                debounceInterval: .milliseconds(500)
-            )
+                updateInterval: Constants.progressUpdateInterval
+            ).debounce(for: .milliseconds(500))
 
             for await event in progressStream {
                 switch event {
                 case .progress(let time):
-                    self.stateStore.currentTime = time
+                    self.dispatch(.progressChanged(time))
 
                 case .finished:
                     await self.handlePlaybackFinished()
@@ -385,19 +389,15 @@ final class AudioPlayerSessionController {
     private func handlePlaybackFinished() async {
         if !loadAdjacentTrack(next: true, autoplay: true) {
             let audioInfo = engine.markFinished()
-            applyScreenStateAction(.finished(audioInfo))
-            stateStore.currentTime = stateStore.duration
-            applyStatusPresentation(
-                statusPresenter.presentInfo(message: "Playback finished")
-            )
+            dispatch(.playbackFinished(audioInfo))
         }
     }
 
-private func showReadyStatus(for audioInfo: AudioInfo) {
+    private func showReadyStatus(for audioInfo: AudioInfo) {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: false
          )
-        applyStatusPresentation(
+        dispatchStatus(
             statusPresenter.presentReady(
                 PlayerStatusContext(
                     phase: .ready,
@@ -412,11 +412,11 @@ private func showReadyStatus(for audioInfo: AudioInfo) {
          )
        }
 
-private func showPlayingStatus() {
+    private func showPlayingStatus() {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: isStartingPlayback
          )
-        applyStatusPresentation(
+        dispatchStatus(
             statusPresenter.presentPlaying(
                 PlayerStatusContext(
                     phase: .playing,
@@ -432,7 +432,7 @@ private func showPlayingStatus() {
        }
 
     private func showError(_ error: PlaybackError) {
-        applyStatusPresentation(
+        dispatchStatus(
             statusPresenter.presentError(
                 error,
                 hasCurrentAudio: stateStore.currentAudioInfo != nil
@@ -440,15 +440,11 @@ private func showPlayingStatus() {
         )
     }
 
-    private func applyStatusPresentation(_ output: PlayerStatusPresentationOutput) {
-        stateStore.applyStatusPresentation(output)
+    private func dispatchStatus(_ output: PlayerStatusPresentationOutput) {
+        dispatch(.statusPresented(output))
     }
 
-    private func presentError(_ error: PlaybackError) {
-        showError(error)
-    }
-
-    private func applyScreenStateAction(_ action: PlayerScreenStateReducer.Action) {
-        stateStore.applyScreenStateAction(action, reducer: screenStateReducer)
+    private func dispatch(_ action: AudioPlayerAction) {
+        stateStore.dispatch(action)
     }
 }

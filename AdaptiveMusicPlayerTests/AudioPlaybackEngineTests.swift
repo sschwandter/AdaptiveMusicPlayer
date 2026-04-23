@@ -73,40 +73,6 @@ struct AudioPlaybackEngineTests {
         task.cancel()
     }
 
-    @Test("Debounced progress tracking returns AsyncStream")
-    func debouncedProgressTrackingReturnsAsyncStream() async throws {
-        let stubPlayer = try StubAudioPlayer()
-        let tracker = RecordingPlaybackProgressTracker()
-        let engine = AudioPlaybackEngine(
-            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: stubPlayer),
-            sampleRateManager: StubSampleRateManager()
-        )
-
-        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
-
-        // Create the debounced progress stream
-        let stream = engine.trackProgressDebounced(
-            using: tracker,
-            updateInterval: 0.1,
-            debounceInterval: .milliseconds(500)
-        )
-
-        // Start consuming the stream and give it time to initialize
-        let task = Task {
-            for await _ in stream {
-                // Just consume events
-            }
-        }
-
-        // Give the stream time to start and configure the tracker
-        try await Task.sleep(for: .milliseconds(50))
-
-        // Verify the stream was created
-        #expect(tracker.updateInterval == 0.1)
-
-        task.cancel()
-    }
-
     @Test("Stopping progress tracking delegates to the tracker")
     func stopProgressTrackingDelegatesToTracker() async throws {
         let engine = AudioPlaybackEngine(

@@ -49,7 +49,7 @@ struct ContentView: View {
                     handleImportedURL(url, target: importTarget)
                 }
             case .failure(let error):
-                player.reportFileSelectionError(error.localizedDescription)
+                player.send(.reportFileSelectionError(error.localizedDescription))
             }
         }
     }
@@ -152,7 +152,7 @@ struct ContentView: View {
                 Slider(value: $sliderPosition, in: 0...max(viewState.duration, 1)) { isEditing in
                     isEditingSlider = isEditing
                     if !isEditing {
-                        player.seek(to: sliderPosition)
+                        player.send(.seek(to: sliderPosition))
                     }
                 }
                 .tint(.white.opacity(0.95))
@@ -228,7 +228,7 @@ struct ContentView: View {
         HStack(spacing: 16) {
             GlassEffectContainer {
                 HStack(spacing: 12) {
-                    Button(action: { player.playPreviousTrack() }) {
+                    Button(action: { player.send(.navigatePlaylist(next: false, autoplay: true)) }) {
                         Image(systemName: "backward.end.fill")
                             .frame(width: 20, height: 20)
                     }
@@ -236,7 +236,7 @@ struct ContentView: View {
                     .help("Previous Track (⌘←)")
                     .disabled(!viewState.transport.canPlayPreviousTrack)
 
-                    Button(action: { player.skipBackward() }) {
+                    Button(action: { player.send(.skipBackward) }) {
                         Image(systemName: "gobackward.10")
                             .frame(width: 20, height: 20)
                     }
@@ -244,7 +244,7 @@ struct ContentView: View {
                     .help("Skip Backward 10s")
                     .disabled(!viewState.transport.canSkip)
 
-                    Button(action: { player.togglePlayPause() }) {
+                    Button(action: { player.send(.togglePlayPause) }) {
                         Image(systemName: viewState.transport.playPauseSymbolName)
                             .frame(width: 20, height: 20)
                     }
@@ -252,7 +252,7 @@ struct ContentView: View {
                     .help(viewState.transport.playPauseHelp)
                     .disabled(!viewState.transport.canPlayPause)
 
-                    Button(action: { player.skipForward() }) {
+                    Button(action: { player.send(.skipForward) }) {
                         Image(systemName: "goforward.10")
                             .frame(width: 20, height: 20)
                     }
@@ -260,7 +260,7 @@ struct ContentView: View {
                     .help("Skip Forward 10s")
                     .disabled(!viewState.transport.canSkip)
 
-                    Button(action: { player.playNextTrack() }) {
+                    Button(action: { player.send(.navigatePlaylist(next: true, autoplay: true)) }) {
                         Image(systemName: "forward.end.fill")
                             .frame(width: 20, height: 20)
                     }
@@ -268,7 +268,7 @@ struct ContentView: View {
                     .help("Next Track (⌘→)")
                     .disabled(!viewState.transport.canPlayNextTrack)
 
-                    Button(action: { player.stop() }) {
+                    Button(action: { player.send(.stop) }) {
                         Image(systemName: "stop.fill")
                             .frame(width: 20, height: 20)
                     }
@@ -377,27 +377,27 @@ struct ContentView: View {
             openFolderPicker: { presentImporter(for: .folder) },
             togglePlayPause: {
                 guard canPerformPlaybackAction else { return }
-                player.togglePlayPause()
+                player.send(.togglePlayPause)
             },
             stopPlayback: {
                 guard canPerformPlaybackAction else { return }
-                player.stop()
+                player.send(.stop)
             },
             skipForward: {
                 guard canPerformPlaybackAction else { return }
-                player.skipForward()
+                player.send(.skipForward)
             },
             skipBackward: {
                 guard canPerformPlaybackAction else { return }
-                player.skipBackward()
+                player.send(.skipBackward)
             },
             playNextTrack: {
                 guard viewState.transport.canPlayNextTrack else { return }
-                player.playNextTrack()
+                player.send(.navigatePlaylist(next: true, autoplay: true))
             },
             playPreviousTrack: {
                 guard viewState.transport.canPlayPreviousTrack else { return }
-                player.playPreviousTrack()
+                player.send(.navigatePlaylist(next: false, autoplay: true))
             },
             canControlPlayback: canPerformPlaybackAction,
             canNavigatePlaylist: viewState.transport.canPlayNextTrack || viewState.transport.canPlayPreviousTrack
@@ -567,14 +567,14 @@ struct ContentView: View {
         // Let the picker dismiss before file access begins.
         switch target {
         case .folder:
-            player.loadFolder(url: url, importerDismissalDelay: .milliseconds(50))
+            player.send(.loadFolder(url: url, importerDismissalDelay: .milliseconds(50)))
         case .file, .none:
-            player.loadFile(url: url, importerDismissalDelay: .milliseconds(50))
+            player.send(.loadFile(url: url, importerDismissalDelay: .milliseconds(50)))
         }
     }
 
     private func playlistTrackRow(_ track: PlaylistTrackRow) -> some View {
-        Button(action: { player.selectPlaylistTrack(at: track.index) }) {
+        Button(action: { player.send(.selectPlaylistTrack(index: track.index)) }) {
             HStack(spacing: 12) {
                 Text("\(track.index + 1)")
                     .font(.caption.weight(.semibold))
@@ -617,7 +617,7 @@ struct ContentView: View {
         .contextMenu {
             if track.isCurrent {
                 Button("Show in Finder") {
-                    player.showCurrentTrackInFinder()
+                    player.send(.revealCurrentTrackInFinder)
                 }
             }
         }
