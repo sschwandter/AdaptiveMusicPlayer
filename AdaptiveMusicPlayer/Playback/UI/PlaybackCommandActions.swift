@@ -10,8 +10,12 @@ struct PlaybackCommandActions {
     let skipBackward: () -> Void
     let playNextTrack: () -> Void
     let playPreviousTrack: () -> Void
-    let canControlPlayback: Bool
-    let canNavigatePlaylist: Bool
+    let canTogglePlayPause: Bool
+    let canStopPlayback: Bool
+    let canSkipForward: Bool
+    let canSkipBackward: Bool
+    let canPlayNextTrack: Bool
+    let canPlayPreviousTrack: Bool
 }
 
 private struct PlaybackCommandActionsKey: FocusedValueKey {

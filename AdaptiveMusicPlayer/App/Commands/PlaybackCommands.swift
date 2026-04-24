@@ -25,13 +25,13 @@ struct PlaybackCommands: Commands {
                 actions?.togglePlayPause()
             }
             .keyboardShortcut(.space, modifiers: [])
-            .disabled(actions?.canControlPlayback != true)
+            .disabled(actions?.canTogglePlayPause != true)
 
             Button("Stop") {
                 actions?.stopPlayback()
             }
             .keyboardShortcut(".", modifiers: .command)
-            .disabled(actions?.canControlPlayback != true)
+            .disabled(actions?.canStopPlayback != true)
 
             Divider()
 
@@ -39,13 +39,13 @@ struct PlaybackCommands: Commands {
                 actions?.skipBackward()
             }
             .keyboardShortcut(.leftArrow, modifiers: [])
-            .disabled(actions?.canControlPlayback != true)
+            .disabled(actions?.canSkipBackward != true)
 
             Button("Skip Forward") {
                 actions?.skipForward()
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
-            .disabled(actions?.canControlPlayback != true)
+            .disabled(actions?.canSkipForward != true)
 
             Divider()
 
@@ -53,13 +53,13 @@ struct PlaybackCommands: Commands {
                 actions?.playPreviousTrack()
             }
             .keyboardShortcut(.leftArrow, modifiers: .command)
-            .disabled(actions?.canNavigatePlaylist != true)
+            .disabled(actions?.canPlayPreviousTrack != true)
 
             Button("Next Track") {
                 actions?.playNextTrack()
             }
             .keyboardShortcut(.rightArrow, modifiers: .command)
-            .disabled(actions?.canNavigatePlaylist != true)
+            .disabled(actions?.canPlayNextTrack != true)
         }
     }
 }

@@ -1,17 +1,6 @@
 import Foundation
 
-enum PlayerStatusPhase {
-    case idle
-    case ready
-    case playing
-    case loading
-    case error
-    case info
-    case finished
-}
-
 struct PlayerStatusContext {
-    let phase: PlayerStatusPhase
     let hasPlaylist: Bool
     let playlistTrackPosition: String?
     let sampleRate: Double
@@ -73,10 +62,6 @@ func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutpu
              ),
             playbackOverride: hasCurrentAudio ? nil : .unavailable
          )
-      }
-
-    private func presentIdle() -> PlayerStatusPresentationOutput {
-        presentInfo(message: "", loading: .idle)
       }
 
     private func buildMessage(prefix: String, context: PlayerStatusContext) -> String {

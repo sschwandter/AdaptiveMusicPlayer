@@ -400,7 +400,6 @@ final class AudioPlayerSessionController {
         dispatchStatus(
             statusPresenter.presentReady(
                 PlayerStatusContext(
-                    phase: .ready,
                     hasPlaylist: stateStore.playlistSession?.trackCount ?? 0 > 1,
                     playlistTrackPosition: stateStore.playlistSession?.positionDescription,
                     sampleRate: audioInfo.sampleRate,
@@ -419,7 +418,6 @@ final class AudioPlayerSessionController {
         dispatchStatus(
             statusPresenter.presentPlaying(
                 PlayerStatusContext(
-                    phase: .playing,
                     hasPlaylist: stateStore.playlistSession?.trackCount ?? 0 > 1,
                     playlistTrackPosition: stateStore.playlistSession?.positionDescription,
                     sampleRate: stateStore.fileSampleRate,

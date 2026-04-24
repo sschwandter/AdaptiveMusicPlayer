@@ -363,10 +363,6 @@ struct ContentView: View {
 
     // MARK: - Computed Properties
 
-    private var canPerformPlaybackAction: Bool {
-        viewState.transport.canPlayPause
-    }
-
     private var displayedPlaybackTime: Double {
         isEditingSlider ? sliderPosition : viewState.currentTime
     }
@@ -376,19 +372,19 @@ struct ContentView: View {
             openFilePicker: { presentImporter(for: .file) },
             openFolderPicker: { presentImporter(for: .folder) },
             togglePlayPause: {
-                guard canPerformPlaybackAction else { return }
+                guard viewState.transport.canPlayPause else { return }
                 player.send(.togglePlayPause)
             },
             stopPlayback: {
-                guard canPerformPlaybackAction else { return }
+                guard viewState.transport.canStop else { return }
                 player.send(.stop)
             },
             skipForward: {
-                guard canPerformPlaybackAction else { return }
+                guard viewState.transport.canSkip else { return }
                 player.send(.skipForward)
             },
             skipBackward: {
-                guard canPerformPlaybackAction else { return }
+                guard viewState.transport.canSkip else { return }
                 player.send(.skipBackward)
             },
             playNextTrack: {
@@ -399,8 +395,12 @@ struct ContentView: View {
                 guard viewState.transport.canPlayPreviousTrack else { return }
                 player.send(.navigatePlaylist(next: false, autoplay: true))
             },
-            canControlPlayback: canPerformPlaybackAction,
-            canNavigatePlaylist: viewState.transport.canPlayNextTrack || viewState.transport.canPlayPreviousTrack
+            canTogglePlayPause: viewState.transport.canPlayPause,
+            canStopPlayback: viewState.transport.canStop,
+            canSkipForward: viewState.transport.canSkip,
+            canSkipBackward: viewState.transport.canSkip,
+            canPlayNextTrack: viewState.transport.canPlayNextTrack,
+            canPlayPreviousTrack: viewState.transport.canPlayPreviousTrack
         )
     }
 

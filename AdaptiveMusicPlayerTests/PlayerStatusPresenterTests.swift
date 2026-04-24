@@ -10,7 +10,6 @@ struct PlayerStatusPresenterTests {
     func readyStatus() {
         let output = presenter.presentReady(
             PlayerStatusContext(
-                phase: .ready,
                 hasPlaylist: false,
                 playlistTrackPosition: nil,
                 sampleRate: 44_100,
@@ -30,7 +29,6 @@ struct PlayerStatusPresenterTests {
     func playingStatus() {
         let output = presenter.presentPlaying(
             PlayerStatusContext(
-                phase: .playing,
                 hasPlaylist: true,
                 playlistTrackPosition: "2 of 3",
                 sampleRate: 48_000,
@@ -50,7 +48,6 @@ struct PlayerStatusPresenterTests {
     func playingStatusWithoutPlaylist() {
         let output = presenter.presentPlaying(
             PlayerStatusContext(
-                phase: .playing,
                 hasPlaylist: false,
                 playlistTrackPosition: nil,
                 sampleRate: 44_100,
