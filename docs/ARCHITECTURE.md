@@ -4,10 +4,10 @@ This document collects implementation details that are useful when working on th
 
 At a high level, the app flows like this:
 
-`ContentView` presents the macOS interface and forwards user actions to `AudioPlayer`.
-`AudioPlayer` owns UI-facing state, async loading, playlist coordination, and hardware refresh behavior.
-`AudioPlaybackEngine` owns the active playback session and delegates focused operations to use cases and services.
-Use cases and services wrap lower-level playback, file-loading, seeking, progress, playlist, and Core Audio behavior.
+`ContentView` presents the macOS interface and forwards user actions as commands.
+`AudioPlayer` is the `@Observable` bridge used by SwiftUI.
+`AudioPlayerSessionController` owns app-level playback orchestration and updates a reducer-backed `AudioPlayerSessionState`.
+`AudioPlaybackEngine` owns the active `AVAudioPlayer` runtime and delegates focused work to engine operations and services.
 
 ## Current Structure
 
@@ -34,11 +34,19 @@ The project is organized by feature area under `Playback/`, with a small app she
 ### Playback Coordination
 
 - `AdaptiveMusicPlayer/Playback/Engine/AudioPlaybackEngine.swift`
-  Owns the underlying `AVAudioPlayer`, coordinates use cases, and is the main stateful playback coordinator.
+  Owns the underlying `AVAudioPlayer`, loads tracks, controls playback, synchronizes sample rates, and bridges progress events.
 - `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
-  Acts as the `@Observable` view model used by SwiftUI. It exposes UI-facing playback state, status/error text, hardware diagnostics, playlist state, and asynchronous load orchestration for the view.
+  Acts as the `@Observable` view model used by SwiftUI. It exposes projected UI state plus a single `send(_:)` command entry point for the view layer.
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/AudioPlayerSessionController.swift`
+  Central app-level orchestrator for loading, playlist navigation, playback commands, startup cancellation, progress tracking, and hardware refresh.
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/AudioPlayerLoadCoordinator.swift`
+  Manages file and folder loading with latest-request-wins behavior.
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/PlaybackStartupCoordinator.swift`
+  Manages cancellable playback-start work, especially sample-rate synchronization before playback.
+- `AdaptiveMusicPlayer/Playback/UI/Coordination/LatestAsyncRequestCoordinator.swift`
+  Shared helper for replacing in-flight async work while suppressing stale results.
 
-Playback coordination is intentionally split between the engine and the view model rather than centered in a single orchestration layer. The engine owns the active playback session and lower-level transitions, while the view model owns UI-facing state and higher-level loading and playlist behavior.
+App-level playback rules are centered in the session controller. The engine remains a narrower runtime dependency rather than a second user-visible state owner.
 
 ### Services
 
@@ -66,6 +74,25 @@ Playback coordination is intentionally split between the engine and the view mod
 
 These files hold smaller units of playback behavior, but the codebase is not a strict clean-architecture implementation. Important orchestration still lives in the engine and the view model.
 
+### UI State And Presentation
+
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerSessionState.swift`
+  Holds the authoritative UI-facing session state.
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerSessionReducer.swift`
+  Applies app actions to the session state.
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerStateStore.swift`
+  Stores session state and exposes presentation helpers to the rest of the UI layer.
+- `AdaptiveMusicPlayer/Playback/UI/State/AudioPlayerCommand.swift`
+  Defines the command set sent from SwiftUI into the session controller.
+- `AdaptiveMusicPlayer/Playback/UI/Presentation/ContentViewStatePresenter.swift`
+  Builds the main `ContentViewState` projection used by the view.
+- `AdaptiveMusicPlayer/Playback/UI/Presentation/PlayerStatusPresenter.swift`
+  Builds status and loading messages.
+- `AdaptiveMusicPlayer/Playback/UI/Presentation/SampleRatePresenter.swift`
+  Builds sample-rate diagnostics and banner state.
+- `AdaptiveMusicPlayer/Playback/UI/Workflow/AudioPlayerHardwareMonitor.swift`
+  Observes hardware changes and refreshes hardware state in the store.
+
 ### UI
 
 - `AdaptiveMusicPlayer/Playback/UI/ContentView.swift`
@@ -84,9 +111,21 @@ This keeps command routing window-scoped instead of broadcasting process-wide ac
 
 ## File Loading Flow
 
-`ContentView` delegates file and folder selection results to `AudioPlayer`. The view model moves into loading state, coordinates any short importer-dismissal delay, performs asynchronous loading or folder scanning work, and then updates the engine-backed playback state for the UI.
+`ContentView` delegates file and folder selection results to `AudioPlayer`, which forwards them as commands. `AudioPlayerSessionController` asks `AudioPlayerLoadCoordinator` to start a new load, applies loading-state transitions through the reducer, performs asynchronous file loading or folder scanning, and updates `AudioPlayerSessionState` when the load completes.
 
-This keeps the UI-facing loading contract in one place instead of splitting it between the view and lower-level playback services, although a small amount of view-local interaction state still remains in `ContentView`, such as importer presentation and slider editing state.
+Folder scanning runs off the main actor and uses latest-request-wins cancellation so stale scans cannot publish tracks after a newer request has taken over.
+
+View-local interaction state such as importer presentation and slider editing still remains in `ContentView`.
+
+## Playback Flow
+
+Playback commands also pass through `AudioPlayer.send(_:)` into `AudioPlayerSessionController`.
+
+- The controller starts playback through `PlaybackStartupCoordinator`.
+- The startup coordinator handles cancellation and stale startup suppression.
+- `AudioPlaybackEngine` performs the actual `AVAudioPlayer` and sample-rate work.
+- `PlaybackProgressTracker` emits progress and finish events back to the controller.
+- The controller dispatches reducer actions into the state store, and presenters derive `ContentViewState` plus status/sample-rate UI from that state.
 
 ## Testing Overview
 
@@ -99,9 +138,15 @@ Tests live in:
 
 The unit tests currently cover:
 
-- Basic `AudioPlayer` behavior
+- `AudioPlayer` behavior and user-visible workflows
+- `AudioPlayerSessionReducer` and session-state transitions
+- `AudioPlayerLoadCoordinator` and latest-request-wins loading behavior
+- `PlaybackStartupCoordinator`
 - `PlaybackControlOperation`
 - `PlaybackProgressTracker`
+- `AudioPlaybackEngine`
+- Playlist and folder-scanning behavior
+- Presentation helpers and sample-rate UI logic
 - `SampleRateManager` helper logic
 - `TimeFormatter`
 

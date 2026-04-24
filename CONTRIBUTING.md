@@ -16,8 +16,10 @@ Thanks for your interest in contributing to Adaptive Music Player.
 4. Run unit tests with:
 
 ```sh
-xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests
+xcodebuild test -project AdaptiveMusicPlayer.xcodeproj -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests
 ```
+
+The repository currently tracks a `commit-msg` hook under `.githooks/` to help enforce Conventional Commit messages.
 
 ## Pull Requests
 
@@ -25,11 +27,12 @@ xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-
 - Mention testing performed.
 - Include screenshots for UI changes when helpful.
 - Avoid unrelated refactors in the same PR.
-- Releases are created from `main` with `release-please`; do not create release tags manually.
+- Releases are created from `main` with `release-please` plus the GitHub release workflows; do not create release tags manually unless you are intentionally using the manual release workflow.
 
 ## Style
 
 - Follow the existing Swift and SwiftUI patterns in the project.
+- Keep orchestration in the existing session-controller and reducer flow unless there is a clear reason to move it.
 - Prefer small, readable helpers over large rewrites.
 - Add or update tests when behavior changes.
 - Use Conventional Commit messages such as `fix: ...` and `feat: ...`.

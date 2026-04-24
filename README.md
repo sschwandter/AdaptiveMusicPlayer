@@ -4,9 +4,9 @@ Adaptive Music Player is a macOS audio player focused on sample-rate-aware playb
 
 Download the current release from [Latest release](https://github.com/sschwandter/AdaptiveMusicPlayer/releases/latest) and choose the packaged app asset from the release page.
 
-![Adaptive Music Player screenshot](AdaptiveMusicPlayer/docs/screenshots/app-screenshot.png)
+![Adaptive Music Player screenshot](docs/screenshots/app-screenshot.png)
 
-Technical details: [Architecture notes](doc/ARCHITECTURE.md)
+Technical details: [Architecture notes](docs/ARCHITECTURE.md)
 
 ## Features
 
@@ -31,19 +31,29 @@ Technical details: [Architecture notes](doc/ARCHITECTURE.md)
 ## Run Tests
 
 ```sh
-xcodebuild test -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests
+xcodebuild test -project AdaptiveMusicPlayer.xcodeproj -scheme AdaptiveMusicPlayer -destination 'platform=macOS' -only-testing:AdaptiveMusicPlayerTests
 ```
 
 UI tests exist, but command-line execution may depend on the local environment and permissions available to the test runner.
 
+## Code Structure
+
+The app is organized under `AdaptiveMusicPlayer/Playback/`:
+
+- `UI/` contains the SwiftUI view, window command bridge, reducer-backed session state, and the `AudioPlayerSessionController` orchestration layer.
+- `Engine/` contains the runtime playback adapter around `AVAudioPlayer` plus focused playback operations.
+- `Services/` wraps file loading, folder scanning, progress tracking, Core Audio access, and Finder integration.
+- `Domain/` contains shared playback models such as `AudioInfo`, playlists, sessions, and typed errors.
+
+For a contributor-focused walkthrough, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Releases
 
-Releases are managed with `release-please`.
+Releases are managed with `release-please` and GitHub Actions.
 
 - Pushes to `main` update or create a release PR based on Conventional Commits.
-- Merging the release PR creates the version tag and GitHub release automatically.
-- Publishing that release triggers the macOS signing, notarization, and asset upload workflow.
-- Pushing a tag manually does not create a release.
+- When the release PR lands and CI passes, the release workflow creates the tag, signs and notarizes the app, and uploads the packaged build to the GitHub release.
+- There is also a manual release workflow that can rebuild and upload a tagged release on demand.
 
 Examples:
 
