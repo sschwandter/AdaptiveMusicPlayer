@@ -71,6 +71,33 @@ struct AudioPlayerTests {
          #expect(player.contentViewState.isPlaying == false)
      }
 
+    @Test("Playback progress events update the UI immediately while playing")
+    func playbackProgressUpdatesImmediately() async throws {
+        let progressTracker = RecordingPlaybackProgressTracker()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            progressTracker: progressTracker,
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        player.send(.togglePlayPause)
+        try await Task.sleep(for: .milliseconds(20))
+
+        progressTracker.streamContinuation?.yield(.progress(0.25))
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(player.contentViewState.currentTime == 0.25)
+
+        progressTracker.streamContinuation?.yield(.progress(0.5))
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(player.contentViewState.currentTime == 0.5)
+    }
+
     @Test("Stop functionality")
     func stopFunctionality() async throws {
         let player = AudioPlayer(

@@ -79,8 +79,7 @@ func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutpu
         presentInfo(message: "", loading: .idle)
       }
 
-private func buildMessage(prefix: String, context: PlayerStatusContext) -> String {
-        let position = context.playlistTrackPosition ?? "1"
+    private func buildMessage(prefix: String, context: PlayerStatusContext) -> String {
         if context.hasSampleRateMismatch {
             return "\(prefix) - \(context.sampleRateStatusDetail)"
           }

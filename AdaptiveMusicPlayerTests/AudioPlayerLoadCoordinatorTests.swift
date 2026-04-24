@@ -90,6 +90,39 @@ struct AudioPlayerLoadCoordinatorTests {
         let loadedURLs = await recorder.loadedTrackURLs()
         #expect(loadedURLs.map(canonicalTestFileURL) == [replacementURL].map(canonicalTestFileURL))
     }
+
+    @Test("folder scanning runs off the main thread")
+    func folderScanRunsOffMainThread() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let trackURL = rootFolder.appending(path: "album/track.wav")
+        try TemporaryFolder.writeWaveFile(at: trackURL)
+
+        let scanner = ThreadRecordingFolderScanner(tracks: [trackURL])
+        let coordinator = AudioPlayerLoadCoordinator(folderScanner: scanner)
+        let recorder = LoadCoordinatorEventRecorder()
+
+        coordinator.loadFolder(
+            url: rootFolder,
+            loadTrack: { url in
+                AudioInfo(
+                    fileName: url.lastPathComponent,
+                    displayTitle: url.lastPathComponent,
+                    duration: 1,
+                    sampleRate: 44_100
+                )
+            },
+            handleEvent: { event in
+                await recorder.record(event)
+            }
+        )
+
+        await coordinator.waitForCurrentLoad()
+
+        #expect(scanner.wasCalled)
+        #expect(scanner.wasCalledOnMainThread == false)
+    }
 }
 
 actor LoadCoordinatorEventRecorder {
@@ -120,5 +153,24 @@ actor LoadCoordinatorEventRecorder {
 
     func loadedTrackURLs() -> [URL] {
         loadedTrackURLsStorage
+    }
+}
+
+final class ThreadRecordingFolderScanner: AudioPlaylistFolderScanning, @unchecked Sendable {
+    private let tracks: [URL]
+    private let lock = NSLock()
+    private(set) var wasCalled = false
+    private(set) var wasCalledOnMainThread = false
+
+    init(tracks: [URL]) {
+        self.tracks = tracks
+    }
+
+    func scan(folderURL: URL) throws -> [URL] {
+        lock.lock()
+        wasCalled = true
+        wasCalledOnMainThread = Thread.isMainThread
+        lock.unlock()
+        return tracks
     }
 }

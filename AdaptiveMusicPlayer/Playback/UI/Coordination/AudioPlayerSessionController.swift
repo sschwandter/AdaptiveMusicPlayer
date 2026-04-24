@@ -1,5 +1,4 @@
 import Foundation
-import AsyncAlgorithms
 
 @MainActor
 final class AudioPlayerSessionController {
@@ -357,14 +356,14 @@ final class AudioPlayerSessionController {
             }
         }
 
-        // Start progress tracking with debounced updates using AsyncAlgorithms
+        // Forward progress updates as they arrive so the slider stays responsive.
         progressTrackingTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
             let progressStream = self.engine.trackProgress(
                 using: self.progressTracker,
                 updateInterval: Constants.progressUpdateInterval
-            ).debounce(for: .milliseconds(500))
+            )
 
             for await event in progressStream {
                 switch event {
