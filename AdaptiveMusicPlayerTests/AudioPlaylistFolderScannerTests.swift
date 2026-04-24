@@ -27,7 +27,7 @@ struct AudioPlaylistFolderScannerTests {
 
         let scanner = AudioPlaylistFolderScanner()
 
-        let result = try scanner.scan(folderURL: rootFolder)
+        let result = try await scanner.scan(folderURL: rootFolder)
 
         #expect(
             result.map(canonicalTestFileURL) ==
@@ -45,8 +45,8 @@ struct AudioPlaylistFolderScannerTests {
 
         let scanner = AudioPlaylistFolderScanner()
 
-        #expect(throws: AudioPlaylistFolderScannerError.notADirectory(fileURL)) {
-            try scanner.scan(folderURL: fileURL)
+        await #expect(throws: AudioPlaylistFolderScannerError.notADirectory(fileURL)) {
+            try await scanner.scan(folderURL: fileURL)
         }
     }
 
@@ -65,7 +65,7 @@ struct AudioPlaylistFolderScannerTests {
             audioFileClassifier: classifier
         )
 
-        let result = try scanner.scan(folderURL: rootFolder)
+        let result = try await scanner.scan(folderURL: rootFolder)
 
         #expect(
             result.map(canonicalTestFileURL) ==

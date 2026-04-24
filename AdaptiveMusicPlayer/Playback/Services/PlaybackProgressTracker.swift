@@ -112,8 +112,13 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
             return
         }
 
+        stopTracking()
+
         // Weak reference to avoid retention cycles
         weak let weakPlayer = player
+        trackedPlayer = player
+        trackedPlayerID = ObjectIdentifier(player)
+        player.delegate = self
 
         // Use Timer.publish as an AsyncSequence for modern Swift concurrency
         let timerSequence = Timer.publish(every: updateInterval, on: .main, in: .common)
@@ -123,18 +128,11 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         // Track if we've already finished to avoid duplicate events
         var hasFinished = false
 
-        // Create a detached task to handle finish detection via delegate
-        let finishTask = Task { @MainActor in
-            while !Task.isCancelled && !hasFinished {
-                // Check if playback finished naturally (via currentTime >= duration)
-                if let p = weakPlayer, p.currentTime >= p.duration - 0.1 && p.currentTime > 0 {
-                    hasFinished = true
-                    continuation.yield(.finished)
-                    continuation.finish()
-                    break
-                }
-                try? await Task.sleep(for: .milliseconds(100))
-            }
+        onPlaybackFinished = {
+            guard !hasFinished else { return }
+            hasFinished = true
+            continuation.yield(.finished)
+            continuation.finish()
         }
 
         // Process timer updates
@@ -149,21 +147,17 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
             let currentTime = currentPlayer.currentTime
             continuation.yield(.progress(currentTime))
 
-            // Trigger periodic updates (e.g., for hardware sample rate display)
             timerTickCount += 1
             if timerTickCount >= Constants.periodicUpdateTicks {
-                // Note: Periodic updates are handled separately by the consumer
-                // using AsyncAlgorithms timers or Task.sleep
                 timerTickCount = 0
             }
         }
 
-        finishTask.cancel()
-
-        // Ensure we finish the stream
         if !hasFinished {
             continuation.finish()
         }
+
+        stopTracking()
     }
 
     // MARK: - AVAudioPlayerDelegate

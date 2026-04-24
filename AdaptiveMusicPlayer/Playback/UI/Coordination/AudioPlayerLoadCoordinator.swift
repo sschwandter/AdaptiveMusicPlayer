@@ -173,7 +173,7 @@ final class AudioPlayerLoadCoordinator {
     private func scanFolderOffMainActor(_ url: URL) async throws -> [URL] {
         let folderScanner = self.folderScanner
         let scanTask = Task.detached(priority: .userInitiated) {
-            try folderScanner.scan(folderURL: url)
+            try await folderScanner.scan(folderURL: url)
         }
 
         return try await withTaskCancellationHandler {
@@ -182,5 +182,4 @@ final class AudioPlayerLoadCoordinator {
             scanTask.cancel()
         }
     }
-
 }

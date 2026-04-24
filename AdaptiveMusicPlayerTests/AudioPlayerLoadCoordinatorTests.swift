@@ -123,6 +123,58 @@ struct AudioPlayerLoadCoordinatorTests {
         #expect(scanner.wasCalled)
         #expect(scanner.wasCalledOnMainThread == false)
     }
+
+    @Test("replacing a folder load cancels the in-flight folder scan")
+    func replacingFolderLoadCancelsInFlightScan() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let replacementURL = rootFolder.appending(path: "replacement.wav")
+        try TemporaryFolder.writeWaveFile(at: replacementURL)
+
+        let scanner = CancellableFolderScanner(tracks: [rootFolder.appending(path: "album/track.wav")])
+        let coordinator = AudioPlayerLoadCoordinator(folderScanner: scanner)
+        let replacementSession = try #require(PlaylistSession.singleTrack(replacementURL))
+        let recorder = LoadCoordinatorEventRecorder()
+
+        coordinator.loadFolder(
+            url: rootFolder,
+            loadTrack: { url in
+                AudioInfo(
+                    fileName: url.lastPathComponent,
+                    displayTitle: url.lastPathComponent,
+                    duration: 1,
+                    sampleRate: 44_100
+                )
+            },
+            handleEvent: { event in
+                await recorder.record(event)
+            }
+        )
+
+        await scanner.waitUntilStarted()
+
+        coordinator.loadFile(
+            url: replacementURL,
+            playlistSession: replacementSession,
+            loadTrack: { url in
+                AudioInfo(
+                    fileName: url.lastPathComponent,
+                    displayTitle: url.lastPathComponent,
+                    duration: 1,
+                    sampleRate: 48_000
+                )
+            },
+            handleEvent: { event in
+                await recorder.record(event)
+            }
+        )
+
+        await coordinator.waitForCurrentLoad()
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(await scanner.didObserveCancellation())
+    }
 }
 
 actor LoadCoordinatorEventRecorder {
@@ -166,11 +218,43 @@ final class ThreadRecordingFolderScanner: AudioPlaylistFolderScanning, @unchecke
         self.tracks = tracks
     }
 
-    func scan(folderURL: URL) throws -> [URL] {
+    func scan(folderURL: URL) async throws -> [URL] {
         lock.lock()
         wasCalled = true
         wasCalledOnMainThread = Thread.isMainThread
         lock.unlock()
         return tracks
+    }
+}
+
+actor CancellableFolderScanner: AudioPlaylistFolderScanning {
+    private let tracks: [URL]
+    private var started = false
+    private var observedCancellation = false
+
+    init(tracks: [URL]) {
+        self.tracks = tracks
+    }
+
+    func scan(folderURL: URL) async throws -> [URL] {
+        started = true
+
+        do {
+            try await Task.sleep(for: .seconds(5))
+            return tracks
+        } catch is CancellationError {
+            observedCancellation = true
+            throw CancellationError()
+        }
+    }
+
+    func waitUntilStarted() async {
+        while !started {
+            await Task.yield()
+        }
+    }
+
+    func didObserveCancellation() -> Bool {
+        observedCancellation
     }
 }

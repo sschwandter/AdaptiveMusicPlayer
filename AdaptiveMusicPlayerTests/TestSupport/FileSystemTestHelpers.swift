@@ -8,7 +8,7 @@ func canonicalTestFileURL(_ url: URL) -> URL {
 struct StubDirectoryTreeEnumerator: DirectoryTreeEnumerating {
     let urls: [URL]
 
-    func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL] {
+    func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL] {
         urls
     }
 }

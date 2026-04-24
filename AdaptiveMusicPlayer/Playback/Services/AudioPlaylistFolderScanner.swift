@@ -2,11 +2,11 @@ import Foundation
 import UniformTypeIdentifiers
 
 protocol AudioPlaylistFolderScanning: Sendable {
-    nonisolated func scan(folderURL: URL) throws -> [URL]
+    nonisolated func scan(folderURL: URL) async throws -> [URL]
 }
 
 protocol DirectoryTreeEnumerating: Sendable {
-    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL]
+    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL]
 }
 
 protocol PlayableAudioFileClassifying: Sendable {
@@ -14,7 +14,7 @@ protocol PlayableAudioFileClassifying: Sendable {
 }
 
 struct FileManagerDirectoryTreeEnumerator: DirectoryTreeEnumerating {
-    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) throws -> [URL] {
+    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL] {
         let resourceKeys: Set<URLResourceKey> = [.isRegularFileKey, .contentTypeKey]
         let options: FileManager.DirectoryEnumerationOptions = [
             .skipsHiddenFiles,
@@ -31,7 +31,8 @@ struct FileManagerDirectoryTreeEnumerator: DirectoryTreeEnumerating {
         }
 
         var urls: [URL] = []
-        for case let fileURL as URL in enumerator {
+        while let fileURL = enumerator.nextObject() as? URL {
+            try Task.checkCancellation()
             urls.append(fileURL)
         }
         return urls
@@ -69,13 +70,13 @@ struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
         self.audioFileClassifier = audioFileClassifier
     }
 
-    nonisolated func scan(folderURL: URL) throws -> [URL] {
+    nonisolated func scan(folderURL: URL) async throws -> [URL] {
         let resourceValues = try folderURL.resourceValues(forKeys: [.isDirectoryKey])
         guard resourceValues.isDirectory == true else {
             throw AudioPlaylistFolderScannerError.notADirectory(folderURL)
         }
 
-        return try directoryEnumerator.recursivelyEnumerateFiles(in: folderURL)
+        return try await directoryEnumerator.recursivelyEnumerateFiles(in: folderURL)
             .filter(audioFileClassifier.isPlayableFile(at:))
             .sorted(by: Self.sortByFullPath)
     }
