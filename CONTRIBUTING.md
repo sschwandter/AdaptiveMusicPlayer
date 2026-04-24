@@ -28,6 +28,7 @@ The repository currently tracks a `commit-msg` hook under `.githooks/` to help e
 - Include screenshots for UI changes when helpful.
 - Avoid unrelated refactors in the same PR.
 - Releases are created from `main` with `release-please` plus the GitHub release workflows; do not create release tags manually unless you are intentionally using the manual release workflow.
+- For review expectations, see `docs/REVIEW-GUIDELINES.md`.
 
 ## Style
 

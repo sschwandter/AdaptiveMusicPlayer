@@ -87,10 +87,18 @@ func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutpu
        }
 
     private func readyPrefix(for context: PlayerStatusContext) -> String {
-         "Track \(context.playlistTrackPosition ?? "1") ready"
-       }
+        if context.hasPlaylist, let playlistTrackPosition = context.playlistTrackPosition {
+            return "Track \(playlistTrackPosition) ready"
+        }
+
+        return "Track ready"
+    }
 
     private func playingPrefix(for context: PlayerStatusContext) -> String {
-         "Playing track \(context.playlistTrackPosition ?? "1")"
-       }
+        if context.hasPlaylist, let playlistTrackPosition = context.playlistTrackPosition {
+            return "Playing track \(playlistTrackPosition)"
+        }
+
+        return "Playing"
+    }
 }

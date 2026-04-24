@@ -98,6 +98,35 @@ struct AudioPlayerTests {
         #expect(player.contentViewState.currentTime == 0.5)
     }
 
+    @Test("Natural playback finish stops progress tracking cleanup work")
+    func playbackFinishStopsProgressTracking() async throws {
+        let progressTracker = RecordingPlaybackProgressTracker()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            progressTracker: progressTracker,
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        player.send(.togglePlayPause)
+        try await Task.sleep(for: .milliseconds(20))
+
+        let stopCallCountBeforeFinish = progressTracker.stopCallCount
+
+        progressTracker.streamContinuation?.yield(.finished)
+        try await waitUntil(timeout: .milliseconds(250)) {
+            progressTracker.stopCallCount > stopCallCountBeforeFinish
+        }
+
+        #expect(progressTracker.stopCallCount > stopCallCountBeforeFinish)
+        #expect(player.contentViewState.isPlaying == false)
+    }
+
     @Test("Stop functionality")
     func stopFunctionality() async throws {
         let player = AudioPlayer(
@@ -468,4 +497,21 @@ struct AudioPlayerTests {
           #expect(player.contentViewState.currentTrackTitle == "failing.wav")
           #expect(player.contentViewState.duration == 1)
       }
+}
+
+@MainActor
+private func waitUntil(
+    timeout: Duration,
+    condition: @escaping @MainActor () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+
+    while !condition() {
+        if ContinuousClock.now >= deadline {
+            Issue.record("Timed out waiting for condition.")
+            return
+        }
+
+        try await Task.sleep(for: .milliseconds(10))
+    }
 }

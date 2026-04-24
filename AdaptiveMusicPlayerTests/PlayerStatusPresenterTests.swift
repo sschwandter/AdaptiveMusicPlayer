@@ -22,7 +22,7 @@ struct PlayerStatusPresenterTests {
 
          #expect(output.loading == .idle)
          #expect(output.status.kind == .info)
-         #expect(output.status.message == "Track 1 ready at 44.1 kHz on Built-in Output")
+         #expect(output.status.message == "Track ready at 44.1 kHz on Built-in Output")
          #expect(output.playbackOverride == nil)
      }
 
@@ -45,6 +45,26 @@ struct PlayerStatusPresenterTests {
          #expect(output.status.message == "Playing track 2 of 3 - Device is running at 44.1 kHz")
          #expect(output.playbackOverride == nil)
      }
+
+    @Test("playing status for a single file avoids playlist wording")
+    func playingStatusWithoutPlaylist() {
+        let output = presenter.presentPlaying(
+            PlayerStatusContext(
+                phase: .playing,
+                hasPlaylist: false,
+                playlistTrackPosition: nil,
+                sampleRate: 44_100,
+                hardwareDeviceName: "Built-in Output",
+                hasSampleRateMismatch: false,
+                sampleRateStatusDetail: "Matched"
+            )
+        )
+
+        #expect(output.loading == .idle)
+        #expect(output.status.kind == .info)
+        #expect(output.status.message == "Playing at 44.1 kHz on Built-in Output")
+        #expect(output.playbackOverride == nil)
+    }
 
     @Test("cancelled loading keeps an informational status and explicit cancelled state")
     func cancelledStatus() {

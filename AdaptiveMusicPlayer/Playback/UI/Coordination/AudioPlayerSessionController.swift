@@ -386,6 +386,7 @@ final class AudioPlayerSessionController {
     }
 
     private func handlePlaybackFinished() async {
+        stopProgressTracking()
         if !loadAdjacentTrack(next: true, autoplay: true) {
             let audioInfo = engine.markFinished()
             dispatch(.playbackFinished(audioInfo))
