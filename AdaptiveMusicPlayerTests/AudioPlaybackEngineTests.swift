@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@preconcurrency import AVFoundation
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlaybackEngine Tests")
@@ -73,6 +74,19 @@ struct AudioPlaybackEngineTests {
         task.cancel()
     }
 
+    @Test("Loading creates the audio session away from the main thread")
+    func loadFileCreatesSessionOffMainThread() async throws {
+        let recorder = LoadExecutionThreadRecorder()
+        let engine = AudioPlaybackEngine(
+            loadFileOperation: ThreadRecordingLoadFileOperation(recorder: recorder),
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/test.wav"))
+
+        #expect(await recorder.didRunOnMainThread == false)
+    }
+
     @Test("Stopping progress tracking delegates to the tracker")
     func stopProgressTrackingDelegatesToTracker() async throws {
         let engine = AudioPlaybackEngine(
@@ -84,5 +98,34 @@ struct AudioPlaybackEngineTests {
         tracker.stopTracking()
 
         #expect(tracker.stopCallCount == 1)
+    }
+}
+
+private actor LoadExecutionThreadRecorder {
+    private var recordedValue: Bool?
+
+    var didRunOnMainThread: Bool? {
+        recordedValue
+    }
+
+    func record(_ didRunOnMainThread: Bool) {
+        recordedValue = didRunOnMainThread
+    }
+}
+
+private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
+    let recorder: LoadExecutionThreadRecorder
+
+    nonisolated func execute(from url: URL) async throws -> AudioSession {
+        await recorder.record(Thread.isMainThread)
+        let player = try AVAudioPlayer(data: WaveData.make(), fileTypeHint: "wav")
+
+        return AudioSession(
+            player: player,
+            fileName: url.lastPathComponent,
+            displayTitle: url.lastPathComponent,
+            sampleRate: player.format.sampleRate,
+            duration: player.duration
+        )
     }
 }

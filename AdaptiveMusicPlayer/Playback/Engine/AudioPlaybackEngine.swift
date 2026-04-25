@@ -71,7 +71,7 @@ func loadFile(from url: URL) async throws -> AudioInfo {
         playbackState = .loading(playbackState.audioInfo)
 
         do {
-            let session = try await loadFileOperation.execute(from: url)
+            let session = try await loadSessionOffMainActor(from: url)
 
             guard !Task.isCancelled else {
                 playbackState = .idle
@@ -101,6 +101,19 @@ func loadFile(from url: URL) async throws -> AudioInfo {
             playbackState = stateAfterFailedLoad(playbackError)
             throw playbackError
          }
+    }
+
+    private func loadSessionOffMainActor(from url: URL) async throws -> AudioSession {
+        let loadFileOperation = self.loadFileOperation
+        let loadTask = Task.detached(priority: .userInitiated) {
+            try await loadFileOperation.execute(from: url)
+        }
+
+        return try await withTaskCancellationHandler {
+            try await loadTask.value
+        } onCancel: {
+            loadTask.cancel()
+        }
     }
 
     // MARK: - Playback Control

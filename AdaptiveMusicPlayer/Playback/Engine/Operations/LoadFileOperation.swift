@@ -7,7 +7,7 @@ protocol LoadFileOperationProtocol: Sendable {
     /// - Parameter url: URL of the audio file to load
     /// - Returns: AudioSession containing player and metadata
     /// - Throws: PlaybackError if loading fails
-    func execute(from url: URL) async throws -> AudioSession
+    nonisolated func execute(from url: URL) async throws -> AudioSession
 }
 
 /// Operation for loading audio files
@@ -20,7 +20,7 @@ final class LoadFileOperation: LoadFileOperationProtocol {
         self.sessionManager = sessionManager
     }
 
-    func execute(from url: URL) async throws -> AudioSession {
+    nonisolated func execute(from url: URL) async throws -> AudioSession {
         do {
             let session = try await sessionManager.createSession(from: url)
 

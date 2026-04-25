@@ -1,23 +1,37 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 
 /// Represents a complete audio playback session
 /// @unchecked because AVAudioPlayer is not Sendable, but the session is created
 /// on a background thread and then consumed exclusively on @MainActor.
 struct AudioSession: @unchecked Sendable {
-    let player: AVAudioPlayer
-    let fileName: String
-    let displayTitle: String
-    let sampleRate: Double
-    let duration: Double
+    nonisolated(unsafe) let player: AVAudioPlayer
+    nonisolated let fileName: String
+    nonisolated let displayTitle: String
+    nonisolated let sampleRate: Double
+    nonisolated let duration: Double
+
+    nonisolated init(
+        player: AVAudioPlayer,
+        fileName: String,
+        displayTitle: String,
+        sampleRate: Double,
+        duration: Double
+    ) {
+        self.player = player
+        self.fileName = fileName
+        self.displayTitle = displayTitle
+        self.sampleRate = sampleRate
+        self.duration = duration
+    }
 }
 
 protocol AudioTitleReading: Sendable {
-    func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String
+    nonisolated func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String
 }
 
 struct AVAssetAudioTitleReader: AudioTitleReading {
-    func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String {
+    nonisolated func readDisplayTitle(from url: URL, fallbackFileName: String) async -> String {
         let asset = AVURLAsset(url: url)
         do {
             let metadata = try await asset.load(.commonMetadata)
@@ -27,7 +41,7 @@ struct AVAssetAudioTitleReader: AudioTitleReading {
         }
     }
 
-    private func titleFromCommonMetadata(_ metadataItems: [AVMetadataItem]) async throws -> String? {
+    private nonisolated func titleFromCommonMetadata(_ metadataItems: [AVMetadataItem]) async throws -> String? {
         if let item = AVMetadataItem.metadataItems(
             from: metadataItems,
             filteredByIdentifier: .commonIdentifierTitle
@@ -49,7 +63,7 @@ protocol AudioSessionManaging: Sendable {
     /// - Parameter url: The file URL to load
     /// - Returns: Complete audio session ready for playback
     /// - Throws: Error if session cannot be created
-    func createSession(from url: URL) async throws -> AudioSession
+    nonisolated func createSession(from url: URL) async throws -> AudioSession
 }
 
 /// Manages audio session creation by coordinating file loading, player creation, and metadata extraction
@@ -72,7 +86,7 @@ final class AudioSessionManager: AudioSessionManaging {
 
     // MARK: - Public Methods
 
-    func createSession(from url: URL) async throws -> AudioSession {
+    nonisolated func createSession(from url: URL) async throws -> AudioSession {
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)
         guard !Task.isCancelled else { throw CancellationError() }
@@ -100,7 +114,7 @@ final class AudioSessionManager: AudioSessionManaging {
         )
     }
 
-    private static func normalizedDisplayTitle(_ title: String?, fallback: String) -> String {
+    private nonisolated static func normalizedDisplayTitle(_ title: String?, fallback: String) -> String {
         guard let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmedTitle.isEmpty else {
             return fallback
