@@ -94,11 +94,11 @@ func loadFile(from url: URL) async throws -> AudioInfo {
             playbackState = .idle
             throw PlaybackError.loadingCancelled
          } catch let error as PlaybackError {
-            playbackState = .error(error)
+            playbackState = stateAfterFailedLoad(error)
             throw error
          } catch {
             let playbackError = PlaybackError.loadFailed(error.localizedDescription)
-            playbackState = .error(playbackError)
+            playbackState = stateAfterFailedLoad(playbackError)
             throw playbackError
          }
     }
@@ -263,5 +263,13 @@ func loadFile(from url: URL) async throws -> AudioInfo {
                 task.cancel()
             }
         }
+    }
+
+    private func stateAfterFailedLoad(_ error: PlaybackError) -> EnginePlaybackState {
+        if let preservedAudioInfo = playbackState.audioInfo, player != nil {
+            return .ready(preservedAudioInfo)
+        }
+
+        return .error(error)
     }
 }

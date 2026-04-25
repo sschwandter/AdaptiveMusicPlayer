@@ -185,6 +185,45 @@ struct AudioPlayerTests {
          #expect(player.contentViewState.currentTrackTitle == nil)
      }
 
+    @Test("Failed replacement load keeps previous track playable")
+    func failedReplacementLoadKeepsPreviousTrackPlayable() async throws {
+        let originalURL = URL(fileURLWithPath: "/tmp/original.wav")
+        let brokenURL = URL(fileURLWithPath: "/tmp/broken.wav")
+        let originalPlayer = try StubAudioPlayer()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
+                    originalURL: AudioSession(
+                        player: originalPlayer,
+                        fileName: "original.wav",
+                        displayTitle: "Original",
+                        sampleRate: 44_100,
+                        duration: 1
+                    )
+                ]),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.send(.loadFile(url: originalURL, importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        player.send(.loadFile(url: brokenURL, importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+
+        #expect(player.contentViewState.currentTrackTitle == "Original")
+        #expect(player.contentViewState.hasLoadedFile)
+
+        player.send(.togglePlayPause)
+        try await waitUntil(timeout: .milliseconds(250)) {
+            originalPlayer.playCallCount == 1
+        }
+
+        #expect(originalPlayer.playCallCount == 1)
+        #expect(player.contentViewState.isPlaying)
+    }
+
     @Test("Main play/pause button cancels a pending playback start")
     func togglePlayPauseCancelsPendingPlaybackStart() async throws {
         let context = try StartupTestContext(syncDelay: .milliseconds(100))
