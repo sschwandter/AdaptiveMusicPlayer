@@ -71,7 +71,7 @@ private var sampleRatePresentation: SampleRatePresentationOutput {
     // MARK: - Initialization
 
     init(
-        engine: AudioPlaybackEngine = AudioPlaybackEngine(backend: AVAudioEnginePlaybackBackend()),
+        engine: AudioPlaybackEngine = AudioPlaybackEngine(),
         progressTracker: PlaybackProgressTracking = PlaybackProgressTracker(),
         hardwareObserver: AudioHardwareObserving = CoreAudioHardwareObserver(),
         hardwareInfoProvider: AudioHardwareInfoProviding = CoreAudioHardwareInfoProvider(),

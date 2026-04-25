@@ -4,6 +4,7 @@ import Foundation
 final class AudioPlayerSessionController {
     private enum Constants {
         static let progressUpdateInterval: TimeInterval = 0.1
+        static let hardwareRefreshInterval: Duration = .seconds(5)
     }
 
     private let stateStore: AudioPlayerStateStore
@@ -15,8 +16,9 @@ final class AudioPlayerSessionController {
     private let refreshHardwareInfo: @MainActor () async -> Void
     private let currentVolume: @MainActor () -> Double
 
-    // AsyncStream progress tracking task
+    // AsyncStream progress tracking tasks
     private var progressTrackingTask: Task<Void, Never>?
+    private var hardwareRefreshTask: Task<Void, Never>?
 
     init(
         stateStore: AudioPlayerStateStore,
@@ -346,6 +348,14 @@ final class AudioPlayerSessionController {
         // Cancel any existing tracking
         stopProgressTracking()
 
+        // Start hardware refresh task (separate from progress tracking)
+        hardwareRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshHardwareInfo()
+                try? await Task.sleep(for: Constants.hardwareRefreshInterval)
+            }
+        }
+
         // Forward progress updates as they arrive so the slider stays responsive.
         progressTrackingTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -370,6 +380,8 @@ final class AudioPlayerSessionController {
     private func stopProgressTracking() {
         progressTrackingTask?.cancel()
         progressTrackingTask = nil
+        hardwareRefreshTask?.cancel()
+        hardwareRefreshTask = nil
         progressTracker.stopTracking()
     }
 
