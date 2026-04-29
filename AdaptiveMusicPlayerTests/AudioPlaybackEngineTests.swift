@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @preconcurrency import AVFoundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlaybackEngine Tests")
@@ -43,10 +44,9 @@ struct AudioPlaybackEngineTests {
 
     @Test("Progress tracking returns AsyncStream with correct configuration")
     func progressTrackingReturnsAsyncStream() async throws {
-        let stubPlayer = try StubAudioPlayer()
         let tracker = RecordingPlaybackProgressTracker()
         let engine = AudioPlaybackEngine(
-            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: stubPlayer),
+            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
             sampleRateManager: StubSampleRateManager()
         )
 
@@ -116,16 +116,17 @@ private actor LoadExecutionThreadRecorder {
 private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
     let recorder: LoadExecutionThreadRecorder
 
-    nonisolated func execute(from url: URL) async throws -> AudioSession {
+    func execute(from url: URL) async throws -> LoadedAudioData {
         await recorder.record(Thread.isMainThread)
-        let player = try AVAudioPlayer(data: WaveData.make(), fileTypeHint: "wav")
-
-        return AudioSession(
-            player: player,
+        // Read sample rate from a probe player, same as AudioSessionManager does.
+        let probePlayer = try AVAudioPlayer(data: WaveData.make(), fileTypeHint: "wav")
+        return LoadedAudioData(
+            data: WaveData.make(),
             fileName: url.lastPathComponent,
+            fileExtension: "wav",
             displayTitle: url.lastPathComponent,
-            sampleRate: player.format.sampleRate,
-            duration: player.duration
+            sampleRate: probePlayer.format.sampleRate,
+            duration: probePlayer.duration
         )
     }
 }

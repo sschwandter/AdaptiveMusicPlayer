@@ -1,5 +1,6 @@
 import Testing
 import AVFoundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioSessionManager Tests")
@@ -13,11 +14,11 @@ struct AudioSessionManagerTests {
             titleReader: StubAudioTitleReader(title: "Tagged Track")
         )
 
-        let session = try await manager.createSession(from: URL(fileURLWithPath: "/tmp/track.mp3"))
+        let audioData = try await manager.loadAudioData(from: URL(fileURLWithPath: "/tmp/track.mp3"))
 
-        #expect(session.fileName == "track.mp3")
-        #expect(session.displayTitle == "Tagged Track")
-        #expect(session.player is AVAudioPlayer)
+        #expect(audioData.fileName == "track.mp3")
+        #expect(audioData.displayTitle == "Tagged Track")
+        #expect(audioData.fileExtension == "mp3")
     }
 
     @Test("Missing metadata title falls back to file name")
@@ -27,9 +28,9 @@ struct AudioSessionManagerTests {
             titleReader: StubAudioTitleReader(title: nil)
         )
 
-        let session = try await manager.createSession(from: URL(fileURLWithPath: "/tmp/track.mp3"))
+        let audioData = try await manager.loadAudioData(from: URL(fileURLWithPath: "/tmp/track.mp3"))
 
-        #expect(session.displayTitle == "track.mp3")
+        #expect(audioData.displayTitle == "track.mp3")
     }
 
     @Test("Blank metadata title falls back to file name")
@@ -39,8 +40,8 @@ struct AudioSessionManagerTests {
             titleReader: StubAudioTitleReader(title: "   ")
         )
 
-        let session = try await manager.createSession(from: URL(fileURLWithPath: "/tmp/track.mp3"))
+        let audioData = try await manager.loadAudioData(from: URL(fileURLWithPath: "/tmp/track.mp3"))
 
-        #expect(session.displayTitle == "track.mp3")
+        #expect(audioData.displayTitle == "track.mp3")
     }
 }

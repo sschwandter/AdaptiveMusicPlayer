@@ -1,12 +1,11 @@
 import Foundation
 import Testing
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @MainActor
 struct StartupTestContext {
     let player: AudioPlayer
-    let firstPlayer: StubAudioPlayer
-    let secondPlayer: StubAudioPlayer?
     let firstURL: URL
     let secondURL: URL?
 
@@ -19,16 +18,10 @@ struct StartupTestContext {
     ) throws {
         self.firstURL = firstURL
         self.secondURL = secondURL
-        firstPlayer = try StubAudioPlayer()
-        if secondURL != nil {
-            secondPlayer = try StubAudioPlayer()
-        } else {
-            secondPlayer = nil
-        }
 
         var sessionsByURL: [URL: AudioSession] = [
             firstURL: AudioSession(
-                player: firstPlayer,
+                player: try StubAudioPlayer(),
                 fileName: firstURL.lastPathComponent,
                 displayTitle: firstURL.lastPathComponent,
                 sampleRate: firstSampleRate,
@@ -36,9 +29,9 @@ struct StartupTestContext {
             )
         ]
 
-        if let secondURL, let secondPlayer, let secondSampleRate {
+        if let secondURL, let secondSampleRate {
             sessionsByURL[secondURL] = AudioSession(
-                player: secondPlayer,
+                player: try StubAudioPlayer(),
                 fileName: secondURL.lastPathComponent,
                 displayTitle: secondURL.lastPathComponent,
                 sampleRate: secondSampleRate,

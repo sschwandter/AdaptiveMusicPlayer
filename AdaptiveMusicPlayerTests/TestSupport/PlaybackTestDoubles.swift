@@ -1,6 +1,7 @@
 import Testing
 import AVFoundation
 import Foundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 final class StubAudioPlayer: AVAudioPlayer {
@@ -128,19 +129,18 @@ final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
 
 struct StubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
     let sampleRate: Double
-    let player: AVAudioPlayer
     let displayTitle: String?
 
     init(sampleRate: Double, player: AVAudioPlayer? = nil, displayTitle: String? = nil) {
         self.sampleRate = sampleRate
-        self.player = player ?? (try! StubAudioPlayer())
         self.displayTitle = displayTitle
     }
 
-    func execute(from url: URL) async throws -> AudioSession {
-        AudioSession(
-            player: player,
+    func execute(from url: URL) async throws -> LoadedAudioData {
+        LoadedAudioData(
+            data: WaveData.make(),
             fileName: url.lastPathComponent,
+            fileExtension: url.pathExtension.isEmpty ? "wav" : url.pathExtension,
             displayTitle: displayTitle ?? url.lastPathComponent,
             sampleRate: sampleRate,
             duration: 1
@@ -149,19 +149,40 @@ struct StubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
 }
 
 struct RoutingStubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
-    let sessionsByURL: [URL: AudioSession]
+    let dataByURL: [URL: LoadedAudioData]
 
     init(sessionsByURL: [URL: AudioSession]) {
-        self.sessionsByURL = Dictionary(
-            uniqueKeysWithValues: sessionsByURL.map { (canonicalTestFileURL($0.key), $0.value) }
+        self.dataByURL = Dictionary(
+            uniqueKeysWithValues: sessionsByURL.map { url, session in
+                (canonicalTestFileURL(url), LoadedAudioData(
+                    data: WaveData.make(),
+                    fileName: session.fileName,
+                    fileExtension: "wav",
+                    displayTitle: session.displayTitle,
+                    sampleRate: session.sampleRate,
+                    duration: session.duration
+                ))
+            }
         )
     }
 
-    func execute(from url: URL) async throws -> AudioSession {
-        guard let session = sessionsByURL[canonicalTestFileURL(url)] else {
-            throw PlaybackError.loadFailed("Missing stub session for \(url.path)")
+    func execute(from url: URL) async throws -> LoadedAudioData {
+        guard let data = dataByURL[canonicalTestFileURL(url)] else {
+            throw PlaybackError.loadFailed("Missing stub data for \(url.path)")
         }
-        return session
+        return data
+    }
+}
+
+struct FailingPlaybackControlOperation: PlaybackControlOperationProtocol {
+    func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
+        throw PlaybackError.playbackStartFailed
+    }
+    func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState {
+        throw PlaybackError.notPlaying
+    }
+    func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState {
+        .ready(audioInfo)
     }
 }
 

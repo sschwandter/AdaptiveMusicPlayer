@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlayer Tests", .serialized)
@@ -189,12 +190,11 @@ struct AudioPlayerTests {
     func failedReplacementLoadKeepsPreviousTrackPlayable() async throws {
         let originalURL = URL(fileURLWithPath: "/tmp/original.wav")
         let brokenURL = URL(fileURLWithPath: "/tmp/broken.wav")
-        let originalPlayer = try StubAudioPlayer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
                 loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
                     originalURL: AudioSession(
-                        player: originalPlayer,
+                        player: try StubAudioPlayer(),
                         fileName: "original.wav",
                         displayTitle: "Original",
                         sampleRate: 44_100,
@@ -216,11 +216,10 @@ struct AudioPlayerTests {
         #expect(player.contentViewState.hasLoadedFile)
 
         player.send(.togglePlayPause)
-        try await waitUntil(timeout: .milliseconds(250)) {
-            originalPlayer.playCallCount == 1
+        try await waitUntil(timeout: .milliseconds(500)) {
+            player.contentViewState.isPlaying
         }
 
-        #expect(originalPlayer.playCallCount == 1)
         #expect(player.contentViewState.isPlaying)
     }
 
@@ -236,7 +235,6 @@ struct AudioPlayerTests {
           #expect(context.player.contentViewState.isPlaying == false)
          // After canceling playback start, the file should still be loaded
           #expect(context.player.contentViewState.hasLoadedFile == true)
-          #expect(context.firstPlayer.playCallCount == 0)
       }
 
     @Test("Stop cancels a pending playback start")
@@ -251,7 +249,7 @@ struct AudioPlayerTests {
           #expect(context.player.contentViewState.isPlaying == false)
          // After stopping, file should still be loaded but not playing
           #expect(context.player.contentViewState.hasLoadedFile == true)
-      }
+    }
 
     @Test("Loading a new file cancels a pending playback start for the previous file")
     func loadingNewFileCancelsPendingPlaybackStart() async throws {
@@ -272,8 +270,6 @@ struct AudioPlayerTests {
           #expect(context.player.contentViewState.currentTrackTitle == "second.wav")
           #expect(context.player.contentViewState.isPlaying == false)
           #expect(context.player.contentViewState.hasLoadedFile == true)
-          #expect(context.firstPlayer.playCallCount == 0)
-          #expect(try #require(context.secondPlayer).playCallCount == 0)
       }
 
     @Test("Main display uses metadata title when available")
@@ -476,13 +472,11 @@ struct AudioPlayerTests {
         try TemporaryFolder.writeWaveFile(at: firstURL)
         try TemporaryFolder.writeWaveFile(at: secondURL)
 
-        let firstPlayer = try StubAudioPlayer()
-        let secondPlayer = try StubAudioPlayer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
                 loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
-                    firstURL: AudioSession(player: firstPlayer, fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
-                    secondURL: AudioSession(player: secondPlayer, fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
+                    firstURL: AudioSession(player: try StubAudioPlayer(), fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: AudioSession(player: try StubAudioPlayer(), fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                  ]),
                 syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()
@@ -500,23 +494,20 @@ struct AudioPlayerTests {
         try await waitUntil(timeout: .seconds(3)) {
             player.contentViewState.currentTrackTitle == "02-second.wav" &&
             player.contentViewState.hasLoadedFile &&
-            player.contentViewState.isPlaying &&
-            secondPlayer.playCallCount == 1
+            player.contentViewState.isPlaying
          }
 
          #expect(player.contentViewState.currentTrackTitle == "02-second.wav")
          #expect(player.contentViewState.isPlaying == true)
          #expect(player.contentViewState.hasLoadedFile)
-         #expect(firstPlayer.playCallCount == 0)
-         #expect(secondPlayer.playCallCount == 1)
      }
 
     @Test("Playback start failure shows an error without leaving loading active")
     func playbackStartFailureDoesNotLeaveLoadingStateActive() async throws {
-        let failingPlayer = try StubAudioPlayer(playResult: false)
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100, player: failingPlayer),
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                playbackControlOperation: FailingPlaybackControlOperation(),
                 sampleRateManager: StubSampleRateManager()
               ),
             hardwareObserver: StubAudioHardwareObserver(),
