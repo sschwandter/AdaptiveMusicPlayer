@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Observation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlayer Folder Loading Tests", .serialized)
@@ -93,17 +94,19 @@ struct AudioPlayerFolderLoadingTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
-                    firstURL: AudioSession(
-                        player: try StubAudioPlayer(),
+                loadFileOperation: RoutingStubLoadFileOperation(dataByURL: [
+                    firstURL: LoadedAudioData(
+                        data: WaveData.make(),
                         fileName: "01-first.wav",
+                        fileExtension: "wav",
                         displayTitle: "Opening Track",
                         sampleRate: 44_100,
                         duration: 1
                      ),
-                    secondURL: AudioSession(
-                        player: try StubAudioPlayer(),
+                    secondURL: LoadedAudioData(
+                        data: WaveData.make(),
                         fileName: "02-second.wav",
+                        fileExtension: "wav",
                         displayTitle: "Finale",
                         sampleRate: 44_100,
                         duration: 1

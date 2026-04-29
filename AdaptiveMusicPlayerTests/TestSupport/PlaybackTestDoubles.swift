@@ -151,18 +151,9 @@ struct StubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
 struct RoutingStubLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
     let dataByURL: [URL: LoadedAudioData]
 
-    init(sessionsByURL: [URL: AudioSession]) {
+    init(dataByURL: [URL: LoadedAudioData]) {
         self.dataByURL = Dictionary(
-            uniqueKeysWithValues: sessionsByURL.map { url, session in
-                (canonicalTestFileURL(url), LoadedAudioData(
-                    data: WaveData.make(),
-                    fileName: session.fileName,
-                    fileExtension: "wav",
-                    displayTitle: session.displayTitle,
-                    sampleRate: session.sampleRate,
-                    duration: session.duration
-                ))
-            }
+            uniqueKeysWithValues: dataByURL.map { (canonicalTestFileURL($0.key), $0.value) }
         )
     }
 

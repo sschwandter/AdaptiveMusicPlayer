@@ -19,10 +19,11 @@ struct StartupTestContext {
         self.firstURL = firstURL
         self.secondURL = secondURL
 
-        var sessionsByURL: [URL: AudioSession] = [
-            firstURL: AudioSession(
-                player: try StubAudioPlayer(),
+        var dataByURL: [URL: LoadedAudioData] = [
+            firstURL: LoadedAudioData(
+                data: WaveData.make(),
                 fileName: firstURL.lastPathComponent,
+                fileExtension: "wav",
                 displayTitle: firstURL.lastPathComponent,
                 sampleRate: firstSampleRate,
                 duration: 1
@@ -30,9 +31,10 @@ struct StartupTestContext {
         ]
 
         if let secondURL, let secondSampleRate {
-            sessionsByURL[secondURL] = AudioSession(
-                player: try StubAudioPlayer(),
+            dataByURL[secondURL] = LoadedAudioData(
+                data: WaveData.make(),
                 fileName: secondURL.lastPathComponent,
+                fileExtension: "wav",
                 displayTitle: secondURL.lastPathComponent,
                 sampleRate: secondSampleRate,
                 duration: 1
@@ -41,7 +43,7 @@ struct StartupTestContext {
 
         player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: sessionsByURL),
+                loadFileOperation: RoutingStubLoadFileOperation(dataByURL: dataByURL),
                 syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: syncDelay),
                 sampleRateManager: StubSampleRateManager()
             ),

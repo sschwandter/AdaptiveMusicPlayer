@@ -192,10 +192,11 @@ struct AudioPlayerTests {
         let brokenURL = URL(fileURLWithPath: "/tmp/broken.wav")
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
-                    originalURL: AudioSession(
-                        player: try StubAudioPlayer(),
+                loadFileOperation: RoutingStubLoadFileOperation(dataByURL: [
+                    originalURL: LoadedAudioData(
+                        data: WaveData.make(),
                         fileName: "original.wav",
+                        fileExtension: "wav",
                         displayTitle: "Original",
                         sampleRate: 44_100,
                         duration: 1
@@ -333,9 +334,9 @@ struct AudioPlayerTests {
         let finderItemRevealer = RecordingFinderItemRevealer()
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
-                    firstURL: AudioSession(player: try StubAudioPlayer(), fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
-                    secondURL: AudioSession(player: try StubAudioPlayer(), fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
+                loadFileOperation: RoutingStubLoadFileOperation(dataByURL: [
+                    firstURL: LoadedAudioData(data: WaveData.make(), fileName: "01-first.wav", fileExtension: "wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: LoadedAudioData(data: WaveData.make(), fileName: "02-second.wav", fileExtension: "wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                  ]),
                 sampleRateManager: StubSampleRateManager()
               ),
@@ -474,9 +475,9 @@ struct AudioPlayerTests {
 
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
-                loadFileOperation: RoutingStubLoadFileOperation(sessionsByURL: [
-                    firstURL: AudioSession(player: try StubAudioPlayer(), fileName: "01-first.wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
-                    secondURL: AudioSession(player: try StubAudioPlayer(), fileName: "02-second.wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
+                loadFileOperation: RoutingStubLoadFileOperation(dataByURL: [
+                    firstURL: LoadedAudioData(data: WaveData.make(), fileName: "01-first.wav", fileExtension: "wav", displayTitle: "01-first.wav", sampleRate: 44_100, duration: 1),
+                    secondURL: LoadedAudioData(data: WaveData.make(), fileName: "02-second.wav", fileExtension: "wav", displayTitle: "02-second.wav", sampleRate: 48_000, duration: 1)
                  ]),
                 syncSampleRateOperation: DelayedSyncSampleRateOperation(delay: .milliseconds(200)),
                 sampleRateManager: StubSampleRateManager()

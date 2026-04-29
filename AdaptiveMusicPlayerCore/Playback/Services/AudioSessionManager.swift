@@ -45,25 +45,6 @@ public struct AudioSession {
         self.audioData = audioData
     }
 
-    /// Convenience initializer matching the previous flat API, used by tests.
-    public init(
-        player: AVAudioPlayer,
-        fileName: String,
-        displayTitle: String,
-        sampleRate: Double,
-        duration: Double,
-        fileExtension: String = "wav"
-    ) {
-        self.player = player
-        self.audioData = LoadedAudioData(
-            data: Data(),
-            fileName: fileName,
-            fileExtension: fileExtension,
-            displayTitle: displayTitle,
-            sampleRate: sampleRate,
-            duration: duration
-        )
-    }
 }
 
 public protocol AudioTitleReading: Sendable {
