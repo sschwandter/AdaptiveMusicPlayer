@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Protocol for seeking and navigation within audio tracks
-protocol SeekingOperationProtocol: Sendable {
+public protocol SeekingOperationProtocol: Sendable {
     /// Seek to a specific time position
     /// - Parameters:
     ///   - time: Target time in seconds
@@ -34,7 +34,7 @@ protocol SeekingOperationProtocol: Sendable {
 /// Operation for seeking and navigation within audio tracks
 /// Handles seeking to specific positions and skip forward/backward operations
 /// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
-final class SeekingOperation: SeekingOperationProtocol {
+public final class SeekingOperation: SeekingOperationProtocol {
 
     // MARK: - Constants
 
@@ -44,18 +44,20 @@ final class SeekingOperation: SeekingOperationProtocol {
 
     // MARK: - Public Methods
 
-    func seek(to time: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
+    public init() {}
+
+    public func seek(to time: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let clampedTime = audioInfo.clampSeekTime(time)
         player.currentTime = clampedTime
         return clampedTime
     }
 
-    func skipForward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
+    public func skipForward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let newTime = audioInfo.skipForward(from: currentTime, by: Constants.skipInterval)
         return try seek(to: newTime, player: player, audioInfo: audioInfo)
     }
 
-    func skipBackward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
+    public func skipBackward(from currentTime: Double, player: AVAudioPlayer, audioInfo: AudioInfo) throws -> Double {
         let newTime = audioInfo.skipBackward(from: currentTime, by: Constants.skipInterval)
         return try seek(to: newTime, player: player, audioInfo: audioInfo)
     }

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 private final class StopCounter: @unchecked Sendable {

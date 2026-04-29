@@ -1,3 +1,4 @@
+import AdaptiveMusicPlayerCore
 import SwiftUI
 
 /// Window-scoped command actions for the focused player scene.

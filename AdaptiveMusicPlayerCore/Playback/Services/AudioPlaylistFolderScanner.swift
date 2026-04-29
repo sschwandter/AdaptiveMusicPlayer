@@ -1,20 +1,22 @@
 import Foundation
 import UniformTypeIdentifiers
 
-protocol AudioPlaylistFolderScanning: Sendable {
-    nonisolated func scan(folderURL: URL) async throws -> [URL]
+public protocol AudioPlaylistFolderScanning: Sendable {
+    func scan(folderURL: URL) async throws -> [URL]
 }
 
-protocol DirectoryTreeEnumerating: Sendable {
-    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL]
+public protocol DirectoryTreeEnumerating: Sendable {
+    func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL]
 }
 
-protocol PlayableAudioFileClassifying: Sendable {
-    nonisolated func isPlayableFile(at url: URL) -> Bool
+public protocol PlayableAudioFileClassifying: Sendable {
+    func isPlayableFile(at url: URL) -> Bool
 }
 
-struct FileManagerDirectoryTreeEnumerator: DirectoryTreeEnumerating {
-    nonisolated func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL] {
+public struct FileManagerDirectoryTreeEnumerator: DirectoryTreeEnumerating {
+    public init() {}
+
+    public func recursivelyEnumerateFiles(in folderURL: URL) async throws -> [URL] {
         let resourceKeys: Set<URLResourceKey> = [.isRegularFileKey, .contentTypeKey]
         let options: FileManager.DirectoryEnumerationOptions = [
             .skipsHiddenFiles,
@@ -39,8 +41,10 @@ struct FileManagerDirectoryTreeEnumerator: DirectoryTreeEnumerating {
     }
 }
 
-struct UTTypeAudioFileClassifier: PlayableAudioFileClassifying {
-    nonisolated func isPlayableFile(at url: URL) -> Bool {
+public struct UTTypeAudioFileClassifier: PlayableAudioFileClassifying {
+    public init() {}
+
+    public func isPlayableFile(at url: URL) -> Bool {
         guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentTypeKey]),
               resourceValues.isRegularFile == true else {
             return false
@@ -58,11 +62,11 @@ struct UTTypeAudioFileClassifier: PlayableAudioFileClassifying {
     }
 }
 
-struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
+public struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
     private let directoryEnumerator: DirectoryTreeEnumerating
     private let audioFileClassifier: PlayableAudioFileClassifying
 
-    nonisolated init(
+    public init(
         directoryEnumerator: DirectoryTreeEnumerating = FileManagerDirectoryTreeEnumerator(),
         audioFileClassifier: PlayableAudioFileClassifying = UTTypeAudioFileClassifier()
     ) {
@@ -70,7 +74,7 @@ struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
         self.audioFileClassifier = audioFileClassifier
     }
 
-    nonisolated func scan(folderURL: URL) async throws -> [URL] {
+    public func scan(folderURL: URL) async throws -> [URL] {
         let resourceValues = try folderURL.resourceValues(forKeys: [.isDirectoryKey])
         guard resourceValues.isDirectory == true else {
             throw AudioPlaylistFolderScannerError.notADirectory(folderURL)
@@ -81,16 +85,16 @@ struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
             .sorted(by: Self.sortByFullPath)
     }
 
-    private nonisolated static func sortByFullPath(lhs: URL, rhs: URL) -> Bool {
+    private static func sortByFullPath(lhs: URL, rhs: URL) -> Bool {
         lhs.standardizedFileURL.path.localizedStandardCompare(rhs.standardizedFileURL.path) == .orderedAscending
     }
 }
 
-enum AudioPlaylistFolderScannerError: LocalizedError, Equatable {
+public enum AudioPlaylistFolderScannerError: LocalizedError, Equatable {
     case notADirectory(URL)
     case cannotEnumerateFolder(URL)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notADirectory(let url):
             return "\(url.lastPathComponent) is not a folder."

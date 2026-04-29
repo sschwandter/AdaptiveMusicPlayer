@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// Protocol for controlling playback state
-protocol PlaybackControlOperationProtocol: Sendable {
+public protocol PlaybackControlOperationProtocol: Sendable {
     /// Start or resume playback
     /// - Parameters:
     ///   - player: The audio player instance
@@ -31,9 +31,11 @@ protocol PlaybackControlOperationProtocol: Sendable {
 /// Operation for controlling playback state
 /// Handles play, pause, and stop operations with state validation
 /// Stateless — no @MainActor needed; always called from @MainActor via AudioPlaybackEngine
-final class PlaybackControlOperation: PlaybackControlOperationProtocol {
+public final class PlaybackControlOperation: PlaybackControlOperationProtocol {
 
-    func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
+    public init() {}
+
+    public func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
         if isAtEnd {
             player.currentTime = 0
         }
@@ -45,12 +47,12 @@ final class PlaybackControlOperation: PlaybackControlOperationProtocol {
         return .playing(audioInfo)
     }
 
-    func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState {
+    public func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState {
         player.pause()
         return .paused(audioInfo)
     }
 
-    func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState {
+    public func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState {
         player.stop()
         player.currentTime = 0
         return .ready(audioInfo)

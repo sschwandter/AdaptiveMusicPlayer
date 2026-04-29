@@ -1,3 +1,4 @@
+import AdaptiveMusicPlayerCore
 import Foundation
 
 enum AudioPlayerLoadPhase {

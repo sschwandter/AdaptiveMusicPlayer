@@ -2,23 +2,23 @@ import Foundation
 import CoreAudio
 
 @MainActor
-protocol AudioHardwareObserving: AnyObject {
+public protocol AudioHardwareObserving: AnyObject {
     func startObserving(onChange: @escaping @Sendable () -> Void)
     func stopObserving()
 }
 
-protocol AudioHardwareInfoProviding: Sendable {
+public protocol AudioHardwareInfoProviding: Sendable {
     func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo?
 }
 
-struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
+public struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
     private let sampleRateManager: SampleRateManaging
 
-    init(sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()) {
+    public init(sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()) {
         self.sampleRateManager = sampleRateManager
     }
 
-    func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
+    public func getCurrentAudioDeviceInfo() async -> AudioDeviceInfo? {
         await sampleRateManager.getCurrentDeviceInfo()
     }
 }
@@ -29,7 +29,7 @@ struct CoreAudioHardwareInfoProvider: AudioHardwareInfoProviding {
 /// - `ListenerToken` owns low-level CoreAudio registration and deterministic teardown in `deinit`.
 /// - `PropertyChangeDelegate` is a minimal callback bridge that hops onto MainActor.
 @MainActor
-final class CoreAudioHardwareObserver: AudioHardwareObserving {
+public final class CoreAudioHardwareObserver: AudioHardwareObserving {
     private let callbackQueue = DispatchQueue(label: "AdaptiveMusicPlayer.AudioHardwareObserver")
     private let hardwareSystem = AudioHardwareSystem.shared
 
@@ -38,7 +38,9 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
     private var systemToken: ListenerToken?
     private var deviceToken: ListenerToken?
 
-    func startObserving(onChange: @escaping @Sendable () -> Void) {
+    public init() {}
+
+    public func startObserving(onChange: @escaping @Sendable () -> Void) {
         stopObserving()
         self.onChange = onChange
 
@@ -59,7 +61,7 @@ final class CoreAudioHardwareObserver: AudioHardwareObserving {
         registerDeviceListenersIfNeeded(for: defaultDevice)
     }
 
-    func stopObserving() {
+    public func stopObserving() {
         unregisterDeviceListeners()
         systemToken = nil
         observedDeviceUID = nil
@@ -146,15 +148,15 @@ private enum ObserverPropertyChangeEvent: Sendable {
 }
 
 /// RAII-style owner for one CoreAudio listener registration.
-/// Keeping this nonisolated lets teardown happen synchronously in `deinit`,
+/// Keeping this lets teardown happen synchronously in `deinit`,
 /// independent of whether the MainActor observer is explicitly stopped.
 private final class ListenerToken {
-    nonisolated private let object: AudioHardwareObject
-    nonisolated private let properties: [AudioObjectPropertyAddress]
-    nonisolated private let callbackQueue: DispatchQueue
-    nonisolated private let delegate: PropertyChangeDelegate
+    private let object: AudioHardwareObject
+    private let properties: [AudioObjectPropertyAddress]
+    private let callbackQueue: DispatchQueue
+    private let delegate: PropertyChangeDelegate
 
-    nonisolated init?(
+    init?(
         object: AudioHardwareObject,
         properties: [AudioObjectPropertyAddress],
         callbackQueue: DispatchQueue,
@@ -182,7 +184,7 @@ private final class ListenerToken {
         Self.remove(delegate: delegate, from: object)
     }
 
-    private nonisolated static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
+    private static func remove(delegate: PropertyChangeDelegate, from object: AudioHardwareObject) {
         var delegates = object.delegates
         delegates.removeAll { existing in
             guard let existing = existing as? PropertyChangeDelegate else { return false }
@@ -203,7 +205,7 @@ private final class PropertyChangeDelegate: PropertyListenerDelegate, @unchecked
         self.event = event
     }
 
-    nonisolated func propertiesChanged(properties: [AudioObjectPropertyAddress]) {
+    func propertiesChanged(properties: [AudioObjectPropertyAddress]) {
         Task { @MainActor [weak self] in
             self?.notifyObserver()
         }

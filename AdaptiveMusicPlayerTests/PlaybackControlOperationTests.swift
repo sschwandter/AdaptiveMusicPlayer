@@ -1,5 +1,6 @@
 import Testing
 import AVFoundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("PlaybackControlOperation Tests")

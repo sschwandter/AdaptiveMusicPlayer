@@ -1,4 +1,5 @@
 import Testing
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("PlayerStatusPresenter Tests")

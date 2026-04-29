@@ -1,15 +1,15 @@
 import Foundation
 
-struct PlaylistSession: Sendable {
-    let playlist: PlaybackPlaylist
-    let folderAccess: ScopedFolderAccess?
+public struct PlaylistSession: Sendable {
+    public let playlist: PlaybackPlaylist
+    public let folderAccess: ScopedFolderAccess?
 
-    nonisolated init(playlist: PlaybackPlaylist, folderAccess: ScopedFolderAccess? = nil) {
+    public init(playlist: PlaybackPlaylist, folderAccess: ScopedFolderAccess? = nil) {
         self.playlist = playlist
         self.folderAccess = folderAccess
     }
 
-    nonisolated static func singleTrack(_ url: URL) -> PlaylistSession? {
+    public static func singleTrack(_ url: URL) -> PlaylistSession? {
         guard let playlist = PlaybackPlaylist(tracks: [url]) else {
             return nil
         }
@@ -17,7 +17,7 @@ struct PlaylistSession: Sendable {
         return PlaylistSession(playlist: playlist)
     }
 
-    nonisolated static func folderPlaylist(
+    public static func folderPlaylist(
         tracks: [URL],
         folderAccess: ScopedFolderAccess
     ) -> PlaylistSession? {
@@ -28,31 +28,31 @@ struct PlaylistSession: Sendable {
         return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
     }
 
-    nonisolated var currentTrackURL: URL {
+    public var currentTrackURL: URL {
         playlist.currentTrackURL
     }
 
-    nonisolated var positionDescription: String {
+    public var positionDescription: String {
         playlist.positionDescription
     }
 
-    nonisolated var trackCount: Int {
+    public var trackCount: Int {
         playlist.trackCount
     }
 
-    nonisolated var canMoveToPreviousTrack: Bool {
+    public var canMoveToPreviousTrack: Bool {
         playlist.canMoveToPreviousTrack
     }
 
-    nonisolated var canMoveToNextTrack: Bool {
+    public var canMoveToNextTrack: Bool {
         playlist.canMoveToNextTrack
     }
 
-    nonisolated var currentIndex: Int {
+    public var currentIndex: Int {
         playlist.currentIndex
     }
 
-    nonisolated func movingToTrack(at index: Int) -> PlaylistSession? {
+    public func movingToTrack(at index: Int) -> PlaylistSession? {
         guard let playlist = playlist.playlistByMovingToTrack(at: index) else {
             return nil
         }
@@ -60,7 +60,7 @@ struct PlaylistSession: Sendable {
         return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
     }
 
-    nonisolated func movingToNextTrack() -> PlaylistSession? {
+    public func movingToNextTrack() -> PlaylistSession? {
         guard let playlist = playlist.playlistByMovingToNextTrack() else {
             return nil
         }
@@ -68,7 +68,7 @@ struct PlaylistSession: Sendable {
         return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
     }
 
-    nonisolated func movingToPreviousTrack() -> PlaylistSession? {
+    public func movingToPreviousTrack() -> PlaylistSession? {
         guard let playlist = playlist.playlistByMovingToPreviousTrack() else {
             return nil
         }

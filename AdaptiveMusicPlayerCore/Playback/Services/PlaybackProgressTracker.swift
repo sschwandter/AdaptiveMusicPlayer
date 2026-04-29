@@ -4,7 +4,7 @@ import Combine
 
 /// Protocol for tracking audio playback progress
 @MainActor
-protocol PlaybackProgressTracking {
+public protocol PlaybackProgressTracking {
     /// Start tracking playback progress
     /// - Parameters:
     ///   - player: The AVAudioPlayer to track
@@ -37,7 +37,7 @@ protocol PlaybackProgressTracking {
 }
 
 /// Tracks audio playback progress using timer-based polling and delegate for finish detection
-final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudioPlayerDelegate {
+public final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudioPlayerDelegate {
 
     // MARK: - Constants
 
@@ -55,7 +55,7 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
 
     // MARK: - Public Methods
 
-    func startTracking(
+    public func startTracking(
         player: AVAudioPlayer,
         updateInterval: TimeInterval,
         onProgressUpdate: @escaping (Double) -> Void,
@@ -92,7 +92,7 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         }
     }
 
-    func stopTracking() {
+    public func stopTracking() {
         progressUpdateTask?.cancel()
         progressUpdateTask = nil
         timerTickCount = 0
@@ -102,7 +102,7 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
         trackedPlayerID = nil
     }
 
-    func trackProgressStream(
+    public func trackProgressStream(
         player: AVAudioPlayer?,
         updateInterval: TimeInterval,
         continuation: AsyncStream<ProgressEvent>.Continuation
@@ -162,7 +162,7 @@ final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, AVAudio
 
     // MARK: - AVAudioPlayerDelegate
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         let finishedPlayerID = ObjectIdentifier(player)
 
         // Delegate is called on arbitrary thread, dispatch to main actor

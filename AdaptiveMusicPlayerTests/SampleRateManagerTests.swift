@@ -1,5 +1,6 @@
 import Testing
 import CoreAudio
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("SampleRateManager Tests")

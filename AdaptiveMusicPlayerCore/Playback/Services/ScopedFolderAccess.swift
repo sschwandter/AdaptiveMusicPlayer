@@ -1,11 +1,11 @@
 import Foundation
 
-final class ScopedFolderAccess: @unchecked Sendable {
-    let folderURL: URL
+public final class ScopedFolderAccess: @unchecked Sendable {
+    public let folderURL: URL
     private let usesSecurityScope: Bool
     private let stopAccessing: @Sendable (URL) -> Void
 
-    convenience init?(folderURL: URL) {
+    public convenience init?(folderURL: URL) {
         self.init(
             folderURL: folderURL,
             startAccessing: { $0.startAccessingSecurityScopedResource() },
@@ -17,7 +17,7 @@ final class ScopedFolderAccess: @unchecked Sendable {
         )
     }
 
-    init?(
+    public init?(
         folderURL: URL,
         startAccessing: @Sendable (URL) -> Bool,
         isReadableDirectory: @Sendable (URL) -> Bool,

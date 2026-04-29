@@ -1,7 +1,7 @@
 import Foundation
 
-struct TimeFormatter {
-    nonisolated static func format(_ time: Double) -> String {
+public struct TimeFormatter {
+    public static func format(_ time: Double) -> String {
         guard time.isFinite && time >= 0 else {
             return "0:00"
         }
@@ -11,7 +11,7 @@ struct TimeFormatter {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
-    nonisolated static func formatRemaining(currentTime: Double, duration: Double) -> String {
+    public static func formatRemaining(currentTime: Double, duration: Double) -> String {
         guard duration.isFinite && duration >= 0 else {
             return "-0:00"
         }

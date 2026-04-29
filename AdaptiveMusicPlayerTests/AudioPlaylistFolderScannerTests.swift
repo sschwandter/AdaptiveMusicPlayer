@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlaylistFolderScanner Tests")

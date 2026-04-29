@@ -1,3 +1,4 @@
+import AdaptiveMusicPlayerCore
 import Foundation
 
 struct SampleRatePresentationInput {
@@ -211,7 +212,7 @@ struct SampleRatePresenter {
         Self.sampleRate(input.fileSampleRate, isWithin: input.supportedHardwareSampleRates)
     }
 
-    nonisolated static func formatSampleRate(_ sampleRate: Double) -> String {
+    static func formatSampleRate(_ sampleRate: Double) -> String {
         let kilohertz = sampleRate / 1000
         if abs(kilohertz.rounded() - kilohertz) < 0.05 {
             return "\(Int(kilohertz.rounded())) kHz"

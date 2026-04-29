@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 @Suite("AudioPlayerSessionState Tests")

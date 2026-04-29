@@ -5,7 +5,7 @@ import Foundation
 /// Represents the engine's runtime state for audio playback.
 /// This is an internal state used by AudioPlaybackEngine for runtime coordination,
 /// not the authoritative app-level state which is AudioPlayerSessionState.
-enum EnginePlaybackState: Equatable {
+public enum EnginePlaybackState: Equatable {
     case idle
     case loading(AudioInfo?)
     case ready(AudioInfo)
@@ -16,27 +16,27 @@ enum EnginePlaybackState: Equatable {
 
     // MARK: - State Queries
 
-    nonisolated var isPlaying: Bool {
+    public var isPlaying: Bool {
         if case .playing = self { return true }
         return false
     }
 
-    nonisolated var isPaused: Bool {
+    public var isPaused: Bool {
         if case .paused = self { return true }
         return false
     }
 
-    nonisolated var isLoading: Bool {
+    public var isLoading: Bool {
         if case .loading = self { return true }
         return false
     }
 
-    nonisolated var hasError: Bool {
+    public var hasError: Bool {
         if case .error = self { return true }
         return false
     }
 
-    nonisolated var audioInfo: AudioInfo? {
+    public var audioInfo: AudioInfo? {
         switch self {
         case .loading(let info):
             return info
@@ -49,7 +49,7 @@ enum EnginePlaybackState: Equatable {
 
     // MARK: - State Transitions
 
-    nonisolated var canPlay: Bool {
+    public var canPlay: Bool {
         switch self {
         case .ready, .paused, .finished:
             return true
@@ -58,12 +58,12 @@ enum EnginePlaybackState: Equatable {
         }
     }
 
-    nonisolated var canPause: Bool {
+    public var canPause: Bool {
         if case .playing = self { return true }
         return false
     }
 
-    nonisolated var canSeek: Bool {
+    public var canSeek: Bool {
         switch self {
         case .ready, .playing, .paused, .finished:
             return true
@@ -76,26 +76,38 @@ enum EnginePlaybackState: Equatable {
 // MARK: - Domain Data
 
 /// Audio file information with business rules
-struct AudioInfo: Equatable {
-    nonisolated let fileName: String
-    nonisolated let displayTitle: String
-    nonisolated let duration: Double
-    nonisolated let sampleRate: Double
+public struct AudioInfo: Equatable {
+    public let fileName: String
+    public let displayTitle: String
+    public let duration: Double
+    public let sampleRate: Double
+
+    public init(
+        fileName: String,
+        displayTitle: String,
+        duration: Double,
+        sampleRate: Double
+    ) {
+        self.fileName = fileName
+        self.displayTitle = displayTitle
+        self.duration = duration
+        self.sampleRate = sampleRate
+    }
 
     // MARK: - Business Rules
 
     /// Clamp seek time to valid range [0, duration]
-    nonisolated func clampSeekTime(_ time: Double) -> Double {
+    public func clampSeekTime(_ time: Double) -> Double {
         max(0, min(time, duration))
     }
 
     /// Calculate valid skip forward time
-    nonisolated func skipForward(from currentTime: Double, by interval: Double) -> Double {
+    public func skipForward(from currentTime: Double, by interval: Double) -> Double {
         clampSeekTime(currentTime + interval)
     }
 
     /// Calculate valid skip backward time
-    nonisolated func skipBackward(from currentTime: Double, by interval: Double) -> Double {
+    public func skipBackward(from currentTime: Double, by interval: Double) -> Double {
         clampSeekTime(currentTime - interval)
     }
 }
@@ -103,7 +115,7 @@ struct AudioInfo: Equatable {
 // MARK: - Domain Errors
 
 /// Errors that can occur in the playback domain
-enum PlaybackError: LocalizedError, Equatable {
+public enum PlaybackError: LocalizedError, Equatable {
     case notReady
     case noFileLoaded
     case alreadyPlaying
@@ -113,7 +125,7 @@ enum PlaybackError: LocalizedError, Equatable {
     case loadFailed(String)
     case sampleRateSyncFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notReady:
             return "Audio player is not ready"

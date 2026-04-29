@@ -1,14 +1,20 @@
 import Foundation
 
 /// Loaded audio file data
-struct LoadedAudioFile {
-    nonisolated let data: Data
-    nonisolated let fileName: String
-    nonisolated let fileExtension: String
+public struct LoadedAudioFile {
+    public let data: Data
+    public let fileName: String
+    public let fileExtension: String
+
+    public init(data: Data, fileName: String, fileExtension: String) {
+        self.data = data
+        self.fileName = fileName
+        self.fileExtension = fileExtension
+    }
 }
 
 /// Protocol for loading audio files
-protocol AudioFileLoading: Sendable {
+public protocol AudioFileLoading: Sendable {
     /// Load an audio file from the given URL
     /// - Parameter url: The file URL to load
     /// - Returns: Loaded audio file data
@@ -17,9 +23,11 @@ protocol AudioFileLoading: Sendable {
 }
 
 /// File loader that handles security-scoped resource access
-final class SecurityScopedFileLoader: AudioFileLoading {
+public final class SecurityScopedFileLoader: AudioFileLoading {
 
-    nonisolated func load(url: URL) async throws -> LoadedAudioFile {
+    public init() {}
+
+    public func load(url: URL) async throws -> LoadedAudioFile {
         // Check cancellation before starting
         guard !Task.isCancelled else {
             throw CancellationError()
@@ -59,10 +67,10 @@ final class SecurityScopedFileLoader: AudioFileLoading {
 
     // MARK: - Error Types
 
-    enum LoaderError: LocalizedError {
+    public enum LoaderError: LocalizedError {
         case cannotAccessFile
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .cannotAccessFile:
                 return "Cannot access file"

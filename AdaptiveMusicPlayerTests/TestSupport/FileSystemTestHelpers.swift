@@ -1,4 +1,5 @@
 import Foundation
+@testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
 func canonicalTestFileURL(_ url: URL) -> URL {

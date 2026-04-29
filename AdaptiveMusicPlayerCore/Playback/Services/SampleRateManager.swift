@@ -1,20 +1,26 @@
 import Foundation
 import CoreAudio
 
-struct AudioDeviceInfo: Sendable, Equatable {
-    let name: String
-    let currentSampleRate: Double
-    let supportedSampleRates: [Double]
+public struct AudioDeviceInfo: Sendable, Equatable {
+    public let name: String
+    public let currentSampleRate: Double
+    public let supportedSampleRates: [Double]
+
+    public init(name: String, currentSampleRate: Double, supportedSampleRates: [Double]) {
+        self.name = name
+        self.currentSampleRate = currentSampleRate
+        self.supportedSampleRates = supportedSampleRates
+    }
 }
 
-enum SampleRateSupport {
-    nonisolated static func isSupported(_ rate: Double, by ranges: [AudioValueRange]) -> Bool {
+public enum SampleRateSupport {
+    public static func isSupported(_ rate: Double, by ranges: [AudioValueRange]) -> Bool {
         ranges.contains { range in
             rate >= range.mMinimum && rate <= range.mMaximum
         }
     }
 
-    nonisolated static func expandRates(from range: AudioValueRange) -> [Double] {
+    public static func expandRates(from range: AudioValueRange) -> [Double] {
         guard range.mMaximum >= range.mMinimum else { return [] }
         guard range.mMinimum != range.mMaximum else { return [range.mMinimum] }
 
@@ -30,7 +36,7 @@ enum SampleRateSupport {
 }
 
 /// Protocol for managing audio device sample rates
-protocol SampleRateManaging: Sendable {
+public protocol SampleRateManaging: Sendable {
     /// Get the current hardware sample rate
     /// - Returns: The current sample rate in Hz, or nil if unavailable
     func getCurrentSampleRate() async -> Double?
@@ -54,24 +60,26 @@ protocol SampleRateManaging: Sendable {
 }
 
 /// Core Audio implementation of sample rate management
-actor CoreAudioSampleRateManager: SampleRateManaging {
+public actor CoreAudioSampleRateManager: SampleRateManaging {
     private let hardwareSystem = AudioHardwareSystem.shared
 
-    func getCurrentSampleRate() async -> Double? {
+    public init() {}
+
+    public func getCurrentSampleRate() async -> Double? {
         guard let device = try? getDefaultAudioDevice() else {
             return nil
         }
         return try? device.nominalSampleRate
     }
 
-    func getCurrentOutputDeviceName() async -> String? {
+    public func getCurrentOutputDeviceName() async -> String? {
         guard let device = try? getDefaultAudioDevice() else {
             return nil
         }
         return try? device.name
     }
 
-    func setSampleRate(_ rate: Double) async throws {
+    public func setSampleRate(_ rate: Double) async throws {
         let device = try getDefaultAudioDevice()
 
         // Check if sample rate is supported
@@ -85,7 +93,7 @@ actor CoreAudioSampleRateManager: SampleRateManaging {
         try device.setNominalSampleRate(rate)
     }
 
-    func getSupportedSampleRates() async -> [Double] {
+    public func getSupportedSampleRates() async -> [Double] {
         guard let device = try? getDefaultAudioDevice() else {
             return []
         }
@@ -93,7 +101,7 @@ actor CoreAudioSampleRateManager: SampleRateManaging {
         return ranges.flatMap(SampleRateSupport.expandRates(from:))
     }
 
-    func getCurrentDeviceInfo() async -> AudioDeviceInfo? {
+    public func getCurrentDeviceInfo() async -> AudioDeviceInfo? {
         guard let device = try? getDefaultAudioDevice() else {
             return nil
         }

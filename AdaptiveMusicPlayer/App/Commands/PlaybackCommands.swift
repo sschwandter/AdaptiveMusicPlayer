@@ -1,3 +1,4 @@
+import AdaptiveMusicPlayerCore
 import SwiftUI
 
 /// Menu commands for playback control
