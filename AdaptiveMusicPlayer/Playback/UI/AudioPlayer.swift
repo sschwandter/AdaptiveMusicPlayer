@@ -12,16 +12,14 @@ final class AudioPlayer {
 
     private let stateStore = AudioPlayerStateStore()
 
-// MARK: - Domain State (exposed to UI)
+    // MARK: - Domain State (exposed to UI)
 
-var volume: Double = 1 {
-        didSet {
-            engine.setVolume(volume)
-         }
-     }
+    var volume: Double {
+        get { stateStore.sessionState.volume }
+        set { send(.setVolume(newValue)) }
+    }
 
-private var isAttemptingPlaybackStart: Bool {
-        sessionController.isStartingPlayback
+    private var isAttemptingPlaybackStart: Bool {        sessionController.isStartingPlayback
      }
 
 private var contentViewPresentation: ContentViewStatePresentationOutput {
@@ -89,6 +87,9 @@ private var sampleRatePresentation: SampleRatePresentationOutput {
         )
 
         hardwareMonitor.startObserving()
+
+        // Access sessionController to trigger lazy initialization and engine subscription
+        _ = sessionController
 
         // Task inherits @MainActor from surrounding context
         Task {

@@ -21,7 +21,6 @@ struct ContentView: View {
     @State private var activeImportTarget: ImportTarget?
     @State private var showingImporter = false
     @State private var sliderPosition: Double = 0
-    @State private var isEditingSlider = false
 
     private var viewState: ContentViewState {
         player.contentViewState
@@ -150,14 +149,15 @@ struct ContentView: View {
 
             VStack(spacing: 10) {
                 Slider(value: $sliderPosition, in: 0...max(viewState.duration, 1)) { isEditing in
-                    isEditingSlider = isEditing
-                    if !isEditing {
+                    if isEditing {
+                        player.send(.seekStarted)
+                    } else {
                         player.send(.seek(to: sliderPosition))
                     }
                 }
                 .tint(.white.opacity(0.95))
                 .onChange(of: viewState.currentTime) { oldValue, newValue in
-                    if !isEditingSlider {
+                    if !viewState.isSeeking {
                         sliderPosition = newValue
                     }
                 }
@@ -364,7 +364,7 @@ struct ContentView: View {
     // MARK: - Computed Properties
 
     private var displayedPlaybackTime: Double {
-        isEditingSlider ? sliderPosition : viewState.currentTime
+        viewState.isSeeking ? sliderPosition : viewState.currentTime
     }
 
     private var playbackCommandActions: PlaybackCommandActions {

@@ -42,14 +42,59 @@ struct AudioPlayerTests {
          )
 
         player.volume = 0.8
-         #expect(player.volume == 0.8)
+        try await waitUntil { player.volume == 0.8 }
+        #expect(player.volume == 0.8)
 
         player.volume = 0.0
-         #expect(player.volume == 0.0)
+        try await waitUntil { player.volume == 0.0 }
+        #expect(player.volume == 0.0)
 
         player.volume = 1.0
-         #expect(player.volume == 1.0)
+        try await waitUntil { player.volume == 1.0 }
+        #expect(player.volume == 1.0)
      }
+
+    @Test("Progress updates are suppressed during seeking")
+    func progressSuppressionDuringSeeking() async throws {
+        let progressTracker = RecordingPlaybackProgressTracker()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            progressTracker: progressTracker,
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        player.send(.togglePlayPause)
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Start seeking
+        player.send(.seekStarted)
+        try await waitUntil { player.contentViewState.isSeeking }
+
+        // Send progress update while seeking
+        progressTracker.streamContinuation?.yield(.progress(0.75))
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Current time should NOT have updated from the progress event
+        #expect(player.contentViewState.currentTime == 0)
+
+        // Finish seeking
+        player.send(.seek(to: 0.5))
+        try await waitUntil { !player.contentViewState.isSeeking }
+
+        // Current time should now match the seek target
+        #expect(player.contentViewState.currentTime == 0.5)
+
+        // Progress updates should resume
+        progressTracker.streamContinuation?.yield(.progress(0.6))
+        try await waitUntil { player.contentViewState.currentTime == 0.6 }
+        #expect(player.contentViewState.currentTime == 0.6)
+    }
 
     @Test("Time formatting works correctly")
     func timeFormatting() async throws {

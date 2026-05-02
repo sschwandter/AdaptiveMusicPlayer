@@ -111,6 +111,7 @@ struct ContentViewState {
     let playlistTrackPosition: String?
     let duration: Double
     let currentTime: Double
+    let isSeeking: Bool
     let isLoading: Bool
     let isPlaying: Bool
     let hasLoadedFile: Bool
