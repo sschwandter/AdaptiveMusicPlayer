@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.6.1...AdaptiveMusicPlayer-v0.7.0) (2026-05-02)
+
+
+### Features
+
+* Phase 2 - AsyncStream modernization with debounce ([47c3670](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/47c36709cc246231fb397b4aa0d132915e8b0014))
+
+
+### Bug Fixes
+
+* clean up playback finish lifecycle and add review guide ([2ff3172](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/2ff3172294ed0287a25a20f2e7f825f3ddba9c37))
+* load audio sessions off main actor ([bf8df2a](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/bf8df2a99acbd03c58d75332eb56908799f488aa))
+* remove unsafe observer isolation and harden folder/workflow handling ([0edc485](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/0edc485c2630344d082b7b3e35e58ca46cb8a52b))
+* replace invalid playhead symbol ([1e3077f](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/1e3077fe14f12645cae007eafc29ca5ef8637cda))
+* restore folder load observation updates ([3cc290f](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/3cc290f0c47352b4fc38b097d9ec76e84051ab85))
+* restore live progress updates and offload folder scanning ([92c0010](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/92c001068c3bad4262f1a957c8cbf6237650c528))
+
 ## [0.6.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.6.0...AdaptiveMusicPlayer-v0.6.1) (2026-04-21)
 
 
