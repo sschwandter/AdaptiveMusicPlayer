@@ -92,10 +92,6 @@ final class AudioPlayerSessionController {
             )
         case .revealCurrentTrackInFinder:
             dispatch(.commandIgnored(.notReady))
-        case .synchronizeSampleRates:
-            Task { @MainActor [weak self] in
-                await self?.synchronizeSampleRates()
-            }
         case .setVolume(let volume):
             engine.setVolume(volume)
         }
@@ -199,37 +195,6 @@ final class AudioPlayerSessionController {
             dispatch(.seekFinished(newTime))
         } catch {
             dispatch(.commandIgnored(.noFileLoaded))
-        }
-    }
-
-    private func synchronizeSampleRates() async {
-        do {
-            try await engine.synchronizeSampleRates()
-
-            do {
-                try await Task.sleep(for: .milliseconds(500))
-            } catch {
-                return
-            }
-
-            await refreshHardwareInfo()
-
-            let sampleRatePresentation = stateStore.sampleRatePresentation(
-                isAttemptingPlaybackStart: isStartingPlayback
-            )
-            if sampleRatePresentation.hasMismatch {
-                showError(.sampleRateSyncFailed(sampleRatePresentation.statusDetail))
-            } else {
-                dispatchStatus(
-                    statusPresenter.presentInfo(
-                        message: "Hardware sample rate set to \(SampleRatePresenter.formatSampleRate(stateStore.fileSampleRate)) on \(sampleRatePresentation.hardwareDeviceDisplayName)"
-                    )
-                )
-            }
-        } catch let error as PlaybackError {
-            showError(error)
-        } catch {
-            showError(.sampleRateSyncFailed(error.localizedDescription))
         }
     }
 

@@ -14,7 +14,6 @@ enum AudioPlayerCommand {
     case navigatePlaylist(next: Bool, autoplay: Bool)
     case selectPlaylistTrack(index: Int)
     case revealCurrentTrackInFinder
-    case synchronizeSampleRates
     case setVolume(Double)
 }
 

@@ -61,6 +61,12 @@ public protocol SampleRateManaging: Sendable {
 
 /// Core Audio implementation of sample rate management
 public actor CoreAudioSampleRateManager: SampleRateManaging {
+    private enum Constants {
+        static let sampleRateTolerance: Double = 1.0
+        static let settlePollInterval: Duration = .milliseconds(50)
+        static let settleTimeout: Duration = .milliseconds(750)
+    }
+
     private let hardwareSystem = AudioHardwareSystem.shared
 
     public init() {}
@@ -91,6 +97,7 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
         }
 
         try device.setNominalSampleRate(rate)
+        try await waitForSampleRateToSettle(rate, on: device)
     }
 
     public func getSupportedSampleRates() async -> [Double] {
@@ -131,5 +138,27 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
             ])
         }
         return device
+    }
+
+    private func waitForSampleRateToSettle(_ targetRate: Double, on device: AudioHardwareDevice) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: Constants.settleTimeout)
+
+        while true {
+            try Task.checkCancellation()
+
+            if let currentRate = try? device.nominalSampleRate,
+               abs(currentRate - targetRate) <= Constants.sampleRateTolerance {
+                return
+            }
+
+            guard clock.now < deadline else {
+                throw NSError(domain: "SampleRateManager", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "Sample rate did not settle at \(Int(targetRate)) Hz"
+                ])
+            }
+
+            try await Task.sleep(for: Constants.settlePollInterval)
+        }
     }
 }

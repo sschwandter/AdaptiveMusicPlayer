@@ -40,7 +40,7 @@ public final class PlaybackControlOperation: PlaybackControlOperationProtocol {
             player.currentTime = 0
         }
 
-        guard player.play() else {
+        guard player.prepareToPlay(), player.play() else {
             throw PlaybackError.playbackStartFailed
         }
 

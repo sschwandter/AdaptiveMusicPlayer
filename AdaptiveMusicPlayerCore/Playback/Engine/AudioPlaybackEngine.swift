@@ -102,8 +102,10 @@ public final class AudioPlaybackEngine {
             }
 
             // Create AVAudioPlayer on @MainActor from the Sendable audio data.
+            // Do not prepare the player yet: playback startup may first switch the
+            // hardware sample rate, and preparing before that switch can leave the
+            // underlying AudioQueue tied to a stale device configuration.
             let newPlayer = try AVAudioPlayer(data: audioData.data, fileTypeHint: audioData.fileExtension)
-            newPlayer.prepareToPlay()
 
             let audioInfo = AudioInfo(
                 fileName: audioData.fileName,
@@ -249,17 +251,6 @@ public final class AudioPlaybackEngine {
         }
 
         return try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
-    }
-
-    // MARK: - Sample Rate Management
-
-    /// Synchronize hardware sample rate to match current audio file.
-    /// The sample-rate manager owns the concurrency boundary for Core Audio access.
-    public func synchronizeSampleRates() async throws {
-        guard let audioInfo = playbackState.audioInfo else {
-            throw PlaybackError.noFileLoaded
-        }
-        try await syncSampleRateOperation.execute(audioInfo: audioInfo, sampleRateManager: sampleRateManager)
     }
 
     // MARK: - Volume Control
