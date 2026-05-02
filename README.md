@@ -38,12 +38,16 @@ UI tests exist, but command-line execution may depend on the local environment a
 
 ## Code Structure
 
-The app is organized under `AdaptiveMusicPlayer/Playback/`:
+The project is split into two primary targets:
 
-- `UI/` contains the SwiftUI views and a **unidirectional state management triad** (State Store, Reducer, and Session Controller) that synchronizes with the engine via an asynchronous event stream.
-- `Engine/` contains an **event-driven** runtime playback adapter around `AVAudioPlayer` plus atomic playback operations.
-- `Services/` wraps file loading, folder scanning, progress tracking, Core Audio access, and Finder integration.
-- `Domain/` contains shared playback models such as `AudioInfo`, playlists, sessions, and typed errors.
+### AdaptiveMusicPlayer (App)
+The main application target, located under `AdaptiveMusicPlayer/`.
+- `UI/` contains the SwiftUI views and a **unidirectional state management triad** (State Store, Reducer, and Session Controller) that synchronizes with the core engine via an asynchronous event stream.
+
+### AdaptiveMusicPlayerCore (Framework)
+The central playback framework, located under `AdaptiveMusicPlayerCore/`.
+- Contains the **event-driven engine**, domain models, and playback services.
+- For detailed information, see the [Core README](AdaptiveMusicPlayerCore/README.md).
 
 For a contributor-focused walkthrough, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

@@ -5,7 +5,7 @@ import Foundation
 /// Represents the engine's runtime state for audio playback.
 /// This is an internal state used by AudioPlaybackEngine for runtime coordination,
 /// not the authoritative app-level state which is AudioPlayerSessionState.
-public enum EnginePlaybackState: Equatable {
+public enum EnginePlaybackState: Equatable, Sendable {
     case idle
     case loading(AudioInfo?)
     case ready(AudioInfo)
@@ -76,7 +76,7 @@ public enum EnginePlaybackState: Equatable {
 // MARK: - Domain Data
 
 /// Audio file information with business rules
-public struct AudioInfo: Equatable {
+public struct AudioInfo: Equatable, Sendable {
     public let fileName: String
     public let displayTitle: String
     public let duration: Double
