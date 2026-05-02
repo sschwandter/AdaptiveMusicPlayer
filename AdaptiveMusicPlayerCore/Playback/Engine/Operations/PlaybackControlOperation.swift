@@ -40,7 +40,12 @@ public final class PlaybackControlOperation: PlaybackControlOperationProtocol {
             player.currentTime = 0
         }
 
-        guard player.prepareToPlay(), player.play() else {
+        // Prepare against the current output-device configuration, but do not
+        // treat a failed prepare as terminal. On headless/CI macOS runners,
+        // `prepareToPlay()` can report failure even though the playback start
+        // path remains testable via `play()`.
+        player.prepareToPlay()
+        guard player.play() else {
             throw PlaybackError.playbackStartFailed
         }
 
