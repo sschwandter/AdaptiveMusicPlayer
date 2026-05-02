@@ -40,8 +40,8 @@ UI tests exist, but command-line execution may depend on the local environment a
 
 The app is organized under `AdaptiveMusicPlayer/Playback/`:
 
-- `UI/` contains the SwiftUI view, window command bridge, reducer-backed session state, and the `AudioPlayerSessionController` orchestration layer.
-- `Engine/` contains the runtime playback adapter around `AVAudioPlayer` plus focused playback operations.
+- `UI/` contains the SwiftUI views and a **unidirectional state management triad** (State Store, Reducer, and Session Controller) that synchronizes with the engine via an asynchronous event stream.
+- `Engine/` contains an **event-driven** runtime playback adapter around `AVAudioPlayer` plus atomic playback operations.
 - `Services/` wraps file loading, folder scanning, progress tracking, Core Audio access, and Finder integration.
 - `Domain/` contains shared playback models such as `AudioInfo`, playlists, sessions, and typed errors.
 
