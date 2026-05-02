@@ -6,9 +6,6 @@ on:
       - main
   pull_request:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-and-test:
     runs-on: macos-26
@@ -73,7 +70,7 @@ jobs:
             !contains(github.event.head_commit.message, 'release-please--branches--main') &&
             !startsWith(github.event.head_commit.message, 'chore(main): release AdaptiveMusicPlayer ')
           }}
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           target-branch: main
@@ -88,7 +85,7 @@ jobs:
             contains(github.event.head_commit.message, 'release-please--branches--main') ||
             startsWith(github.event.head_commit.message, 'chore(main): release AdaptiveMusicPlayer ')
           }}
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           target-branch: main
