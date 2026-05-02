@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.0...AdaptiveMusicPlayer-v0.7.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* stabilize playback after sample rate switch ([7b78732](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/7b787327021b95d7a1bf51625788e4500de75fb7))
+
 ## [0.7.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.6.1...AdaptiveMusicPlayer-v0.7.0) (2026-05-02)
 
 
