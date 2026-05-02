@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.1...AdaptiveMusicPlayer-v0.7.2) (2026-05-02)
+
+
+### Bug Fixes
+
+* tolerate prepare failure in playback tests ([6c0309c](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/6c0309c789d8ba78d134e83e46d1b468b03ba3e5))
+
 ## [0.7.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.0...AdaptiveMusicPlayer-v0.7.1) (2026-05-02)
 
 
