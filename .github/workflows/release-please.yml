@@ -12,10 +12,11 @@ env:
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
 
 jobs:
-  release-please:
+  detect-release-merge:
     if: >-
       ${{
         github.event.workflow_run.conclusion == 'success' &&
@@ -23,11 +24,72 @@ jobs:
       }}
     runs-on: ubuntu-latest
     outputs:
+      is_release_merge: ${{ steps.detect.outputs.is_release_merge }}
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Detect Release Please merge commit
+        id: detect
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          subject="$(git log -1 --pretty=%s "$HEAD_SHA")"
+          body="$(git log -1 --pretty=%B "$HEAD_SHA")"
+          parents="$(git rev-list --parents -n 1 "$HEAD_SHA")"
+          parent_count="$(wc -w <<< "$parents")"
+
+          second_parent_subject=""
+          if [ "$parent_count" -ge 3 ]; then
+            second_parent="$(awk '{print $3}' <<< "$parents")"
+            second_parent_subject="$(git log -1 --pretty=%s "$second_parent")"
+          fi
+
+          echo "Subject: $subject"
+          echo "Second parent subject: $second_parent_subject"
+
+          is_release_merge=false
+          if grep -q 'release-please--branches--main' <<< "$subject"; then
+            is_release_merge=true
+          elif grep -q '^chore(main): release AdaptiveMusicPlayer ' <<< "$subject"; then
+            is_release_merge=true
+          elif grep -q '^chore(main): release AdaptiveMusicPlayer ' <<< "$second_parent_subject"; then
+            is_release_merge=true
+          elif grep -q '^chore(main): release AdaptiveMusicPlayer ' <<< "$body"; then
+            is_release_merge=true
+          fi
+
+          echo "is_release_merge=$is_release_merge" >> "$GITHUB_OUTPUT"
+
+  release-pr:
+    needs: detect-release-merge
+    if: ${{ needs.detect-release-merge.outputs.is_release_merge != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update release PR only
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
+
+  github-release:
+    needs: detect-release-merge
+    if: ${{ needs.detect-release-merge.outputs.is_release_merge == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       release_sha: ${{ steps.release.outputs.sha }}
     steps:
-      - name: Run release-please
+      - name: Create GitHub release only
         id: release
         uses: googleapis/release-please-action@v4
         with:
@@ -35,10 +97,33 @@ jobs:
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+      - name: Refuse releases for a different commit
+        if: >-
+          ${{
+            steps.release.outputs.release_created == 'true' &&
+            steps.release.outputs.sha != github.event.workflow_run.head_sha
+          }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          CI_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "Release Please created $TAG_NAME for $RELEASE_SHA, but CI passed for $CI_SHA."
+          echo "Deleting the mismatched GitHub release and tag."
+          gh release delete "$TAG_NAME" --cleanup-tag --yes
+          exit 1
 
   signed-release:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: github-release
+    if: >-
+      ${{
+        needs.github-release.outputs.release_created == 'true' &&
+        needs.github-release.outputs.release_sha == github.event.workflow_run.head_sha
+      }}
     runs-on: macos-26
     permissions:
       contents: write
@@ -47,8 +132,8 @@ jobs:
       BUILD_CONFIGURATION: Release
       ARCHIVE_PATH: .build/ReleaseArchive/AdaptiveMusicPlayer.xcarchive
       EXPORT_PATH: .build/ReleaseExport
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
-      RELEASE_ZIP: AdaptiveMusicPlayer-${{ needs.release-please.outputs.tag_name }}-macOS.zip
+      RELEASE_TAG: ${{ needs.github-release.outputs.tag_name }}
+      RELEASE_ZIP: AdaptiveMusicPlayer-${{ needs.github-release.outputs.tag_name }}-macOS.zip
 
     steps:
       - name: Check out release tag
@@ -56,7 +141,19 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.github-release.outputs.tag_name }}
+
+      - name: Verify release tag unit tests
+        run: |
+          xcodebuild \
+            -scheme "$APP_NAME" \
+            -destination 'platform=macOS' \
+            -only-testing:AdaptiveMusicPlayerTests \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            test
 
       - name: Install signing certificate
         env:
