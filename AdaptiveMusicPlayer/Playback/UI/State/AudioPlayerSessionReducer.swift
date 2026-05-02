@@ -18,10 +18,14 @@ enum AudioPlayerAction {
     case playbackStopped(preservedAudioInfo: AudioInfo?)
     case playbackFinished(AudioInfo?)
     case progressChanged(Double)
+    case volumeChanged(Double)
+    case seekStarted
+    case seekFinished(Double)
     case hardwareInfoChanged(AudioDeviceInfo?)
     case statusPresented(PlayerStatusPresentationOutput)
     case playbackFailed(PlaybackError)
     case commandIgnored(PlaybackError)
+    case engineEventReceived(EngineEvent)
 }
 
 struct AudioPlayerSessionReducer {
@@ -32,6 +36,14 @@ struct AudioPlayerSessionReducer {
         var nextState = state
 
         switch action {
+        case .engineEventReceived(let event):
+            switch event {
+            case .stateChanged(let engineState):
+                nextState = reduceEngineStateChange(state: nextState, engineState: engineState)
+            case .volumeChanged(let volume):
+                nextState.volume = volume
+            }
+
         case .loadStarted(let preservedAudioInfo, let phase):
             nextState.playback = loadingPlaybackState(
                 preservedAudioInfo: preservedAudioInfo,
@@ -97,7 +109,19 @@ struct AudioPlayerSessionReducer {
             )
 
         case .progressChanged(let currentTime):
-            nextState.currentTime = currentTime
+            if !state.isSeeking {
+                nextState.currentTime = currentTime
+            }
+
+        case .volumeChanged(let volume):
+            nextState.volume = volume
+
+        case .seekStarted:
+            nextState.isSeeking = true
+
+        case .seekFinished(let time):
+            nextState.isSeeking = false
+            nextState.currentTime = time
 
         case .hardwareInfoChanged(let deviceInfo):
             if let deviceInfo {
@@ -130,6 +154,43 @@ struct AudioPlayerSessionReducer {
 
         case .commandIgnored:
             break
+        }
+
+        return nextState
+    }
+
+    private func reduceEngineStateChange(
+        state: AudioPlayerSessionState,
+        engineState: EnginePlaybackState
+    ) -> AudioPlayerSessionState {
+        var nextState = state
+
+        switch engineState {
+        case .idle:
+            nextState.playback = .idle
+        case .loading(let audioInfo):
+            nextState.playback = loadingPlaybackState(
+                preservedAudioInfo: audioInfo,
+                currentPlayback: state.playback
+            )
+        case .ready(let audioInfo):
+            nextState.playback = .ready(audioInfo)
+        case .playing(let audioInfo):
+            nextState.playback = .playing(audioInfo)
+        case .paused(let audioInfo):
+            nextState.playback = .paused(audioInfo)
+        case .finished(let audioInfo):
+            nextState.playback = .finished(audioInfo)
+            nextState.currentTime = audioInfo.duration
+        case .error(let error):
+            nextState.activity = .failed
+            nextState.status = StatusPresentationState(
+                kind: .error,
+                message: error.localizedDescription
+            )
+            if nextState.currentAudioInfo == nil {
+                nextState.playback = .unavailable
+            }
         }
 
         return nextState

@@ -41,23 +41,6 @@
 		A0000000000000000000000C /* AdaptiveMusicPlayerCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002 /* AdaptiveMusicPlayerCore.framework */; };
 		A0000000000000000000000E /* AdaptiveMusicPlayerCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002 /* AdaptiveMusicPlayerCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A00000000000000000000011 /* AdaptiveMusicPlayerCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002 /* AdaptiveMusicPlayerCore.framework */; };
-		B00000000000000000000031 /* EnginePlaybackState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* EnginePlaybackState.swift */; };
-		B00000000000000000000032 /* PlaybackPlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* PlaybackPlaylist.swift */; };
-		B00000000000000000000033 /* PlaylistSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* PlaylistSession.swift */; };
-		B00000000000000000000034 /* AudioPlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000014 /* AudioPlaybackEngine.swift */; };
-		B00000000000000000000035 /* LoadFileOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* LoadFileOperation.swift */; };
-		B00000000000000000000036 /* PlaybackControlOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* PlaybackControlOperation.swift */; };
-		B00000000000000000000037 /* SeekingOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* SeekingOperation.swift */; };
-		B00000000000000000000038 /* SyncSampleRateOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* SyncSampleRateOperation.swift */; };
-		B00000000000000000000039 /* AudioFileLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* AudioFileLoader.swift */; };
-		B0000000000000000000003A /* AudioHardwareObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* AudioHardwareObserver.swift */; };
-		B0000000000000000000003B /* AudioPlaylistFolderScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001B /* AudioPlaylistFolderScanner.swift */; };
-		B0000000000000000000003C /* AudioSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001C /* AudioSessionManager.swift */; };
-		B0000000000000000000003D /* FinderItemRevealer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001D /* FinderItemRevealer.swift */; };
-		B0000000000000000000003E /* PlaybackProgressTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001E /* PlaybackProgressTracker.swift */; };
-		B0000000000000000000003F /* SampleRateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001F /* SampleRateManager.swift */; };
-		B00000000000000000000040 /* ScopedFolderAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* ScopedFolderAccess.swift */; };
-		B00000000000000000000041 /* TimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* TimeFormatter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -79,29 +62,17 @@
 		F8C938C22EA40C9F00E18E93 /* AdaptiveMusicPlayerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AdaptiveMusicPlayerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8C938CC2EA40C9F00E18E93 /* AdaptiveMusicPlayerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AdaptiveMusicPlayerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000002 /* AdaptiveMusicPlayerCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AdaptiveMusicPlayerCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		B00000000000000000000011 /* EnginePlaybackState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginePlaybackState.swift; sourceTree = "<group>"; };
-		B00000000000000000000012 /* PlaybackPlaylist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackPlaylist.swift; sourceTree = "<group>"; };
-		B00000000000000000000013 /* PlaylistSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistSession.swift; sourceTree = "<group>"; };
-		B00000000000000000000014 /* AudioPlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackEngine.swift; sourceTree = "<group>"; };
-		B00000000000000000000015 /* LoadFileOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadFileOperation.swift; sourceTree = "<group>"; };
-		B00000000000000000000016 /* PlaybackControlOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControlOperation.swift; sourceTree = "<group>"; };
-		B00000000000000000000017 /* SeekingOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekingOperation.swift; sourceTree = "<group>"; };
-		B00000000000000000000018 /* SyncSampleRateOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSampleRateOperation.swift; sourceTree = "<group>"; };
-		B00000000000000000000019 /* AudioFileLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileLoader.swift; sourceTree = "<group>"; };
-		B0000000000000000000001A /* AudioHardwareObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHardwareObserver.swift; sourceTree = "<group>"; };
-		B0000000000000000000001B /* AudioPlaylistFolderScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaylistFolderScanner.swift; sourceTree = "<group>"; };
-		B0000000000000000000001C /* AudioSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionManager.swift; sourceTree = "<group>"; };
-		B0000000000000000000001D /* FinderItemRevealer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderItemRevealer.swift; sourceTree = "<group>"; };
-		B0000000000000000000001E /* PlaybackProgressTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackProgressTracker.swift; sourceTree = "<group>"; };
-		B0000000000000000000001F /* SampleRateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleRateManager.swift; sourceTree = "<group>"; };
-		B00000000000000000000020 /* ScopedFolderAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopedFolderAccess.swift; sourceTree = "<group>"; };
-		B00000000000000000000021 /* TimeFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormatter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F8C938B72EA40C9E00E18E93 /* AdaptiveMusicPlayer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AdaptiveMusicPlayer;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000022 /* AdaptiveMusicPlayerCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AdaptiveMusicPlayerCore;
 			sourceTree = "<group>";
 		};
 		F8C938C52EA40C9F00E18E93 /* AdaptiveMusicPlayerTests */ = {
@@ -150,83 +121,11 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A00000000000000000000003 /* AdaptiveMusicPlayerCore */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000001 /* Playback */,
-				B00000000000000000000006 /* Utilities */,
-			);
-			path = AdaptiveMusicPlayerCore;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000001 /* Playback */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000002 /* Domain */,
-				B00000000000000000000003 /* Engine */,
-				B00000000000000000000005 /* Services */,
-			);
-			path = Playback;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000002 /* Domain */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000011 /* EnginePlaybackState.swift */,
-				B00000000000000000000012 /* PlaybackPlaylist.swift */,
-				B00000000000000000000013 /* PlaylistSession.swift */,
-			);
-			path = Domain;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000003 /* Engine */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000014 /* AudioPlaybackEngine.swift */,
-				B00000000000000000000004 /* Operations */,
-			);
-			path = Engine;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000004 /* Operations */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000015 /* LoadFileOperation.swift */,
-				B00000000000000000000016 /* PlaybackControlOperation.swift */,
-				B00000000000000000000017 /* SeekingOperation.swift */,
-				B00000000000000000000018 /* SyncSampleRateOperation.swift */,
-			);
-			path = Operations;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000005 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000019 /* AudioFileLoader.swift */,
-				B0000000000000000000001A /* AudioHardwareObserver.swift */,
-				B0000000000000000000001B /* AudioPlaylistFolderScanner.swift */,
-				B0000000000000000000001C /* AudioSessionManager.swift */,
-				B0000000000000000000001D /* FinderItemRevealer.swift */,
-				B0000000000000000000001E /* PlaybackProgressTracker.swift */,
-				B0000000000000000000001F /* SampleRateManager.swift */,
-				B00000000000000000000020 /* ScopedFolderAccess.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
-		B00000000000000000000006 /* Utilities */ = {
-			isa = PBXGroup;
-			children = (
-				B00000000000000000000021 /* TimeFormatter.swift */,
-			);
-			path = Utilities;
-			sourceTree = "<group>";
-		};
 		F8C938AC2EA40C9E00E18E93 = {
 			isa = PBXGroup;
 			children = (
 				F8C938B72EA40C9E00E18E93 /* AdaptiveMusicPlayer */,
-				A00000000000000000000003 /* AdaptiveMusicPlayerCore */,
+				A00000000000000000000022 /* AdaptiveMusicPlayerCore */,
 				F8C938C52EA40C9F00E18E93 /* AdaptiveMusicPlayerTests */,
 				F8C938CF2EA40C9F00E18E93 /* AdaptiveMusicPlayerUITests */,
 				F8C938B62EA40C9E00E18E93 /* Products */,
@@ -283,6 +182,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A00000000000000000000022 /* AdaptiveMusicPlayerCore */,
 			);
 			name = AdaptiveMusicPlayerCore;
 			packageProductDependencies = (
@@ -469,23 +371,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B00000000000000000000031 /* EnginePlaybackState.swift in Sources */,
-				B00000000000000000000032 /* PlaybackPlaylist.swift in Sources */,
-				B00000000000000000000033 /* PlaylistSession.swift in Sources */,
-				B00000000000000000000034 /* AudioPlaybackEngine.swift in Sources */,
-				B00000000000000000000035 /* LoadFileOperation.swift in Sources */,
-				B00000000000000000000036 /* PlaybackControlOperation.swift in Sources */,
-				B00000000000000000000037 /* SeekingOperation.swift in Sources */,
-				B00000000000000000000038 /* SyncSampleRateOperation.swift in Sources */,
-				B00000000000000000000039 /* AudioFileLoader.swift in Sources */,
-				B0000000000000000000003A /* AudioHardwareObserver.swift in Sources */,
-				B0000000000000000000003B /* AudioPlaylistFolderScanner.swift in Sources */,
-				B0000000000000000000003C /* AudioSessionManager.swift in Sources */,
-				B0000000000000000000003D /* FinderItemRevealer.swift in Sources */,
-				B0000000000000000000003E /* PlaybackProgressTracker.swift in Sources */,
-				B0000000000000000000003F /* SampleRateManager.swift in Sources */,
-				B00000000000000000000040 /* ScopedFolderAccess.swift in Sources */,
-				B00000000000000000000041 /* TimeFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

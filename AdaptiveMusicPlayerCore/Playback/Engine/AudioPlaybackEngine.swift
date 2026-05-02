@@ -7,6 +7,12 @@ public enum ProgressEvent: Sendable {
     case finished          // Playback reached end
 }
 
+/// Events emitted by the engine to notify observers of internal changes
+public enum EngineEvent: Sendable {
+    case stateChanged(EnginePlaybackState)
+    case volumeChanged(Double)
+}
+
 /// Stateful playback coordinator around AVAudioPlayer
 /// Owns playback state and delegates smaller operations to focused operation types
 @MainActor
@@ -15,19 +21,32 @@ public final class AudioPlaybackEngine {
         static let sampleRateTolerance: Double = 1.0
     }
 
-// MARK: - Properties
+    // MARK: - Properties
 
-private var playbackState: EnginePlaybackState = .idle
-private var player: AVAudioPlayer?
+    private var playbackState: EnginePlaybackState = .idle {
+        didSet {
+            if playbackState != oldValue {
+                emit(.stateChanged(playbackState))
+            }
+        }
+    }
+    private var player: AVAudioPlayer?
 
-// MARK: - Internal State Queries (for runtime coordination only)
+    public let eventStream: AsyncStream<EngineEvent>
+    private let eventContinuation: AsyncStream<EngineEvent>.Continuation
 
-/// Returns whether the engine has an active player ready for playback.
-/// This is an internal runtime check, not the authoritative app state.
-public var hasActivePlayer: Bool { player != nil }
+    private func emit(_ event: EngineEvent) {
+        eventContinuation.yield(event)
+    }
 
-/// Returns the current audio info if a file is loaded.
-public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
+    // MARK: - Internal State Queries (for runtime coordination only)
+
+    /// Returns whether the engine has an active player ready for playback.
+    /// This is an internal runtime check, not the authoritative app state.
+    public var hasActivePlayer: Bool { player != nil }
+
+    /// Returns the current audio info if a file is loaded.
+    public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
 
     // MARK: - Dependencies
 
@@ -46,6 +65,10 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
         syncSampleRateOperation: SyncSampleRateOperationProtocol = SyncSampleRateOperation(),
         sampleRateManager: SampleRateManaging = CoreAudioSampleRateManager()
     ) {
+        let (stream, continuation) = AsyncStream.makeStream(of: EngineEvent.self)
+        self.eventStream = stream
+        self.eventContinuation = continuation
+
         self.sampleRateManager = sampleRateManager
         self.loadFileOperation = loadFileOperation ?? LoadFileOperation(sessionManager: AudioSessionManager())
         self.playbackControlOperation = playbackControlOperation
@@ -123,7 +146,7 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
     // MARK: - Playback Control
 
     /// Start or resume playback
- public func play() async throws -> AudioInfo {
+    public func play() async throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
@@ -136,19 +159,19 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
             let currentSampleRate = await getCurrentHardwareSampleRate()
             if currentSampleRate <= 0 ||
                 abs(currentSampleRate - targetSampleRate) > Constants.sampleRateTolerance
-             {
+            {
                 do {
                     try await syncSampleRateOperation.execute(audioInfo: requestedAudioInfo, sampleRateManager: sampleRateManager)
-                 } catch {
+                } catch {
                     // Playback should still start even if the device refuses the requested rate.
-                 }
-             }
-         }
+                }
+            }
+        }
 
         try Task.checkCancellation()
         guard self.player === player, self.playbackState.audioInfo == requestedAudioInfo else {
             throw CancellationError()
-         }
+        }
 
         let isAtEnd = if case .finished = playbackState { true } else { false }
         playbackState = try playbackControlOperation.play(player: player, audioInfo: requestedAudioInfo, isAtEnd: isAtEnd)
@@ -156,7 +179,7 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
     }
 
     /// Pause playback
- public func pause() throws -> AudioInfo {
+    public func pause() throws -> AudioInfo {
         guard let player = player else {
             throw PlaybackError.noFileLoaded
         }
@@ -200,33 +223,33 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
         return try seekingOperation.seek(to: time, player: player, audioInfo: audioInfo)
     }
 
-/// Skip forward by the configured interval
-      /// - Parameter currentTime: Current playback time
-      /// - Returns: New time after skipping
-     public func skipForward(from currentTime: Double) throws -> Double {
-         guard let player = player else {
-             throw PlaybackError.noFileLoaded
-          }
-         guard let audioInfo = playbackState.audioInfo else {
-             throw PlaybackError.noFileLoaded
-          }
+    /// Skip forward by the configured interval
+    /// - Parameter currentTime: Current playback time
+    /// - Returns: New time after skipping
+    public func skipForward(from currentTime: Double) throws -> Double {
+        guard let player = player else {
+            throw PlaybackError.noFileLoaded
+        }
+        guard let audioInfo = playbackState.audioInfo else {
+            throw PlaybackError.noFileLoaded
+        }
 
-         return try seekingOperation.skipForward(from: currentTime, player: player, audioInfo: audioInfo)
-      }
+        return try seekingOperation.skipForward(from: currentTime, player: player, audioInfo: audioInfo)
+    }
 
-      /// Skip backward by the configured interval
-      /// - Parameter currentTime: Current playback time
-      /// - Returns: New time after skipping
-     public func skipBackward(from currentTime: Double) throws -> Double {
-         guard let player = player else {
-             throw PlaybackError.noFileLoaded
-          }
-         guard let audioInfo = playbackState.audioInfo else {
-             throw PlaybackError.noFileLoaded
-          }
+    /// Skip backward by the configured interval
+    /// - Parameter currentTime: Current playback time
+    /// - Returns: New time after skipping
+    public func skipBackward(from currentTime: Double) throws -> Double {
+        guard let player = player else {
+            throw PlaybackError.noFileLoaded
+        }
+        guard let audioInfo = playbackState.audioInfo else {
+            throw PlaybackError.noFileLoaded
+        }
 
-         return try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
-      }
+        return try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
+    }
 
     // MARK: - Sample Rate Management
 
@@ -246,8 +269,8 @@ public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
     public func setVolume(_ volume: Double) {
         let clampedVolume = max(0, min(volume, 1))
         player?.volume = Float(clampedVolume)
+        emit(.volumeChanged(clampedVolume))
     }
-
     // MARK: - Hardware Info
 
     /// Get current hardware sample rate

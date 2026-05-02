@@ -30,6 +30,7 @@ struct ContentViewStatePresenter {
         let isPlaying = input.sessionState.isPlaying
         let currentTrackTitle = input.sessionState.currentDisplayTitle
         let duration = input.sessionState.duration
+        let isSeeking = input.sessionState.isSeeking
         let hasLoadedFile = currentTrackTitle != nil
 
         let transport = TransportControlsPresentation(
@@ -53,6 +54,7 @@ struct ContentViewStatePresenter {
             playlistTrackPosition: playlistTrackPosition,
             duration: duration,
             currentTime: input.sessionState.currentTime,
+            isSeeking: isSeeking,
             isLoading: isLoading,
             isPlaying: isPlaying,
             hasLoadedFile: hasLoadedFile,

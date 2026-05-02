@@ -20,6 +20,7 @@ final class AudioPlayerSessionController {
     // AsyncStream progress tracking tasks
     private var progressTrackingTask: Task<Void, Never>?
     private var hardwareRefreshTask: Task<Void, Never>?
+    private var engineSubscriptionTask: Task<Void, Never>?
 
     init(
         stateStore: AudioPlayerStateStore,
@@ -39,6 +40,8 @@ final class AudioPlayerSessionController {
         self.refreshHardwareInfo = refreshHardwareInfo
         self.currentVolume = currentVolume
         self.statusPresenter = statusPresenter
+
+        startEngineSubscription()
     }
 
     var isStartingPlayback: Bool {
@@ -48,6 +51,16 @@ final class AudioPlayerSessionController {
     func waitForCurrentActivity() async {
         await loadCoordinator.waitForCurrentLoad()
         await startupCoordinator.waitForCurrentStartup()
+    }
+
+    private func startEngineSubscription() {
+        engineSubscriptionTask?.cancel()
+        engineSubscriptionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for await event in self.engine.eventStream {
+                self.dispatch(.engineEventReceived(event))
+            }
+        }
     }
 
     func send(_ command: AudioPlayerCommand) {
@@ -62,6 +75,8 @@ final class AudioPlayerSessionController {
             togglePlayPause()
         case .stop:
             stop()
+        case .seekStarted:
+            dispatch(.seekStarted)
         case .seek(let time):
             seek(to: time)
         case .skipForward:
@@ -81,6 +96,8 @@ final class AudioPlayerSessionController {
             Task { @MainActor [weak self] in
                 await self?.synchronizeSampleRates()
             }
+        case .setVolume(let volume):
+            engine.setVolume(volume)
         }
     }
 
@@ -151,33 +168,35 @@ final class AudioPlayerSessionController {
 
     private func stop() {
         _ = cancelPendingPlaybackStart()
-        let audioInfo = engine.stop()
+        _ = engine.stop()
         stopProgressTracking()
-        dispatch(.playbackStopped(preservedAudioInfo: audioInfo))
     }
 
     private func seek(to time: Double) {
+        dispatch(.seekStarted)
         do {
             let newTime = try engine.seek(to: time)
-            dispatch(.progressChanged(newTime))
+            dispatch(.seekFinished(newTime))
         } catch {
             dispatch(.commandIgnored(.noFileLoaded))
         }
     }
 
     private func skipForward() {
+        dispatch(.seekStarted)
         do {
             let newTime = try engine.skipForward(from: stateStore.currentTime)
-            dispatch(.progressChanged(newTime))
+            dispatch(.seekFinished(newTime))
         } catch {
             dispatch(.commandIgnored(.noFileLoaded))
         }
     }
 
     private func skipBackward() {
+        dispatch(.seekStarted)
         do {
             let newTime = try engine.skipBackward(from: stateStore.currentTime)
-            dispatch(.progressChanged(newTime))
+            dispatch(.seekFinished(newTime))
         } catch {
             dispatch(.commandIgnored(.noFileLoaded))
         }
@@ -268,9 +287,9 @@ final class AudioPlayerSessionController {
 
     private func beginLoading(phase: AudioPlayerLoadPhase) {
         _ = cancelPendingPlaybackStart()
-        let preservedAudioInfo = engine.beginLoading()
+        _ = engine.beginLoading()
         stopProgressTracking()
-        dispatch(.loadStarted(preservedAudioInfo: preservedAudioInfo, phase: phase))
+        dispatch(.loadStarted(preservedAudioInfo: engine.currentAudioInfo, phase: phase))
     }
 
     private func finishLoadingTrack(
@@ -312,9 +331,8 @@ final class AudioPlayerSessionController {
         }
 
         do {
-            let audioInfo = try engine.pause()
+            _ = try engine.pause()
             stopProgressTracking()
-            dispatch(.playbackPaused(audioInfo))
         } catch let error as PlaybackError {
             showError(error)
         } catch {
@@ -333,13 +351,11 @@ final class AudioPlayerSessionController {
         case .startupFailed(let error):
             showError(error)
         case .staleStartupFinished:
-            let preservedAudioInfo = engine.stop()
-            dispatch(.playbackStopped(preservedAudioInfo: preservedAudioInfo))
+            _ = engine.stop()
         }
     }
 
     private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
-        dispatch(.playbackStarted(audioInfo))
         startProgressTracking()
         await refreshHardwareInfo()
         showPlayingStatus()

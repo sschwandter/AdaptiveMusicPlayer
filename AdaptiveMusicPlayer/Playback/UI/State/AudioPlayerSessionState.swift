@@ -8,13 +8,20 @@ struct AudioPlayerSessionState {
     var playlist: PlaylistPresentationState = .init()
     var hardware: HardwarePresentationState = .init()
     var currentTime: Double = 0
+    var volume: Double = 1.0
+    var isSeeking: Bool = false
     var displayTitlesByTrackURL: [URL: String] = [:]
 
     var duration: Double { playback.audioInfo?.duration ?? 0 }
     var statusMessage: String { status.message }
     var hasError: Bool { status.kind == .error }
     var currentFileName: String? { playback.audioInfo?.fileName }
-    var currentDisplayTitle: String? { playback.audioInfo?.displayTitle }
+    var currentDisplayTitle: String? {
+        if let currentTrackURL, let title = displayTitlesByTrackURL[currentTrackURL] {
+            return title
+        }
+        return playback.audioInfo?.displayTitle
+    }
     var fileSampleRate: Double { playback.audioInfo?.sampleRate ?? 0 }
     var hardwareSampleRate: Double { hardware.currentSampleRate }
     var hardwareDeviceName: String { hardware.deviceName }

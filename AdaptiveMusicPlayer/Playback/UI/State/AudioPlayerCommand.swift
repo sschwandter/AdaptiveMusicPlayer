@@ -7,6 +7,7 @@ enum AudioPlayerCommand {
     case reportFileSelectionError(String)
     case togglePlayPause
     case stop
+    case seekStarted
     case seek(to: Double)
     case skipForward
     case skipBackward
@@ -14,5 +15,6 @@ enum AudioPlayerCommand {
     case selectPlaylistTrack(index: Int)
     case revealCurrentTrackInFinder
     case synchronizeSampleRates
+    case setVolume(Double)
 }
 
