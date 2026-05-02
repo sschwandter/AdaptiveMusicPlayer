@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.2...AdaptiveMusicPlayer-v0.7.3) (2026-05-02)
+
+
+### Bug Fixes
+
+* test release pipeline ([e924697](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/e9246971bf1baace748c10458944d72f8f00d927))
+
 ## [0.7.2](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.1...AdaptiveMusicPlayer-v0.7.2) (2026-05-02)
 
 
