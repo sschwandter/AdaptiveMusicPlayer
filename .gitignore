@@ -4,3 +4,4 @@
 DerivedData/
 .deriveddata/
 build/
+node_modules/

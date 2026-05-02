@@ -42,14 +42,15 @@ The project is split into two primary targets:
 
 ### AdaptiveMusicPlayer (App)
 The main application target, located under `AdaptiveMusicPlayer/`.
-- `UI/` contains the SwiftUI views and a **unidirectional state management triad** (State Store, Reducer, and Session Controller) that synchronizes with the core engine via an asynchronous event stream.
+- Contains the SwiftUI app shell, menu commands, and playback UI layer.
+- The UI sends commands into an app-level session controller instead of owning playback rules directly.
 
 ### AdaptiveMusicPlayerCore (Framework)
-The central playback framework, located under `AdaptiveMusicPlayerCore/`.
-- Contains the **event-driven engine**, domain models, and playback services.
-- For detailed information, see the [Core README](AdaptiveMusicPlayerCore/README.md).
+The playback framework target, located under `AdaptiveMusicPlayerCore/`.
+- Contains playback domain models, the event-driven playback engine, engine operations, system audio services, and shared utilities.
+- Does not contain SwiftUI presentation or app command routing.
 
-For a contributor-focused walkthrough, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For the authoritative contributor-focused walkthrough of both targets, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Releases
 
