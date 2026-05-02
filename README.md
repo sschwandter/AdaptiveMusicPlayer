@@ -57,7 +57,7 @@ For the authoritative contributor-focused walkthrough of both targets, see [docs
 Releases are managed with `release-please` and GitHub Actions.
 
 - Pushes to `main` update or create a release PR based on Conventional Commits.
-- When the release PR lands and CI passes for that merge commit, the release workflow creates the tag, signs and notarizes the app, and uploads the packaged build to the GitHub release.
+- When the release PR lands and CI passes for that merge commit, the release jobs create the tag, sign and notarize the app, and upload the packaged build to the GitHub release.
 
 Examples:
 

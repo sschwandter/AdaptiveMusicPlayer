@@ -9,12 +9,11 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-permissions:
-  contents: read
-
 jobs:
   build-and-test:
     runs-on: macos-26
+    permissions:
+      contents: read
     env:
       APP_NAME: AdaptiveMusicPlayer
       DERIVED_DATA_PATH: .build/DerivedData
@@ -54,3 +53,79 @@ jobs:
       - name: Summarize test results
         if: always()
         run: python3 tools/ci/summarize_xcresult.py "$TEST_RESULT_BUNDLE" >> "$GITHUB_STEP_SUMMARY"
+
+  release-please:
+    needs: build-and-test
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Create or update release PR only
+        if: >-
+          ${{
+            !contains(github.event.head_commit.message, 'release-please--branches--main') &&
+            !startsWith(github.event.head_commit.message, 'chore(main): release AdaptiveMusicPlayer ')
+          }}
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
+
+      - name: Create GitHub release only
+        id: release
+        if: >-
+          ${{
+            contains(github.event.head_commit.message, 'release-please--branches--main') ||
+            startsWith(github.event.head_commit.message, 'chore(main): release AdaptiveMusicPlayer ')
+          }}
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+      - name: Refuse releases for a different commit
+        if: >-
+          ${{
+            steps.release.outputs.release_created == 'true' &&
+            steps.release.outputs.sha != github.sha
+          }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          CI_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          echo "Release Please created $TAG_NAME for $RELEASE_SHA, but CI passed for $CI_SHA."
+          echo "Deleting the mismatched GitHub release and tag."
+          gh release delete "$TAG_NAME" --cleanup-tag --yes
+          exit 1
+
+  signed-release:
+    needs: release-please
+    if: >-
+      ${{
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.release-please.outputs.release_sha == github.sha
+      }}
+    uses: ./.github/workflows/signed-release.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
+    permissions:
+      contents: write
