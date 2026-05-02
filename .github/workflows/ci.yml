@@ -17,7 +17,6 @@ jobs:
     runs-on: macos-26
     env:
       APP_NAME: AdaptiveMusicPlayer
-      BUILD_CONFIGURATION: Debug
       DERIVED_DATA_PATH: .build/DerivedData
       TEST_RESULT_BUNDLE: TestResults.xcresult
 
@@ -30,17 +29,6 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
-
-      - name: Build app
-        run: |
-          xcodebuild \
-            -scheme "$APP_NAME" \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$DERIVED_DATA_PATH" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
 
       - name: Run unit tests
         run: |
@@ -66,14 +54,3 @@ jobs:
       - name: Summarize test results
         if: always()
         run: python3 tools/ci/summarize_xcresult.py "$TEST_RESULT_BUNDLE" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Package app artifact
-        if: success()
-        run: bash tools/ci/package_app.sh "$DERIVED_DATA_PATH/Build/Products/$BUILD_CONFIGURATION/$APP_NAME.app" "$APP_NAME.zip"
-
-      - name: Upload app artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.APP_NAME }}-macOS-${{ github.sha }}
-          path: ${{ env.APP_NAME }}.zip

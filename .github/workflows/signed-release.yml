@@ -1,7 +1,7 @@
-name: macOS Release
+name: Signed Release
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tag_name:
         description: Release tag to build and upload
