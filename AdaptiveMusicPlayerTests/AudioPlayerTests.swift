@@ -123,6 +123,7 @@ struct AudioPlayerTests {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
                 loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                playbackControlOperation: SucceedingPlaybackControlOperation(),
                 sampleRateManager: StubSampleRateManager()
             ),
             progressTracker: progressTracker,
@@ -133,7 +134,9 @@ struct AudioPlayerTests {
         player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
         player.send(.togglePlayPause)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitUntil(timeout: .milliseconds(500)) {
+            player.contentViewState.isPlaying && progressTracker.streamContinuation != nil
+        }
 
         progressTracker.streamContinuation?.yield(.progress(0.25))
         try await Task.sleep(for: .milliseconds(20))
@@ -150,6 +153,7 @@ struct AudioPlayerTests {
         let player = AudioPlayer(
             engine: AudioPlaybackEngine(
                 loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                playbackControlOperation: SucceedingPlaybackControlOperation(),
                 sampleRateManager: StubSampleRateManager()
             ),
             progressTracker: progressTracker,
@@ -160,7 +164,9 @@ struct AudioPlayerTests {
         player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
         player.send(.togglePlayPause)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitUntil(timeout: .milliseconds(500)) {
+            player.contentViewState.isPlaying && progressTracker.streamContinuation != nil
+        }
 
         let stopCallCountBeforeFinish = progressTracker.stopCallCount
 

@@ -165,6 +165,24 @@ struct RoutingStubLoadFileOperation: LoadFileOperationProtocol, @unchecked Senda
     }
 }
 
+struct SucceedingPlaybackControlOperation: PlaybackControlOperationProtocol {
+    func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
+        if isAtEnd {
+            player.currentTime = 0
+        }
+        return .playing(audioInfo)
+    }
+
+    func pause(player: AVAudioPlayer, audioInfo: AudioInfo) throws -> EnginePlaybackState {
+        .paused(audioInfo)
+    }
+
+    func stop(player: AVAudioPlayer, audioInfo: AudioInfo) -> EnginePlaybackState {
+        player.currentTime = 0
+        return .ready(audioInfo)
+    }
+}
+
 struct FailingPlaybackControlOperation: PlaybackControlOperationProtocol {
     func play(player: AVAudioPlayer, audioInfo: AudioInfo, isAtEnd: Bool) throws -> EnginePlaybackState {
         throw PlaybackError.playbackStartFailed

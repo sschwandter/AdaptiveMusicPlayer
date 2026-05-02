@@ -40,7 +40,10 @@ struct AudioPlayerFolderLoadingTests {
         try TemporaryFolder.writeWaveFile(at: rootFolder.appending(path: "album/02-second.wav"))
 
         let player = AudioPlayer(
-            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            engine: AudioPlaybackEngine(
+                playbackControlOperation: SucceedingPlaybackControlOperation(),
+                sampleRateManager: StubSampleRateManager()
+            ),
             hardwareObserver: StubAudioHardwareObserver(),
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
@@ -50,6 +53,10 @@ struct AudioPlayerFolderLoadingTests {
 
         player.send(.navigatePlaylist(next: true, autoplay: true))
         await player.waitForCurrentLoad()
+        try await waitUntil(timeout: .milliseconds(500)) {
+            player.contentViewState.currentTrackTitle == "02-second.wav" &&
+                player.contentViewState.isPlaying
+        }
 
         #expect(player.contentViewState.currentTrackTitle == "02-second.wav")
         #expect(player.contentViewState.playlistTrackPosition == "2 of 2")
