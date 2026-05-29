@@ -39,4 +39,12 @@ struct AudioPlayerSessionState {
     mutating func recordLoadedTrack(_ audioInfo: AudioInfo, for trackURL: URL) {
         displayTitlesByTrackURL[trackURL] = audioInfo.displayTitle
     }
+
+    /// Drops cached titles for tracks that are no longer part of the active
+    /// playlist, keeping the cache bounded to the current session.
+    mutating func pruneDisplayTitles(keeping trackURLs: [URL]) {
+        guard !displayTitlesByTrackURL.isEmpty else { return }
+        let retained = Set(trackURLs)
+        displayTitlesByTrackURL = displayTitlesByTrackURL.filter { retained.contains($0.key) }
+    }
 }

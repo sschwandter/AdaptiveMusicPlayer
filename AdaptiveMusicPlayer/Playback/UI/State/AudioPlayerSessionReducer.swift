@@ -13,8 +13,6 @@ enum AudioPlayerAction {
     case loadingCancelled
     case playbackStarting
     case playbackStartCancelled
-    case playbackStarted(AudioInfo)
-    case playbackPaused(AudioInfo)
     case playbackStopped(preservedAudioInfo: AudioInfo?)
     case playbackFinished(AudioInfo?)
     case progressChanged(Double)
@@ -23,7 +21,6 @@ enum AudioPlayerAction {
     case seekFinished(Double)
     case hardwareInfoChanged(AudioDeviceInfo?)
     case statusPresented(PlayerStatusPresentationOutput)
-    case playbackFailed(PlaybackError)
     case commandIgnored(PlaybackError)
     case engineEventReceived(EngineEvent)
 }
@@ -54,6 +51,7 @@ struct AudioPlayerSessionReducer {
 
         case .playlistSessionUpdated(let playlistSession):
             nextState.playlistSession = playlistSession
+            nextState.pruneDisplayTitles(keeping: playlistSession.playlist.tracks)
 
         case .trackReady(let url, let audioInfo):
             nextState.playback = .ready(audioInfo)
@@ -73,17 +71,6 @@ struct AudioPlayerSessionReducer {
 
         case .playbackStartCancelled:
             nextState.activity = .idle
-
-        case .playbackStarted(let audioInfo):
-            nextState.playback = .playing(audioInfo)
-
-        case .playbackPaused(let audioInfo):
-            nextState.playback = .paused(audioInfo)
-            nextState.activity = .idle
-            nextState.status = StatusPresentationState(
-                kind: .info,
-                message: "Paused"
-            )
 
         case .playbackStopped(let preservedAudioInfo):
             nextState.playback = stoppedPlaybackState(
@@ -140,16 +127,6 @@ struct AudioPlayerSessionReducer {
 
             if let playbackOverride = output.playbackOverride {
                 nextState.playback = playbackOverride
-            }
-
-        case .playbackFailed(let error):
-            nextState.activity = .failed
-            nextState.status = StatusPresentationState(
-                kind: .error,
-                message: error.localizedDescription
-            )
-            if nextState.currentAudioInfo == nil {
-                nextState.playback = .unavailable
             }
 
         case .commandIgnored:
