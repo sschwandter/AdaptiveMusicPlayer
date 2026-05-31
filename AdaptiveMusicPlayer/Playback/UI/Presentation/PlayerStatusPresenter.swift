@@ -21,56 +21,56 @@ struct PlayerStatusPresenter {
     func presentLoading(
         state: LoadingPresentationState,
         message: String
-     ) -> PlayerStatusPresentationOutput {
+    ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: state,
             status: StatusPresentationState(kind: .info, message: message),
             playbackOverride: nil
-         )
-      }
+        )
+    }
 
     func presentInfo(
         message: String,
         loading: LoadingPresentationState = .idle
-     ) -> PlayerStatusPresentationOutput {
+    ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: loading,
             status: StatusPresentationState(
                 kind: message.isEmpty ? .neutral : .info,
                 message: message
-             ),
+            ),
             playbackOverride: nil
-         )
-      }
+        )
+    }
 
-func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutput {
+    func presentReady(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutput {
         presentInfo(message: buildMessage(prefix: readyPrefix(for: input), context: input))
-        }
+    }
 
     func presentPlaying(_ input: PlayerStatusContext) -> PlayerStatusPresentationOutput {
         presentInfo(message: buildMessage(prefix: playingPrefix(for: input), context: input))
-        }
+    }
 
     func presentError(
-         _ error: PlaybackError,
+        _ error: PlaybackError,
         hasCurrentAudio: Bool
-     ) -> PlayerStatusPresentationOutput {
+    ) -> PlayerStatusPresentationOutput {
         PlayerStatusPresentationOutput(
             loading: .failed,
             status: StatusPresentationState(
                 kind: .error,
                 message: error.localizedDescription
-             ),
+            ),
             playbackOverride: hasCurrentAudio ? nil : .unavailable
-         )
-      }
+        )
+    }
 
     private func buildMessage(prefix: String, context: PlayerStatusContext) -> String {
         if context.hasSampleRateMismatch {
             return "\(prefix) - \(context.sampleRateStatusDetail)"
-          }
+        }
         return "\(prefix) at \(SampleRatePresenter.formatSampleRate(context.sampleRate)) on \(context.hardwareDeviceName)"
-       }
+    }
 
     private func readyPrefix(for context: PlayerStatusContext) -> String {
         if context.hasPlaylist, let playlistTrackPosition = context.playlistTrackPosition {

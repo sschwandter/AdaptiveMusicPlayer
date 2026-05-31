@@ -70,6 +70,27 @@ struct AudioPlayerSessionReducerTests {
         #expect(reducedAudioInfo.displayTitle == "Track Title")
     }
 
+    @Test("switching playlists prunes cached titles for tracks no longer present")
+    func playlistSwitchPrunesStaleTitleCache() throws {
+        let keptURL = URL(fileURLWithPath: "/tmp/kept.wav")
+        let staleURL = URL(fileURLWithPath: "/tmp/stale.wav")
+        let newSession = try #require(PlaylistSession.singleTrack(keptURL))
+
+        var initialState = AudioPlayerSessionState()
+        initialState.displayTitlesByTrackURL = [
+            keptURL: "Kept",
+            staleURL: "Stale"
+        ]
+
+        let nextState = reducer.reduce(
+            state: initialState,
+            action: .playlistSessionUpdated(newSession)
+        )
+
+        #expect(nextState.displayTitlesByTrackURL[keptURL] == "Kept")
+        #expect(nextState.displayTitlesByTrackURL[staleURL] == nil)
+    }
+
     @Test("playback lifecycle actions set expected states")
     func playbackLifecycleActions() {
         let audioInfo = AudioInfo(
@@ -85,7 +106,7 @@ struct AudioPlayerSessionReducerTests {
         )
         let playingState = reducer.reduce(
             state: startingState,
-            action: .playbackStarted(audioInfo)
+            action: .engineEventReceived(.stateChanged(.playing(audioInfo)))
         )
         let progressState = reducer.reduce(
             state: playingState,
@@ -93,7 +114,7 @@ struct AudioPlayerSessionReducerTests {
         )
         let pausedState = reducer.reduce(
             state: progressState,
-            action: .playbackPaused(audioInfo)
+            action: .engineEventReceived(.stateChanged(.paused(audioInfo)))
         )
         let stoppedState = reducer.reduce(
             state: pausedState,
@@ -107,8 +128,10 @@ struct AudioPlayerSessionReducerTests {
         #expect(startingState.activity == .startingPlayback)
         #expect(playingState.isPlaying)
         #expect(progressState.currentTime == 4)
-        #expect(pausedState.statusMessage == "Paused")
+        #expect(!pausedState.isPlaying)
+        #expect(pausedState.currentTime == 4)
         #expect(stoppedState.currentTime == 0)
+        #expect(stoppedState.statusMessage == "Stopped")
         #expect(finishedState.currentTime == 10)
         guard case .finished = finishedState.playback else {
             Issue.record("Expected finished playback state.")
@@ -134,7 +157,7 @@ struct AudioPlayerSessionReducerTests {
         )
         let failedState = reducer.reduce(
             state: hardwareState,
-            action: .playbackFailed(.noFileLoaded)
+            action: .engineEventReceived(.stateChanged(.error(.noFileLoaded)))
         )
         let ignoredState = reducer.reduce(
             state: failedState,

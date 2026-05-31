@@ -53,11 +53,19 @@ final class AudioPlayerSessionController {
         await startupCoordinator.waitForCurrentStartup()
     }
 
+    deinit {
+        engineSubscriptionTask?.cancel()
+    }
+
     private func startEngineSubscription() {
         engineSubscriptionTask?.cancel()
+        // Capture the stream by value so the long-lived consumer task does not
+        // retain the controller. Re-acquire `self` weakly each iteration so that
+        // once the controller is released the loop exits and the task completes.
+        let eventStream = engine.eventStream
         engineSubscriptionTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for await event in self.engine.eventStream {
+            for await event in eventStream {
+                guard let self else { return }
                 self.dispatch(.engineEventReceived(event))
             }
         }
@@ -91,7 +99,9 @@ final class AudioPlayerSessionController {
                 shouldAutoplay: stateStore.isPlaying || isStartingPlayback
             )
         case .revealCurrentTrackInFinder:
-            dispatch(.commandIgnored(.notReady))
+            // Handled entirely by AudioPlayer before reaching the controller;
+            // it never owns playback state, so there is nothing to do here.
+            break
         case .setVolume(let volume):
             engine.setVolume(volume)
         }
@@ -164,8 +174,9 @@ final class AudioPlayerSessionController {
 
     private func stop() {
         _ = cancelPendingPlaybackStart()
-        _ = engine.stop()
+        let stoppedAudioInfo = engine.stop()
         stopProgressTracking()
+        dispatch(.playbackStopped(preservedAudioInfo: stoppedAudioInfo))
     }
 
     private func seek(to time: Double) {
@@ -378,7 +389,7 @@ final class AudioPlayerSessionController {
     private func showReadyStatus(for audioInfo: AudioInfo) {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: false
-         )
+        )
         dispatchStatus(
             statusPresenter.presentReady(
                 PlayerStatusContext(
@@ -388,15 +399,15 @@ final class AudioPlayerSessionController {
                     hardwareDeviceName: sampleRatePresentation.hardwareDeviceDisplayName,
                     hasSampleRateMismatch: sampleRatePresentation.hasMismatch,
                     sampleRateStatusDetail: sampleRatePresentation.statusDetail
-                 )
-             )
-         )
-       }
+                )
+            )
+        )
+    }
 
     private func showPlayingStatus() {
         let sampleRatePresentation = stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: isStartingPlayback
-         )
+        )
         dispatchStatus(
             statusPresenter.presentPlaying(
                 PlayerStatusContext(
@@ -406,10 +417,10 @@ final class AudioPlayerSessionController {
                     hardwareDeviceName: sampleRatePresentation.hardwareDeviceDisplayName,
                     hasSampleRateMismatch: sampleRatePresentation.hasMismatch,
                     sampleRateStatusDetail: sampleRatePresentation.statusDetail
-                 )
-             )
-         )
-       }
+                )
+            )
+        )
+    }
 
     private func showError(_ error: PlaybackError) {
         dispatchStatus(

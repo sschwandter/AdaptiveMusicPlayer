@@ -20,28 +20,29 @@ final class AudioPlayer {
         set { send(.setVolume(newValue)) }
     }
 
-    private var isAttemptingPlaybackStart: Bool {        sessionController.isStartingPlayback
-     }
+    private var isAttemptingPlaybackStart: Bool {
+        sessionController.isStartingPlayback
+    }
 
-private var contentViewPresentation: ContentViewStatePresentationOutput {
+    private var contentViewPresentation: ContentViewStatePresentationOutput {
         stateStore.contentViewPresentation(
             sampleRateBanner: sampleRateBannerPresentation
-         )
-     }
+        )
+    }
 
-var contentViewState: ContentViewState {
+    var contentViewState: ContentViewState {
         contentViewPresentation.contentViewState
-     }
+    }
 
-var sampleRateBannerPresentation: SampleRateBannerPresentation {
+    var sampleRateBannerPresentation: SampleRateBannerPresentation {
         sampleRatePresentation.banner
-     }
+    }
 
-private var sampleRatePresentation: SampleRatePresentationOutput {
+    private var sampleRatePresentation: SampleRatePresentationOutput {
         stateStore.sampleRatePresentation(
             isAttemptingPlaybackStart: isAttemptingPlaybackStart
-         )
-     }
+        )
+    }
 
     // MARK: - Dependencies
 

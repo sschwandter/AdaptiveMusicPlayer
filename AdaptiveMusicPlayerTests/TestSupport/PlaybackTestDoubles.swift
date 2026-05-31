@@ -94,17 +94,6 @@ final class RecordingPlaybackProgressTracker: PlaybackProgressTracking {
     private(set) var stopCallCount = 0
     private(set) var streamContinuation: AsyncStream<ProgressEvent>.Continuation?
 
-    func startTracking(
-        player: AVAudioPlayer,
-        updateInterval: TimeInterval,
-        onProgressUpdate: @escaping (Double) -> Void,
-        onPlaybackFinished: @escaping () -> Void,
-        onPeriodicUpdate: @escaping () -> Void
-    ) {
-        trackedPlayer = player
-        self.updateInterval = updateInterval
-    }
-
     func stopTracking() {
         stopCallCount += 1
     }

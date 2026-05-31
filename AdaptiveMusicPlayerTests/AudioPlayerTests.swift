@@ -191,6 +191,35 @@ struct AudioPlayerTests {
          #expect(player.contentViewState.currentTime == 0)
      }
 
+    @Test("Stopping during playback resets the playback position to the start")
+    func stopDuringPlaybackResetsPosition() async throws {
+        let progressTracker = RecordingPlaybackProgressTracker()
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            progressTracker: progressTracker,
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+        )
+
+        player.send(.loadFile(url: URL(fileURLWithPath: "/tmp/test.wav"), importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        player.send(.togglePlayPause)
+
+        // Advance playback to a non-zero position once progress tracking is live.
+        try await waitUntil { progressTracker.streamContinuation != nil }
+        progressTracker.streamContinuation?.yield(.progress(2.5))
+        try await waitUntil { player.contentViewState.currentTime == 2.5 }
+
+        player.send(.stop)
+
+        #expect(player.contentViewState.isPlaying == false)
+        #expect(player.contentViewState.currentTime == 0)
+        #expect(player.contentViewState.hasLoadedFile == true)
+    }
+
     @Test("Skip operations without file")
     func skipWithoutFile() async throws {
         let player = AudioPlayer(
