@@ -96,10 +96,7 @@ public final class AudioPlaybackEngine {
         do {
             let audioData = try await loadAudioDataOffMainActor(from: url)
 
-            guard !Task.isCancelled else {
-                playbackState = .idle
-                throw PlaybackError.loadingCancelled
-            }
+            try Task.checkCancellation()
 
             // Create AVAudioPlayer on @MainActor from the Sendable audio data.
             // Do not prepare the player yet: playback startup may first switch the
@@ -120,9 +117,22 @@ public final class AudioPlaybackEngine {
             return audioInfo
 
         } catch is CancellationError {
+            // Propagate cooperative cancellation as a plain `CancellationError`
+            // so the load coordinator can route it through its cancellation
+            // branch. Translating it here into `PlaybackError.loadingCancelled`
+            // would cause the controller to show it as a user-facing error.
             playbackState = .idle
-            throw PlaybackError.loadingCancelled
+            throw CancellationError()
         } catch let error as PlaybackError {
+            // The load pipeline (`LoadFileOperation`) translates inner
+            // `CancellationError` into `PlaybackError.loadingCancelled`. Surface
+            // that variant as a plain cancellation too, for the same reason as
+            // above: the user did not actually fail to load the file, the load
+            // was cancelled.
+            if case .loadingCancelled = error {
+                playbackState = .idle
+                throw CancellationError()
+            }
             playbackState = stateAfterFailedLoad(error)
             throw error
         } catch {
@@ -171,6 +181,12 @@ public final class AudioPlaybackEngine {
         }
 
         try Task.checkCancellation()
+        // The re-entrancy check guards against the case where a newer load
+        // replaced `self.player` (and/or `playbackState.audioInfo`) while we
+        // were awaiting the sample-rate switch. If that happened, this
+        // `play()` call refers to a track the user no longer wants, so we
+        // bail out with `CancellationError` instead of starting playback on
+        // a stale player.
         guard self.player === player, self.playbackState.audioInfo == requestedAudioInfo else {
             throw CancellationError()
         }

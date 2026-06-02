@@ -88,15 +88,10 @@ final class AudioPlayer {
             hardwareInfoProvider: hardwareInfoProvider
         )
 
-        hardwareMonitor.startObserving()
+        hardwareMonitor.startObserving(initialRefresh: true)
 
         // Access sessionController to trigger lazy initialization and engine subscription
         _ = sessionController
-
-        // Task inherits @MainActor from surrounding context
-        Task {
-            await hardwareMonitor.refreshHardwareInfo()
-        }
     }
 
     // MARK: - Commands

@@ -184,8 +184,10 @@ final class AudioPlayerSessionController {
         do {
             let newTime = try engine.seek(to: time)
             dispatch(.seekFinished(newTime))
+        } catch let error as PlaybackError {
+            dispatch(.commandIgnored(error))
         } catch {
-            dispatch(.commandIgnored(.noFileLoaded))
+            assertionFailure("Unexpected error from engine.seek(to:): \(error)")
         }
     }
 
@@ -194,8 +196,10 @@ final class AudioPlayerSessionController {
         do {
             let newTime = try engine.skipForward(from: stateStore.currentTime)
             dispatch(.seekFinished(newTime))
+        } catch let error as PlaybackError {
+            dispatch(.commandIgnored(error))
         } catch {
-            dispatch(.commandIgnored(.noFileLoaded))
+            assertionFailure("Unexpected error from engine.skipForward(from:): \(error)")
         }
     }
 
@@ -204,8 +208,10 @@ final class AudioPlayerSessionController {
         do {
             let newTime = try engine.skipBackward(from: stateStore.currentTime)
             dispatch(.seekFinished(newTime))
+        } catch let error as PlaybackError {
+            dispatch(.commandIgnored(error))
         } catch {
-            dispatch(.commandIgnored(.noFileLoaded))
+            assertionFailure("Unexpected error from engine.skipBackward(from:): \(error)")
         }
     }
 
@@ -312,7 +318,11 @@ final class AudioPlayerSessionController {
         } catch let error as PlaybackError {
             showError(error)
         } catch {
-            showError(.notPlaying)
+            // `engine.pause()` is contractually expected to throw only
+            // `PlaybackError`. Treat any other thrown value as a programming
+            // error rather than remapping it to a misleading "not playing"
+            // user-facing message.
+            assertionFailure("Unexpected error from engine.pause(): \(error)")
         }
     }
 
@@ -327,21 +337,33 @@ final class AudioPlayerSessionController {
         case .startupFailed(let error):
             showError(error)
         case .staleStartupFinished:
+            // `engine.play()` returned successfully but the user has already
+            // moved on (e.g. they hit stop or started a different track). The
+            // newer startup has its own player; this one would have started
+            // audio on a player that is no longer current. Stop it so we do
+            // not leak an `AVAudioPlayer` and so the engine's runtime state
+            // matches the controller's view of the world.
             _ = engine.stop()
         }
     }
 
     private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
-        startProgressTracking()
+        startPlaybackLifetimeTasks()
         await refreshHardwareInfo()
         showPlayingStatus()
     }
 
-    private func startProgressTracking() {
-        // Cancel any existing tracking
-        stopProgressTracking()
+    /// Begin the long-lived tasks that should run only while playback is
+    /// actively running. The matching `stopPlaybackLifetimeTasks()` must be
+    /// called on every exit from the playing state so background work cannot
+    /// leak.
+    private func startPlaybackLifetimeTasks() {
+        stopPlaybackLifetimeTasks()
 
-        // Start hardware refresh task (separate from progress tracking)
+        // The hardware refresh task is owned by the playback lifetime because
+        // mismatches between the file and the output device are most useful to
+        // surface while audio is actually playing. It is intentionally separate
+        // from progress tracking so its lifetime is named in the call sites.
         hardwareRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 await self?.refreshHardwareInfo()
@@ -371,6 +393,10 @@ final class AudioPlayerSessionController {
     }
 
     private func stopProgressTracking() {
+        stopPlaybackLifetimeTasks()
+    }
+
+    private func stopPlaybackLifetimeTasks() {
         progressTrackingTask?.cancel()
         progressTrackingTask = nil
         hardwareRefreshTask?.cancel()

@@ -99,6 +99,35 @@ struct AudioPlaybackEngineTests {
 
         #expect(tracker.stopCallCount == 1)
     }
+
+    @Test("Cancellation during load surfaces as CancellationError, not a load failure")
+    func loadCancellationSurfacesAsCancellationError() async throws {
+        let cancellableOperation = CancellableLoadFileOperation()
+        let engine = AudioPlaybackEngine(
+            loadFileOperation: cancellableOperation,
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        let loadTask = Task<AudioInfo, Error> {
+            try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/cancelled.wav"))
+        }
+        cancellableOperation.cancelRequested = true
+        loadTask.cancel()
+
+        do {
+            _ = try await loadTask.value
+            Issue.record("Expected load to be cancelled.")
+        } catch is CancellationError {
+            // The engine should have translated `loadingCancelled` back into a
+            // plain `CancellationError` so the load coordinator can route it
+            // through the cancellation path instead of treating it as a user
+            // error.
+        } catch let error as PlaybackError {
+            Issue.record("Expected CancellationError, got PlaybackError: \(error)")
+        } catch {
+            Issue.record("Expected CancellationError, got: \(error)")
+        }
+    }
 }
 
 private actor LoadExecutionThreadRecorder {
@@ -128,5 +157,27 @@ private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unc
             sampleRate: probePlayer.format.sampleRate,
             duration: probePlayer.duration
         )
+    }
+}
+
+/// Simulates the production load pipeline: cooperative cancellation is
+/// translated to `PlaybackError.loadingCancelled` by `LoadFileOperation`.
+/// The engine must then re-throw a plain `CancellationError` so the load
+/// coordinator's cancellation branch (not the error branch) handles it.
+private final class CancellableLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
+    var cancelRequested: Bool = false
+
+    func execute(from url: URL) async throws -> LoadedAudioData {
+        try Task.checkCancellation()
+
+        // Spin until either the outer task is cancelled or the test signals
+        // cancellation. Once cancelled, throw the same error the production
+        // `LoadFileOperation` would throw.
+        while !cancelRequested {
+            try await Task.sleep(for: .milliseconds(5))
+            try Task.checkCancellation()
+        }
+
+        throw PlaybackError.loadingCancelled
     }
 }

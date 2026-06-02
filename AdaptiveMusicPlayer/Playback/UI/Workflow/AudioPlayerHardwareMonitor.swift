@@ -17,11 +17,22 @@ final class AudioPlayerHardwareMonitor {
         self.hardwareInfoProvider = hardwareInfoProvider
     }
 
-    func startObserving() {
+    /// Begin observing hardware changes.
+    ///
+    /// When `initialRefresh` is `true`, the monitor performs one refresh
+    /// immediately after subscribing so the UI does not have to remember to
+    /// call `refreshHardwareInfo()` itself. This keeps the "start observing
+    /// and seed initial state" responsibility in one place.
+    func startObserving(initialRefresh: Bool = true) {
         hardwareObserver.startObserving { [weak self] in
             Task { @MainActor [weak self] in
                 await self?.refreshHardwareInfo()
             }
+        }
+
+        guard initialRefresh else { return }
+        Task { @MainActor [weak self] in
+            await self?.refreshHardwareInfo()
         }
     }
 
