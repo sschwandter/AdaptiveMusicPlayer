@@ -8,7 +8,7 @@ struct AdaptiveMusicPlayerApp: App {
     @State private var player = AudioPlayer()
 
     var body: some Scene {
-        WindowGroup {
+        Window("Adaptive Music Player", id: "player") {
             ContentView(player: player)
         }
         .restorationBehavior(.disabled)

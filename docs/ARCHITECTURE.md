@@ -60,10 +60,11 @@ The project is organized by feature area under `Playback/`, with a small app she
 ### App Layer
 
 - `AdaptiveMusicPlayer/App/AdaptiveMusicPlayerApp.swift`
-  Creates the main `WindowGroup`, installs app commands, and owns the shared
-  `AudioPlayer`. Because the player is app-scoped rather than window-scoped,
-  playback continues when the last window closes, and a reopened window binds
-  back to the live session state.
+  Creates the single player `Window`, installs app commands, and owns the
+  shared `AudioPlayer`. Because the player is app-scoped rather than
+  window-scoped, playback continues when the window closes, and reopening it
+  binds back to the live session state. The `Window` scene (instead of
+  `WindowGroup`) means there is exactly one player window.
 - `AdaptiveMusicPlayer/App/Commands/PlaybackCommands.swift`
   Defines menu items and keyboard shortcuts and dispatches them to the focused player scene.
 - `AdaptiveMusicPlayer/Playback/UI/PlaybackCommandActions.swift`
