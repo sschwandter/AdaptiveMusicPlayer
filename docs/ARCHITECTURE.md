@@ -60,7 +60,10 @@ The project is organized by feature area under `Playback/`, with a small app she
 ### App Layer
 
 - `AdaptiveMusicPlayer/App/AdaptiveMusicPlayerApp.swift`
-  Creates the main `WindowGroup` and installs app commands.
+  Creates the main `WindowGroup`, installs app commands, and owns the shared
+  `AudioPlayer`. Because the player is app-scoped rather than window-scoped,
+  playback continues when the last window closes, and a reopened window binds
+  back to the live session state.
 - `AdaptiveMusicPlayer/App/Commands/PlaybackCommands.swift`
   Defines menu items and keyboard shortcuts and dispatches them to the focused player scene.
 - `AdaptiveMusicPlayer/Playback/UI/PlaybackCommandActions.swift`
@@ -69,7 +72,7 @@ The project is organized by feature area under `Playback/`, with a small app she
 ### Playback UI Layer
 
 - `AdaptiveMusicPlayer/Playback/UI/ContentView.swift`
-  Main player interface. It binds to `AudioPlayer`, presents file and folder importers, and publishes focused command actions for the active window.
+  Main player interface. It binds to the app-owned `AudioPlayer` passed in by the app shell, presents file and folder importers, and publishes focused command actions for the active window.
 - `AdaptiveMusicPlayer/Playback/UI/AudioPlayer.swift`
   Acts as the `@Observable` view model used by SwiftUI. It exposes projected UI state plus a single `send(_:)` command entry point for the view layer.
 
