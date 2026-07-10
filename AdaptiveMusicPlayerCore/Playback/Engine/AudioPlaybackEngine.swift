@@ -121,7 +121,7 @@ public final class AudioPlaybackEngine {
             // so the load coordinator can route it through its cancellation
             // branch. Translating it here into `PlaybackError.loadingCancelled`
             // would cause the controller to show it as a user-facing error.
-            playbackState = .idle
+            playbackState = stateAfterCancelledLoad()
             throw CancellationError()
         } catch let error as PlaybackError {
             // The load pipeline (`LoadFileOperation`) translates inner
@@ -130,7 +130,7 @@ public final class AudioPlaybackEngine {
             // above: the user did not actually fail to load the file, the load
             // was cancelled.
             if case .loadingCancelled = error {
-                playbackState = .idle
+                playbackState = stateAfterCancelledLoad()
                 throw CancellationError()
             }
             playbackState = stateAfterFailedLoad(error)
@@ -318,5 +318,23 @@ public final class AudioPlaybackEngine {
         }
 
         return .error(error)
+    }
+
+    /// A cancelled load almost always means a newer load replaced this one.
+    /// Dropping to `.idle` here would emit a state change that wipes the
+    /// "previous track stays visible while loading" presentation the replacing
+    /// load just set up, so restore the preserved track instead. If a newer
+    /// load has already moved the engine past `.loading`, leave its state
+    /// untouched.
+    private func stateAfterCancelledLoad() -> EnginePlaybackState {
+        guard case .loading(let preservedAudioInfo) = playbackState else {
+            return playbackState
+        }
+
+        if let preservedAudioInfo, player != nil {
+            return .ready(preservedAudioInfo)
+        }
+
+        return .idle
     }
 }
