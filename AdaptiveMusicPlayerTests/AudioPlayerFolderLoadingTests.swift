@@ -65,6 +65,68 @@ struct AudioPlayerFolderLoadingTests {
         #expect(player.contentViewState.hasLoadedFile == true)
     }
 
+    @Test("Dropped file and folder combine into one sorted playlist that replaces the old one and autoplays")
+    func droppedItemsBuildCombinedSortedPlaylistAndAutoplay() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let looseFile = rootFolder.appending(path: "zz-loose.wav")
+        try TemporaryFolder.writeWaveFile(at: looseFile)
+        let album = rootFolder.appending(path: "album")
+        try TemporaryFolder.writeWaveFile(at: album.appending(path: "01-first.wav"))
+        try TemporaryFolder.writeWaveFile(at: album.appending(path: "02-second.wav"))
+        let notes = rootFolder.appending(path: "notes.txt")
+        try Data("not audio".utf8).write(to: notes)
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(
+                playbackControlOperation: SucceedingPlaybackControlOperation(),
+                sampleRateManager: StubSampleRateManager()
+            ),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+         )
+
+        // Existing single-track playlist that the drop must replace.
+        player.send(.loadFile(url: looseFile, importerDismissalDelay: .zero))
+        await player.waitForCurrentLoad()
+        #expect(player.contentViewState.playlistTrackPosition == "1 of 1")
+
+        player.send(.loadDroppedItems(urls: [looseFile, album, notes]))
+        await player.waitForCurrentLoad()
+        try await waitUntil(timeout: .milliseconds(500)) {
+            player.contentViewState.isPlaying
+        }
+
+        #expect(player.contentViewState.playlist.tracks.map(\.title)
+            == ["01-first.wav", "02-second.wav", "zz-loose.wav"])
+        #expect(player.contentViewState.playlistTrackPosition == "1 of 3")
+        #expect(player.contentViewState.currentTrackTitle == "01-first.wav")
+        #expect(player.contentViewState.isPlaying == true)
+    }
+
+    @Test("Dropping only non-audio files shows an error instead of loading")
+    func droppedNonAudioItemsShowError() async throws {
+        let rootFolder = try TemporaryFolder.make()
+        defer { try? TemporaryFolder.remove(rootFolder) }
+
+        let notes = rootFolder.appending(path: "notes.txt")
+        try Data("not audio".utf8).write(to: notes)
+
+        let player = AudioPlayer(
+            engine: AudioPlaybackEngine(sampleRateManager: StubSampleRateManager()),
+            hardwareObserver: StubAudioHardwareObserver(),
+            hardwareInfoProvider: StubAudioHardwareInfoProvider()
+         )
+
+        player.send(.loadDroppedItems(urls: [notes]))
+        await player.waitForCurrentLoad()
+
+        #expect(player.contentViewState.hasLoadedFile == false)
+        #expect(player.contentViewState.isLoading == false)
+        #expect(player.contentViewState.currentTrackTitle == nil)
+    }
+
     @Test("Loading an empty folder stops loading and shows an error")
     func loadEmptyFolderShowsErrorWithoutSpinner() async throws {
         let rootFolder = try TemporaryFolder.make()

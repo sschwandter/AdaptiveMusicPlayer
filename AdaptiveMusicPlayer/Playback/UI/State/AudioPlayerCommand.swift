@@ -4,6 +4,7 @@ import Foundation
 enum AudioPlayerCommand {
     case loadFile(url: URL, importerDismissalDelay: Duration)
     case loadFolder(url: URL, importerDismissalDelay: Duration)
+    case loadDroppedItems(urls: [URL])
     case reportFileSelectionError(String)
     case togglePlayPause
     case stop

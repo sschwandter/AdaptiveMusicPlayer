@@ -2,11 +2,13 @@ import Foundation
 
 public struct PlaylistSession: Sendable {
     public let playlist: PlaybackPlaylist
-    public let folderAccess: ScopedFolderAccess?
+    /// Held for the session's lifetime so tracks discovered under scoped
+    /// folders stay readable; a drop can span multiple folders.
+    public let folderAccesses: [ScopedFolderAccess]
 
-    public init(playlist: PlaybackPlaylist, folderAccess: ScopedFolderAccess? = nil) {
+    public init(playlist: PlaybackPlaylist, folderAccesses: [ScopedFolderAccess] = []) {
         self.playlist = playlist
-        self.folderAccess = folderAccess
+        self.folderAccesses = folderAccesses
     }
 
     public static func singleTrack(_ url: URL) -> PlaylistSession? {
@@ -19,13 +21,13 @@ public struct PlaylistSession: Sendable {
 
     public static func folderPlaylist(
         tracks: [URL],
-        folderAccess: ScopedFolderAccess
+        folderAccesses: [ScopedFolderAccess]
     ) -> PlaylistSession? {
         guard let playlist = PlaybackPlaylist(tracks: tracks) else {
             return nil
         }
 
-        return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
+        return PlaylistSession(playlist: playlist, folderAccesses: folderAccesses)
     }
 
     public var currentTrackURL: URL {
@@ -57,7 +59,7 @@ public struct PlaylistSession: Sendable {
             return nil
         }
 
-        return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
+        return PlaylistSession(playlist: playlist, folderAccesses: folderAccesses)
     }
 
     public func movingToNextTrack() -> PlaylistSession? {
@@ -65,7 +67,7 @@ public struct PlaylistSession: Sendable {
             return nil
         }
 
-        return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
+        return PlaylistSession(playlist: playlist, folderAccesses: folderAccesses)
     }
 
     public func movingToPreviousTrack() -> PlaylistSession? {
@@ -73,6 +75,6 @@ public struct PlaylistSession: Sendable {
             return nil
         }
 
-        return PlaylistSession(playlist: playlist, folderAccess: folderAccess)
+        return PlaylistSession(playlist: playlist, folderAccesses: folderAccesses)
     }
 }

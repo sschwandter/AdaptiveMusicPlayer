@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var activeImportTarget: ImportTarget?
     @State private var showingImporter = false
     @State private var sliderPosition: Double = 0
+    @State private var isDropTargeted = false
 
     init(player: AudioPlayer) {
         self.player = player
@@ -37,6 +38,19 @@ struct ContentView: View {
             contentStack
         }
         .frame(width: LayoutMetrics.width)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !urls.isEmpty else { return false }
+            player.send(.loadDroppedItems(urls: urls))
+            return true
+        } isTargeted: { isDropTargeted = $0 }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(.tint, lineWidth: 3)
+                    .padding(6)
+                    .allowsHitTesting(false)
+            }
+        }
         // A reopened window binds to in-flight playback; seed the slider from
         // session state because `onChange(of: currentTime)` only fires on
         // changes, which never come while playback is paused or stopped.

@@ -58,8 +58,7 @@ struct ContentViewStatePresenterTests {
         let firstURL = URL(fileURLWithPath: "/tmp/album/01-first.wav")
         let secondURL = URL(fileURLWithPath: "/tmp/album/02-second.wav")
         let playlistSession = PlaylistSession(
-            playlist: PlaybackPlaylist(tracks: [firstURL, secondURL], currentIndex: 1)!,
-            folderAccess: nil
+            playlist: PlaybackPlaylist(tracks: [firstURL, secondURL], currentIndex: 1)!
         )
         let audioInfo = AudioInfo(fileName: "02-second.wav", displayTitle: "Finale", duration: 180, sampleRate: 48_000)
         let output = presenter.present(
