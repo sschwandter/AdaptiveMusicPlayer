@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.4...AdaptiveMusicPlayer-v0.8.0) (2026-07-10)
+
+
+### Features
+
+* continue playback when the window closes, restore state on reopen ([dabe2ee](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/dabe2eee0b81c0f2fc07f8c450d725972b228a05))
+* drag & drop files and folders onto the player window ([6eab040](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/6eab040eb79ca77ebcda2a10b50eede2de5e9c21))
+* drag & drop files and folders onto the player window ([08737b4](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/08737b4e38adad60b9bcd8e06f14a8fa7d02e82b))
+* make the player a single-window app ([8978715](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/897871510a33c58ce4de967b7648a8e4db05d04b))
+* single-window app with playback that survives window close, plus task-lifetime, menu, and seek fixes ([bd2f560](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/bd2f56034b93bd9bf16c42e281412742b7e7acc4))
+
+
+### Bug Fixes
+
+* hold the security scope across the metadata title read ([533957b](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/533957b4333bbf15f93a7f0cd2aeaf55ca317233))
+* hold the security scope across the metadata title read ([222792e](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/222792e2e8c39ef964e9fd5de2acafa32b1195e9)), closes [#19](https://github.com/sschwandter/AdaptiveMusicPlayer/issues/19)
+* identity-check the stale-startup stop so it cannot stop a newer player ([5825712](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/5825712f7b1087280782d2072b9acbe60209c2cf))
+* identity-check the stale-startup stop so it cannot stop a newer player ([a655e4c](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/a655e4c35fe535d9896b6bb4cb7a793f72c5267c)), closes [#21](https://github.com/sschwandter/AdaptiveMusicPlayer/issues/21)
+* keep the app running when the player window closes ([b4429f9](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/b4429f9d5010101abe291be97d83de336ac13a5e))
+* prevent stale progress-tracking cleanup from clobbering a newer session ([fac194a](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/fac194a27ba4f8669471b3ae8f0b796baf638248))
+* prevent stale progress-tracking cleanup from clobbering a newer session ([5f2aa22](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/5f2aa224970cf1c4f5c71c8813b60d3d6997231a))
+* reset playback position to start on stop ([da2239d](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/da2239d6e5471bf4791910c9863aa916bcdbacda))
+* reset playback position to start on stop ([0ec3beb](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/0ec3bebf7dd829e5b0d91f7f52f8e68de2b8652d))
+* stop menu flicker and crash from focused-value churn ([32925a2](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/32925a2e4e49be32df7d2a7b69c9a3165b5b154d))
+* stop playback outliving its window and unstick seek latch ([af6d703](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/af6d7038e9f1f6ddebac91a8acd427fed66c28e7))
+* suppress stale load completions after a replacing load takes over ([d5417bc](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/d5417bc840770a57ea4789a7141c89e166e693bb))
+* suppress stale load completions after a replacing load takes over ([eca14ff](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/eca14ffa7ea6d71ffafa81fe9461c6f96954d07a))
+* tighten playback cancellation, error mapping, and task lifetimes ([2130bf0](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/2130bf07edee05b377e0b6fb5d0b785d66702f11))
+
 ## [0.7.4](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.3...AdaptiveMusicPlayer-v0.7.4) (2026-05-02)
 
 
