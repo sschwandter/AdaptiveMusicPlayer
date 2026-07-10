@@ -31,6 +31,7 @@ public final class AudioPlaybackEngine {
         }
     }
     private var player: AVAudioPlayer?
+    private var playerGeneration = 0
 
     public let eventStream: AsyncStream<EngineEvent>
     private let eventContinuation: AsyncStream<EngineEvent>.Continuation
@@ -47,6 +48,12 @@ public final class AudioPlaybackEngine {
 
     /// Returns the current audio info if a file is loaded.
     public var currentAudioInfo: AudioInfo? { playbackState.audioInfo }
+
+    /// Opaque identity of the currently loaded player. Playback startup
+    /// captures this so a stale startup can stop only the player it actually
+    /// started, never a newer startup's player. A counter rather than
+    /// `ObjectIdentifier` because a deallocated player's address can be reused.
+    public var currentPlayerGeneration: Int { playerGeneration }
 
     // MARK: - Dependencies
 
@@ -112,6 +119,7 @@ public final class AudioPlaybackEngine {
             )
 
             player = newPlayer
+            playerGeneration += 1
             playbackState = .ready(audioInfo)
 
             return audioInfo
@@ -216,6 +224,15 @@ public final class AudioPlaybackEngine {
 
         playbackState = playbackControlOperation.stop(player: player, audioInfo: audioInfo)
         return audioInfo
+    }
+
+    /// Stop playback only if `generation` still identifies the current player.
+    /// Returns nil without touching playback when a newer load has replaced
+    /// the player (the replaced player was already stopped by `beginLoading`).
+    @discardableResult
+    public func stop(ifCurrentPlayerIs generation: Int) -> AudioInfo? {
+        guard generation == playerGeneration else { return nil }
+        return stop()
     }
 
     /// Mark playback as finished

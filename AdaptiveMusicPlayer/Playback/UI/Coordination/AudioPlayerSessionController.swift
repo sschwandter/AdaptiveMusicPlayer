@@ -305,12 +305,19 @@ final class AudioPlayerSessionController {
     }
 
     private func startPlayback() {
+        // Shared between this startup's two closures so the stale-cleanup
+        // path knows which player this startup actually started. Captured
+        // inside `play` (not here) because a load can replace the player
+        // between scheduling the startup and `engine.play()` running;
+        // `play()`'s own identity guard makes the pre-play read authoritative.
+        let startedPlayer = StartedPlayerGeneration()
         startupCoordinator.startPlayback(
             play: { [engine] in
-                try await engine.play()
+                startedPlayer.value = engine.currentPlayerGeneration
+                return try await engine.play()
             },
             handleEvent: { [weak self] event in
-                await self?.handlePlaybackStartupEvent(event)
+                await self?.handlePlaybackStartupEvent(event, startedPlayer: startedPlayer.value)
             }
         )
     }
@@ -336,7 +343,10 @@ final class AudioPlayerSessionController {
         }
     }
 
-    private func handlePlaybackStartupEvent(_ event: PlaybackStartupCoordinator.Event) async {
+    private func handlePlaybackStartupEvent(
+        _ event: PlaybackStartupCoordinator.Event,
+        startedPlayer: Int?
+    ) async {
         switch event {
         case .startupBegan:
             dispatch(.playbackStarting)
@@ -348,12 +358,15 @@ final class AudioPlayerSessionController {
             showError(error)
         case .staleStartupFinished:
             // `engine.play()` returned successfully but the user has already
-            // moved on (e.g. they hit stop or started a different track). The
-            // newer startup has its own player; this one would have started
-            // audio on a player that is no longer current. Stop it so we do
-            // not leak an `AVAudioPlayer` and so the engine's runtime state
-            // matches the controller's view of the world.
-            _ = engine.stop()
+            // moved on (e.g. they hit stop or started a different track).
+            // Stop the player this startup started so audio does not keep
+            // playing behind the controller's back — but only if it is still
+            // the engine's current player. If a newer load replaced it, that
+            // load already stopped it, and an unconditional stop would kill
+            // the newer startup's playback instead.
+            if let startedPlayer {
+                engine.stop(ifCurrentPlayerIs: startedPlayer)
+            }
         }
     }
 
@@ -477,4 +490,11 @@ final class AudioPlayerSessionController {
     private func dispatch(_ action: AudioPlayerAction) {
         stateStore.dispatch(action)
     }
+}
+
+/// Mutable box shared between one startup's `play` and `handleEvent` closures
+/// (a plain captured `var` is rejected: `@MainActor` closures are Sendable).
+@MainActor
+private final class StartedPlayerGeneration {
+    var value: Int?
 }

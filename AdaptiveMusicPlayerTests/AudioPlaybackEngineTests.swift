@@ -123,6 +123,28 @@ struct AudioPlaybackEngineTests {
         #expect(engine.hasActivePlayer)
     }
 
+    @Test("Identity-checked stop ignores a stale player generation")
+    func stopIgnoresStalePlayerGeneration() async throws {
+        let engine = AudioPlaybackEngine(
+            loadFileOperation: StubLoadFileOperation(sampleRate: 44_100),
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/first.wav"))
+        let staleGeneration = engine.currentPlayerGeneration
+
+        // A newer load replaces the player, then starts playing.
+        _ = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/second.wav"))
+        let playingAudioInfo = try await engine.play()
+
+        // The stale startup's cleanup must not stop the newer player...
+        #expect(engine.stop(ifCurrentPlayerIs: staleGeneration) == nil)
+        #expect(engine.currentAudioInfo == playingAudioInfo)
+
+        // ...but a matching generation still stops as before.
+        #expect(engine.stop(ifCurrentPlayerIs: engine.currentPlayerGeneration) == playingAudioInfo)
+    }
+
     @Test("Cancellation during load surfaces as CancellationError, not a load failure")
     func loadCancellationSurfacesAsCancellationError() async throws {
         let cancellableOperation = CancellableLoadFileOperation()
