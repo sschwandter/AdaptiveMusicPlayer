@@ -111,6 +111,20 @@ public final class AudioSessionManager: AudioSessionManaging {
     // MARK: - Public Methods
 
     public func loadAudioData(from url: URL) async throws -> LoadedAudioData {
+        // The app is sandboxed: the security scope must span the whole load,
+        // not just the data read inside the file loader — the title reader
+        // below reads the file from disk too, and a scope released after the
+        // data read would make it silently fall back to the filename for
+        // directly picked files (folder-playlist tracks are covered by the
+        // folder scope held elsewhere). The loader's own start/stop nests
+        // inside this one; nested balanced calls are fine.
+        let didAccessScopedResource = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessScopedResource {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         // 1. Load audio file data
         let loadedFile = try await fileLoader.load(url: url)
         guard !Task.isCancelled else { throw CancellationError() }
