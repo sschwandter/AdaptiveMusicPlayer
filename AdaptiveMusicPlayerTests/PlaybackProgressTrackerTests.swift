@@ -88,6 +88,60 @@ struct PlaybackProgressTrackerTests {
         consumer.cancel()
     }
 
+    @Test("A stale session's cancelled cleanup does not clear a session that already replaced it")
+    func cancelledSessionDoesNotClearNewerSession() async throws {
+        let tracker = PlaybackProgressTracker()
+        let stalePlayer = try StubAudioPlayer()
+        let newPlayer = try StubAudioPlayer()
+
+        // Short interval so the stale session's polling loop reliably wakes
+        // up and notices cancellation instead of staying parked awaiting its
+        // first tick for the rest of the test.
+        let (staleStream, staleContinuation) = AsyncStream<ProgressEvent>.makeStream()
+        let staleTask = Task { @MainActor in
+            await tracker.trackProgressStream(
+                player: stalePlayer,
+                updateInterval: 0.02,
+                continuation: staleContinuation
+            )
+        }
+        let staleDrain = Task { @MainActor in
+            for await _ in staleStream {}
+        }
+
+        // Let the stale session's synchronous setup run before cancelling it.
+        try await Task.sleep(for: .milliseconds(20))
+        staleTask.cancel()
+
+        // Replace it immediately, like the controller does when it cancels
+        // the old lifetime task and starts a new one back-to-back with no
+        // await in between.
+        let (newStream, newContinuation) = AsyncStream<ProgressEvent>.makeStream()
+        let collector = ProgressEventCollector()
+        let newConsumer = collector.consume(newStream)
+        let newTask = Task { @MainActor in
+            await tracker.trackProgressStream(
+                player: newPlayer,
+                updateInterval: 1,
+                continuation: newContinuation
+            )
+        }
+
+        // Wait past the stale session's tick interval so its cancelled loop
+        // wakes up and runs its trailing cleanup.
+        try await Task.sleep(for: .milliseconds(150))
+
+        // If the stale session's trailing cleanup wiped the tracker's shared
+        // state, this finish callback would be silently dropped.
+        tracker.audioPlayerDidFinishPlaying(newPlayer, successfully: true)
+        try await waitUntil { collector.didFinish }
+        #expect(collector.didFinish)
+
+        newConsumer.cancel()
+        newTask.cancel()
+        staleDrain.cancel()
+    }
+
     @Test("Async progress stream emits finished when the delegate reports completion")
     func asyncProgressStreamFinishesFromDelegateCallback() async throws {
         let tracker = PlaybackProgressTracker()
