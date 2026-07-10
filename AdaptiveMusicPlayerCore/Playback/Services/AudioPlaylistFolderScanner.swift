@@ -85,7 +85,9 @@ public struct AudioPlaylistFolderScanner: AudioPlaylistFolderScanning {
             .sorted(by: Self.sortByFullPath)
     }
 
-    private static func sortByFullPath(lhs: URL, rhs: URL) -> Bool {
+    /// Public because drop loading sorts its merged file+folder track list
+    /// with the same ordering folder playlists use.
+    public static func sortByFullPath(lhs: URL, rhs: URL) -> Bool {
         lhs.standardizedFileURL.path.localizedStandardCompare(rhs.standardizedFileURL.path) == .orderedAscending
     }
 }

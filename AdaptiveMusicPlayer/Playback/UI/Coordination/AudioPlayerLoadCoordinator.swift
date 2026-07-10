@@ -16,10 +16,15 @@ final class AudioPlayerLoadCoordinator {
     }
 
     private let folderScanner: AudioPlaylistFolderScanning
+    private let audioFileClassifier: PlayableAudioFileClassifying
     private let latestLoad = LatestAsyncRequestCoordinator()
 
-    init(folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner()) {
+    init(
+        folderScanner: AudioPlaylistFolderScanning = AudioPlaylistFolderScanner(),
+        audioFileClassifier: PlayableAudioFileClassifying = UTTypeAudioFileClassifier()
+    ) {
         self.folderScanner = folderScanner
+        self.audioFileClassifier = audioFileClassifier
     }
 
     func waitForCurrentLoad() async {
@@ -109,7 +114,7 @@ final class AudioPlayerLoadCoordinator {
 
             guard let playlistSession = PlaylistSession.folderPlaylist(
                 tracks: tracks,
-                folderAccess: folderAccess
+                folderAccesses: [folderAccess]
             ) else {
                 throw PlaybackError.loadFailed("No playable audio files were found in the selected folder.")
             }
@@ -127,6 +132,76 @@ final class AudioPlayerLoadCoordinator {
                 )
             )
         }
+    }
+
+    /// Load drag & dropped files and/or folders as one combined playlist.
+    /// Folders are scanned like a folder load; loose files are kept if
+    /// playable. No importer dismissal delay — there is no picker to dismiss.
+    func loadDroppedItems(
+        urls: [URL],
+        loadTrack: @escaping @MainActor (URL) async throws -> AudioInfo,
+        handleEvent: @escaping @MainActor (Event) async -> Void
+    ) {
+        startNewLoad(handleEvent: handleEvent) { run in
+            await handleEvent(.scanningFolderStarted)
+
+            // `ScopedFolderAccess`'s failable init rejects anything that is
+            // not a readable directory, so it doubles as the partition
+            // between dropped folders and loose files.
+            var folderAccesses: [ScopedFolderAccess] = []
+            var looseFiles: [URL] = []
+            for url in urls {
+                if let folderAccess = ScopedFolderAccess(folderURL: url) {
+                    folderAccesses.append(folderAccess)
+                } else {
+                    looseFiles.append(url)
+                }
+            }
+
+            var tracks: [URL] = []
+            // ponytail: sequential scans; drops carry a handful of folders.
+            for folderAccess in folderAccesses {
+                tracks += try await self.scanFolderOffMainActor(folderAccess.folderURL)
+            }
+            tracks += looseFiles.filter { self.isPlayableWithTransientScope($0) }
+            tracks.sort(by: AudioPlaylistFolderScanner.sortByFullPath)
+
+            try self.ensureLoadRemainsCurrent(run)
+
+            guard let playlistSession = PlaylistSession.folderPlaylist(
+                tracks: tracks,
+                folderAccesses: folderAccesses
+            ) else {
+                throw PlaybackError.loadFailed("No playable audio files were found in the dropped items.")
+            }
+
+            await handleEvent(.playlistSessionUpdated(playlistSession))
+            await handleEvent(.trackLoadingStarted(playlistSession))
+
+            let audioInfo = try await loadTrack(playlistSession.currentTrackURL)
+            try self.ensureLoadRemainsCurrent(run)
+            await handleEvent(
+                .trackLoaded(
+                    url: playlistSession.currentTrackURL,
+                    audioInfo: audioInfo,
+                    autoplayOnSuccess: true
+                )
+            )
+        }
+    }
+
+    /// The classifier reads resource values from disk, which needs the
+    /// dropped file's own security scope in the sandboxed app (a no-op for
+    /// URLs that are readable without one).
+    private func isPlayableWithTransientScope(_ url: URL) -> Bool {
+        let didAccessScopedResource = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessScopedResource {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        return audioFileClassifier.isPlayableFile(at: url)
     }
 
     private func startNewLoad(

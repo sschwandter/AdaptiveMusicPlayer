@@ -79,6 +79,8 @@ final class AudioPlayerSessionController {
             loadFile(url: url, importerDismissalDelay: importerDismissalDelay)
         case .loadFolder(let url, let importerDismissalDelay):
             loadFolder(url: url, importerDismissalDelay: importerDismissalDelay)
+        case .loadDroppedItems(let urls):
+            loadDroppedItems(urls: urls)
         case .reportFileSelectionError(let message):
             showError(.loadFailed(message))
         case .togglePlayPause:
@@ -129,6 +131,18 @@ final class AudioPlayerSessionController {
         loadCoordinator.loadFolder(
             url: url,
             importerDismissalDelay: importerDismissalDelay,
+            loadTrack: { [engine] trackURL in
+                try await engine.loadFile(from: trackURL)
+            },
+            handleEvent: { [weak self] event in
+                await self?.handleLoadEvent(event)
+            }
+        )
+    }
+
+    private func loadDroppedItems(urls: [URL]) {
+        loadCoordinator.loadDroppedItems(
+            urls: urls,
             loadTrack: { [engine] trackURL in
                 try await engine.loadFile(from: trackURL)
             },
