@@ -55,6 +55,8 @@ final class AudioPlayerSessionController {
 
     deinit {
         engineSubscriptionTask?.cancel()
+        progressTrackingTask?.cancel()
+        hardwareRefreshTask?.cancel()
     }
 
     private func startEngineSubscription() {
@@ -372,15 +374,18 @@ final class AudioPlayerSessionController {
         }
 
         // Forward progress updates as they arrive so the slider stays responsive.
+        // Like the engine subscription, capture the stream by value and
+        // re-acquire `self` weakly per event: a strong capture here would keep
+        // the controller (and the playing engine) alive after the owning view
+        // is gone, so playback would outlive its window.
+        let progressStream = engine.trackProgress(
+            using: progressTracker,
+            updateInterval: Constants.progressUpdateInterval
+        )
         progressTrackingTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            let progressStream = self.engine.trackProgress(
-                using: self.progressTracker,
-                updateInterval: Constants.progressUpdateInterval
-            )
-
             for await event in progressStream {
+                guard let self else { return }
+
                 switch event {
                 case .progress(let time):
                     self.dispatch(.progressChanged(time))

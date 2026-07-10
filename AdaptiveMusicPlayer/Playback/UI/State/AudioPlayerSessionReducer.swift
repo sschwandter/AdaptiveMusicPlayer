@@ -130,7 +130,10 @@ struct AudioPlayerSessionReducer {
             }
 
         case .commandIgnored:
-            break
+            // Seek paths dispatch `.seekStarted` before calling the engine, so
+            // an ignored command must release the seek latch or progress
+            // updates stay suppressed indefinitely.
+            nextState.isSeeking = false
         }
 
         return nextState

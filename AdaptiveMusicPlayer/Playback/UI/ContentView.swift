@@ -18,10 +18,14 @@ struct ContentView: View {
     }
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var player = AudioPlayer()
+    @Bindable private var player: AudioPlayer
     @State private var activeImportTarget: ImportTarget?
     @State private var showingImporter = false
     @State private var sliderPosition: Double = 0
+
+    init(player: AudioPlayer) {
+        self.player = player
+    }
 
     private var viewState: ContentViewState {
         player.contentViewState
@@ -33,6 +37,12 @@ struct ContentView: View {
             contentStack
         }
         .frame(width: LayoutMetrics.width)
+        // A reopened window binds to in-flight playback; seed the slider from
+        // session state because `onChange(of: currentTime)` only fires on
+        // changes, which never come while playback is paused or stopped.
+        .onAppear {
+            sliderPosition = viewState.currentTime
+        }
         .focusedSceneValue(\.playbackCommandActions, playbackCommandActions)
         .fileImporter(
             isPresented: $showingImporter,
@@ -638,5 +648,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(player: AudioPlayer())
 }

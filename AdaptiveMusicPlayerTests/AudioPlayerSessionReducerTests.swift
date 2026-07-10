@@ -170,4 +170,19 @@ struct AudioPlayerSessionReducerTests {
         #expect(failedState.hasError)
         #expect(ignoredState.statusMessage == failedState.statusMessage)
     }
+
+    @Test("ignored command releases the seek latch so progress updates resume")
+    func commandIgnoredClearsSeeking() {
+        let ignoredState = reducer.reduce(
+            state: AudioPlayerSessionState(isSeeking: true),
+            action: .commandIgnored(.noFileLoaded)
+        )
+        let progressState = reducer.reduce(
+            state: ignoredState,
+            action: .progressChanged(3)
+        )
+
+        #expect(!ignoredState.isSeeking)
+        #expect(progressState.currentTime == 3)
+    }
 }
