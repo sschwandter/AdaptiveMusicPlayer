@@ -14,6 +14,11 @@ public struct AudioDeviceInfo: Sendable, Equatable {
 }
 
 public enum SampleRateSupport {
+    /// Tolerance in Hz within which two sample rates count as equal. Shared by
+    /// the engine's skip-the-switch decision, the settle loop, and the UI's
+    /// mismatch verdict so all three tell one story.
+    public static let tolerance: Double = 1.0
+
     public static func isSupported(_ rate: Double, by ranges: [AudioValueRange]) -> Bool {
         ranges.contains { range in
             rate >= range.mMinimum && rate <= range.mMaximum
@@ -62,7 +67,6 @@ public protocol SampleRateManaging: Sendable {
 /// Core Audio implementation of sample rate management
 public actor CoreAudioSampleRateManager: SampleRateManaging {
     private enum Constants {
-        static let sampleRateTolerance: Double = 1.0
         static let settlePollInterval: Duration = .milliseconds(50)
         static let settleTimeout: Duration = .milliseconds(750)
     }
@@ -148,7 +152,7 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
             try Task.checkCancellation()
 
             if let currentRate = try? device.nominalSampleRate,
-               abs(currentRate - targetRate) <= Constants.sampleRateTolerance {
+               abs(currentRate - targetRate) <= SampleRateSupport.tolerance {
                 return
             }
 
