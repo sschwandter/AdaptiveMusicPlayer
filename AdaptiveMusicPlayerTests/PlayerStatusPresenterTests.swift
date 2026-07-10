@@ -64,19 +64,6 @@ struct PlayerStatusPresenterTests {
         #expect(output.playbackOverride == nil)
     }
 
-    @Test("cancelled loading keeps an informational status and explicit cancelled state")
-    func cancelledStatus() {
-        let output = presenter.presentInfo(
-            message: "Loading cancelled",
-            loading: .cancelled
-        )
-
-        #expect(output.loading == .cancelled)
-        #expect(output.status.kind == .info)
-        #expect(output.status.message == "Loading cancelled")
-        #expect(output.playbackOverride == nil)
-    }
-
     @Test("errors without audio force unavailable playback state")
     func errorStatus() {
         let output = presenter.presentError(

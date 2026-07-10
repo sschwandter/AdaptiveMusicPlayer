@@ -29,14 +29,13 @@ enum LoadingPresentationState: Equatable {
     case scanningFolder
     case loadingTrack
     case startingPlayback
-    case cancelled
     case failed
 
     var isActive: Bool {
         switch self {
         case .scanningFolder, .loadingTrack:
             return true
-        case .idle, .startingPlayback, .cancelled, .failed:
+        case .idle, .startingPlayback, .failed:
             return false
         }
     }
