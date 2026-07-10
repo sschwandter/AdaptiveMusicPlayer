@@ -191,7 +191,7 @@ private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unc
     let recorder: LoadExecutionThreadRecorder
 
     func execute(from url: URL) async throws -> LoadedAudioData {
-        await recorder.record(Thread.isMainThread)
+        await recorder.record(currentThreadIsMain())
         // Read sample rate from a probe player, same as AudioSessionManager does.
         let probePlayer = try AVAudioPlayer(data: WaveData.make(), fileTypeHint: "wav")
         return LoadedAudioData(
@@ -202,6 +202,12 @@ private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unc
             sampleRate: probePlayer.format.sampleRate,
             duration: probePlayer.duration
         )
+    }
+
+    // Synchronous on purpose: `Thread.isMainThread` is unavailable from async
+    // contexts under Swift 6, but a sync helper runs on the caller's thread.
+    private func currentThreadIsMain() -> Bool {
+        Thread.isMainThread
     }
 }
 
