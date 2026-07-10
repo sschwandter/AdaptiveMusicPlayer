@@ -284,6 +284,14 @@ final class AudioPlayerSessionController {
         dispatch(.trackReady(url: trackURL, audioInfo: audioInfo))
         engine.setVolume(currentVolume())
         await refreshHardwareInfo()
+
+        // A newer load can replace this one while awaiting the hardware
+        // refresh; the load coordinator cancels this run's task when that
+        // happens. Bail out so a stale load cannot publish ready status over
+        // the newer load's progress — or worse, start playback of a track the
+        // user has already moved past via an uncancelled startup task.
+        guard !Task.isCancelled else { return }
+
         showReadyStatus(for: audioInfo)
 
         if autoplayOnSuccess {

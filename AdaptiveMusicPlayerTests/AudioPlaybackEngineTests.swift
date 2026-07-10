@@ -100,6 +100,29 @@ struct AudioPlaybackEngineTests {
         #expect(tracker.stopCallCount == 1)
     }
 
+    @Test("Cancelled load keeps the previously loaded track instead of resetting to idle")
+    func loadCancellationPreservesPreviousTrack() async throws {
+        let engine = AudioPlaybackEngine(
+            loadFileOperation: FirstSucceedsThenHangsLoadFileOperation(),
+            sampleRateManager: StubSampleRateManager()
+        )
+
+        let firstAudioInfo = try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/first.wav"))
+
+        let replacedLoad = Task<AudioInfo, Error> {
+            try await engine.loadFile(from: URL(fileURLWithPath: "/tmp/second.wav"))
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        replacedLoad.cancel()
+        _ = try? await replacedLoad.value
+
+        // The cancelled load must not wipe the engine back to idle: the first
+        // track's player and audio info are still valid, and a replacing load
+        // relies on them staying visible while it runs.
+        #expect(engine.currentAudioInfo == firstAudioInfo)
+        #expect(engine.hasActivePlayer)
+    }
+
     @Test("Cancellation during load surfaces as CancellationError, not a load failure")
     func loadCancellationSurfacesAsCancellationError() async throws {
         let cancellableOperation = CancellableLoadFileOperation()
@@ -157,6 +180,31 @@ private struct ThreadRecordingLoadFileOperation: LoadFileOperationProtocol, @unc
             sampleRate: probePlayer.format.sampleRate,
             duration: probePlayer.duration
         )
+    }
+}
+
+/// Loads the first track immediately, then hangs on subsequent loads until
+/// cancelled — mimicking a slow second load that gets replaced.
+private final class FirstSucceedsThenHangsLoadFileOperation: LoadFileOperationProtocol, @unchecked Sendable {
+    private var loadCount = 0
+
+    func execute(from url: URL) async throws -> LoadedAudioData {
+        loadCount += 1
+        guard loadCount > 1 else {
+            return LoadedAudioData(
+                data: WaveData.make(),
+                fileName: url.lastPathComponent,
+                fileExtension: "wav",
+                displayTitle: url.lastPathComponent,
+                sampleRate: 44_100,
+                duration: 1
+            )
+        }
+
+        while true {
+            try await Task.sleep(for: .milliseconds(5))
+            try Task.checkCancellation()
+        }
     }
 }
 
