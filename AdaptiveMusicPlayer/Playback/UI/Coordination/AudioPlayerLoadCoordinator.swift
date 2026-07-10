@@ -12,7 +12,6 @@ final class AudioPlayerLoadCoordinator {
             audioInfo: AudioInfo,
             autoplayOnSuccess: Bool
         )
-        case cancelled
         case failed(PlaybackError)
     }
 
@@ -138,8 +137,10 @@ final class AudioPlayerLoadCoordinator {
             do {
                 try await operation(run)
             } catch is CancellationError {
-                guard run.isCurrent() else { return }
-                await handleEvent(.cancelled)
+                // A cancelled load always means a newer request replaced this
+                // run: every cancellation path also bumps the coordinator's
+                // generation, so there is no current-run cancellation to
+                // report — the replacing load owns the UI now.
             } catch let error as PlaybackError {
                 guard run.isCurrent() else { return }
                 await handleEvent(.failed(error))

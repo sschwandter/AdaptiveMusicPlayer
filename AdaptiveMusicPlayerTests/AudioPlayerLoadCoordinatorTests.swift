@@ -193,8 +193,6 @@ actor LoadCoordinatorEventRecorder {
         case .trackLoaded(let url, _, let autoplayOnSuccess):
             summariesStorage.append("loaded:\(url.lastPathComponent):\(autoplayOnSuccess)")
             loadedTrackURLsStorage.append(url)
-        case .cancelled:
-            summariesStorage.append("cancelled")
         case .failed(let error):
             summariesStorage.append("failed:\(error.localizedDescription)")
         }

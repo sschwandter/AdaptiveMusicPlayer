@@ -139,20 +139,16 @@ struct AudioPlayerSessionReducerTests {
         }
     }
 
-    @Test("cancel, failure, and hardware actions update their own state slices")
-    func cancellationFailureAndHardwareActions() {
+    @Test("failure and hardware actions update their own state slices")
+    func failureAndHardwareActions() {
         let deviceInfo = AudioDeviceInfo(
             name: "Test Device",
             currentSampleRate: 44_100,
             supportedSampleRates: [44_100, 48_000]
         )
 
-        let cancelledState = reducer.reduce(
-            state: AudioPlayerSessionState(currentTime: 8),
-            action: .loadingCancelled
-        )
         let hardwareState = reducer.reduce(
-            state: cancelledState,
+            state: AudioPlayerSessionState(currentTime: 8),
             action: .hardwareInfoChanged(deviceInfo)
         )
         let failedState = reducer.reduce(
@@ -164,8 +160,6 @@ struct AudioPlayerSessionReducerTests {
             action: .commandIgnored(.notReady)
         )
 
-        #expect(cancelledState.currentTime == 0)
-        #expect(cancelledState.activity == .cancelled)
         #expect(hardwareState.hardwareDeviceName == "Test Device")
         #expect(failedState.hasError)
         #expect(ignoredState.statusMessage == failedState.statusMessage)

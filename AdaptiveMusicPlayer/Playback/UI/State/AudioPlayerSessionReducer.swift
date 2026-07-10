@@ -10,7 +10,6 @@ enum AudioPlayerAction {
     case loadStarted(preservedAudioInfo: AudioInfo?, phase: AudioPlayerLoadPhase)
     case playlistSessionUpdated(PlaylistSession)
     case trackReady(url: URL, audioInfo: AudioInfo)
-    case loadingCancelled
     case playbackStarting
     case playbackStartCancelled
     case playbackStopped(preservedAudioInfo: AudioInfo?)
@@ -57,14 +56,6 @@ struct AudioPlayerSessionReducer {
             nextState.playback = .ready(audioInfo)
             nextState.currentTime = 0
             nextState.recordLoadedTrack(audioInfo, for: url)
-
-        case .loadingCancelled:
-            nextState.currentTime = 0
-            nextState.activity = .cancelled
-            nextState.status = StatusPresentationState(
-                kind: .info,
-                message: "Loading cancelled"
-            )
 
         case .playbackStarting:
             nextState.activity = .startingPlayback

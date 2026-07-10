@@ -262,8 +262,6 @@ final class AudioPlayerSessionController {
             } catch {
                 showError(.loadFailed(error.localizedDescription))
             }
-        case .cancelled:
-            handleLoadCancellation()
         case .failed(let error):
             showError(error)
         }
@@ -297,11 +295,6 @@ final class AudioPlayerSessionController {
         if autoplayOnSuccess {
             startPlayback()
         }
-    }
-
-    private func handleLoadCancellation() {
-        stopProgressTracking()
-        dispatch(.loadingCancelled)
     }
 
     private func startPlayback() {
