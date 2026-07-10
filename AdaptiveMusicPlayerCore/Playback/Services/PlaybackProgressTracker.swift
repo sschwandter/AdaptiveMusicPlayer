@@ -29,9 +29,17 @@ public final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, 
     private weak var trackedPlayer: AVAudioPlayer?
     private var trackedPlayerID: ObjectIdentifier?
 
+    /// Bumped by every `stopTracking()` call. A `trackProgressStream`
+    /// invocation whose cancellation is only noticed after a newer session
+    /// has already started (the polling loop only checks `Task.isCancelled`
+    /// once per timer tick) uses this to recognize its trailing cleanup is
+    /// stale, so it doesn't clear state that now belongs to the new session.
+    private var generation = 0
+
     // MARK: - Public Methods
 
     public func stopTracking() {
+        generation += 1
         onPlaybackFinished = nil
         trackedPlayer?.delegate = nil
         trackedPlayer = nil
@@ -49,6 +57,7 @@ public final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, 
         }
 
         stopTracking()
+        let myGeneration = generation
 
         // Weak reference to avoid retention cycles
         weak let weakPlayer = player
@@ -88,7 +97,12 @@ public final class PlaybackProgressTracker: NSObject, PlaybackProgressTracking, 
             continuation.finish()
         }
 
-        stopTracking()
+        // A newer session may have already taken over the tracker's shared
+        // state by the time this cancelled loop wakes up; only tear it down
+        // if no one has replaced this invocation in the meantime.
+        if generation == myGeneration {
+            stopTracking()
+        }
     }
 
     // MARK: - AVAudioPlayerDelegate
