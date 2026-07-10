@@ -220,11 +220,18 @@ final class ThreadRecordingFolderScanner: AudioPlaylistFolderScanning, @unchecke
     }
 
     func scan(folderURL: URL) async throws -> [URL] {
+        recordCallingThread()
+        return tracks
+    }
+
+    // Synchronous on purpose: `NSLock.lock` and `Thread.isMainThread` are
+    // unavailable from async contexts under Swift 6, but a sync helper runs
+    // on the caller's thread and may use both.
+    private func recordCallingThread() {
         lock.lock()
         wasCalled = true
         wasCalledOnMainThread = Thread.isMainThread
         lock.unlock()
-        return tracks
     }
 }
 

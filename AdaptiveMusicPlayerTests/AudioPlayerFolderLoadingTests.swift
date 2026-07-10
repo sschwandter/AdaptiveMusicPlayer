@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Observation
+import os
 @testable import AdaptiveMusicPlayerCore
 @testable import AdaptiveMusicPlayer
 
@@ -183,19 +184,21 @@ struct AudioPlayerFolderLoadingTests {
             hardwareInfoProvider: StubAudioHardwareInfoProvider()
          )
 
-        var didObserveChange = false
+        // `onChange:` is @Sendable, so a captured mutable Bool needs a lock
+        // under Swift 6 strict concurrency.
+        let didObserveChange = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
             _ = player.contentViewState
             _ = player.contentViewState.playlistTrackPosition
             _ = player.contentViewState.playlist.tracks
         } onChange: {
-            didObserveChange = true
+            didObserveChange.withLock { $0 = true }
         }
 
         player.send(.loadFolder(url: rootFolder, importerDismissalDelay: .zero))
         await player.waitForCurrentLoad()
 
-        #expect(didObserveChange)
+        #expect(didObserveChange.withLock { $0 })
         #expect(player.contentViewState.playlistTrackPosition == "1 of 1")
         #expect(player.contentViewState.playlist.tracks.count == 1)
     }
