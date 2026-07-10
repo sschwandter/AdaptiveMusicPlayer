@@ -24,14 +24,10 @@ final class AudioPlayer {
         sessionController.isStartingPlayback
     }
 
-    private var contentViewPresentation: ContentViewStatePresentationOutput {
-        stateStore.contentViewPresentation(
+    var contentViewState: ContentViewState {
+        stateStore.contentViewState(
             sampleRateBanner: sampleRateBannerPresentation
         )
-    }
-
-    var contentViewState: ContentViewState {
-        contentViewPresentation.contentViewState
     }
 
     var sampleRateBannerPresentation: SampleRateBannerPresentation {

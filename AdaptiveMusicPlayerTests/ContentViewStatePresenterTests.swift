@@ -17,13 +17,12 @@ struct ContentViewStatePresenterTests {
             )
         )
 
-        #expect(output.playlistTracks.isEmpty)
-        #expect(output.hasPlaylist == false)
-        #expect(output.contentViewState.currentTrackTitle == nil)
-        #expect(output.contentViewState.sliderIsEnabled == false)
-        #expect(output.contentViewState.sliderOpacity == 0.45)
-        #expect(output.contentViewState.transport.canPlayPause == false)
-        #expect(output.contentViewState.playlist.isVisible == false)
+        #expect(output.playlist.tracks.isEmpty)
+        #expect(output.currentTrackTitle == nil)
+        #expect(output.sliderIsEnabled == false)
+        #expect(output.sliderOpacity == 0.45)
+        #expect(output.transport.canPlayPause == false)
+        #expect(output.playlist.isVisible == false)
     }
 
     @Test("Single loaded track enables transport and keeps playlist hidden")
@@ -46,13 +45,12 @@ struct ContentViewStatePresenterTests {
             )
         )
 
-        #expect(output.contentViewState.currentTrackTitle == "Track")
-        #expect(output.contentViewState.duration == 120)
-        #expect(output.contentViewState.currentTime == 12)
-        #expect(output.contentViewState.sliderIsEnabled == true)
-        #expect(output.contentViewState.transport.canPlayPause == true)
-        #expect(output.contentViewState.playlist.isVisible == false)
-        #expect(output.hasPlaylist == false)
+        #expect(output.currentTrackTitle == "Track")
+        #expect(output.duration == 120)
+        #expect(output.currentTime == 12)
+        #expect(output.sliderIsEnabled == true)
+        #expect(output.transport.canPlayPause == true)
+        #expect(output.playlist.isVisible == false)
     }
 
     @Test("Playlist state maps rows and navigation flags")
@@ -80,16 +78,14 @@ struct ContentViewStatePresenterTests {
         )
 
         #expect(output.playlistTrackPosition == "2 of 2")
-        #expect(output.playlistTracks.count == 2)
-        #expect(output.playlistTracks.first?.title == "01-first.wav")
-        #expect(output.playlistTracks.last?.title == "Finale")
-        #expect(output.playlistTracks.last?.isCurrent == true)
-        #expect(output.hasPlaylist == true)
-        #expect(output.canPlayPreviousTrack == true)
-        #expect(output.canPlayNextTrack == false)
-        #expect(output.contentViewState.playlist.isVisible == true)
-        #expect(output.contentViewState.transport.canPlayPreviousTrack == true)
-        #expect(output.contentViewState.transport.canPlayNextTrack == false)
+        #expect(output.playlist.positionDescription == "2 of 2")
+        #expect(output.playlist.tracks.count == 2)
+        #expect(output.playlist.tracks.first?.title == "01-first.wav")
+        #expect(output.playlist.tracks.last?.title == "Finale")
+        #expect(output.playlist.tracks.last?.isCurrent == true)
+        #expect(output.playlist.isVisible == true)
+        #expect(output.transport.canPlayPreviousTrack == true)
+        #expect(output.transport.canPlayNextTrack == false)
     }
 
     @Test("Loading state disables transport and dims slider")
@@ -112,11 +108,11 @@ struct ContentViewStatePresenterTests {
             )
         )
 
-        #expect(output.contentViewState.isLoading == true)
-        #expect(output.contentViewState.sliderIsEnabled == false)
-        #expect(output.contentViewState.sliderOpacity == 0.7)
-        #expect(output.contentViewState.transport.canPlayPause == false)
-        #expect(output.contentViewState.transport.canAdjustVolume == false)
+        #expect(output.isLoading == true)
+        #expect(output.sliderIsEnabled == false)
+        #expect(output.sliderOpacity == 0.7)
+        #expect(output.transport.canPlayPause == false)
+        #expect(output.transport.canAdjustVolume == false)
     }
 
     @Test("Playing state switches play pause symbol")
@@ -139,9 +135,9 @@ struct ContentViewStatePresenterTests {
             )
         )
 
-        #expect(output.contentViewState.isPlaying == true)
-        #expect(output.contentViewState.transport.playPauseSymbolName == "pause.fill")
-        #expect(output.contentViewState.transport.playPauseHelp == "Pause (Space)")
+        #expect(output.isPlaying == true)
+        #expect(output.transport.playPauseSymbolName == "pause.fill")
+        #expect(output.transport.playPauseHelp == "Pause (Space)")
     }
 
     private var idleBanner: SampleRateBannerPresentation {

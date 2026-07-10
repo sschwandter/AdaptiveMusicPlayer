@@ -52,9 +52,9 @@ final class AudioPlayerStateStore {
         )
     }
 
-    func contentViewPresentation(
+    func contentViewState(
         sampleRateBanner: SampleRateBannerPresentation
-    ) -> ContentViewStatePresentationOutput {
+    ) -> ContentViewState {
         ContentViewStatePresenter().present(
             input: ContentViewStatePresentationInput(
                 sessionState: sessionState,
