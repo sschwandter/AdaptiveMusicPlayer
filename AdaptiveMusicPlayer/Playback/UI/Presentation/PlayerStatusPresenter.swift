@@ -18,17 +18,6 @@ struct PlayerStatusPresentationOutput {
 
 @MainActor
 struct PlayerStatusPresenter {
-    func presentLoading(
-        state: LoadingPresentationState,
-        message: String
-    ) -> PlayerStatusPresentationOutput {
-        PlayerStatusPresentationOutput(
-            loading: state,
-            status: StatusPresentationState(kind: .info, message: message),
-            playbackOverride: nil
-        )
-    }
-
     func presentInfo(
         message: String,
         loading: LoadingPresentationState = .idle

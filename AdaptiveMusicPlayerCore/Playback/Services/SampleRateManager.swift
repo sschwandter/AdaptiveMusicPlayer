@@ -33,6 +33,12 @@ public enum SampleRateSupport {
 
         return [range.mMinimum, range.mMaximum]
     }
+
+    /// Expand device-reported ranges into a deduplicated, sorted rate list —
+    /// the one contract every supported-rates query returns.
+    public static func normalizedRates(from ranges: [AudioValueRange]) -> [Double] {
+        Array(Set(ranges.flatMap(expandRates(from:)))).sorted()
+    }
 }
 
 /// Protocol for managing audio device sample rates
@@ -105,7 +111,7 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
             return []
         }
         let ranges = (try? device.availableNominalSampleRates) ?? []
-        return ranges.flatMap(SampleRateSupport.expandRates(from:))
+        return SampleRateSupport.normalizedRates(from: ranges)
     }
 
     public func getCurrentDeviceInfo() async -> AudioDeviceInfo? {
@@ -119,13 +125,14 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
             return nil
         }
 
-        let supportedRates = ((try? device.availableNominalSampleRates) ?? [])
-            .flatMap(SampleRateSupport.expandRates(from:))
+        let supportedRates = SampleRateSupport.normalizedRates(
+            from: (try? device.availableNominalSampleRates) ?? []
+        )
 
         return AudioDeviceInfo(
             name: name,
             currentSampleRate: currentSampleRate,
-            supportedSampleRates: Array(Set(supportedRates)).sorted()
+            supportedSampleRates: supportedRates
         )
     }
 
