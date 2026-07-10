@@ -6,18 +6,9 @@ struct ContentViewStatePresentationInput {
     let sampleRateBanner: SampleRateBannerPresentation
 }
 
-struct ContentViewStatePresentationOutput {
-    let playlistTrackPosition: String?
-    let playlistTracks: [PlaylistTrackRow]
-    let hasPlaylist: Bool
-    let canPlayPreviousTrack: Bool
-    let canPlayNextTrack: Bool
-    let contentViewState: ContentViewState
-}
-
 @MainActor
 struct ContentViewStatePresenter {
-    func present(input: ContentViewStatePresentationInput) -> ContentViewStatePresentationOutput {
+    func present(input: ContentViewStatePresentationInput) -> ContentViewState {
         let playlistTrackPosition = input.sessionState.playlistSession?.positionDescription
         let playlistTracks = playlistTracks(
             playlistSession: input.sessionState.playlistSession,
@@ -49,7 +40,7 @@ struct ContentViewStatePresenter {
             tracks: playlistTracks
         )
 
-        let contentViewState = ContentViewState(
+        return ContentViewState(
             currentTrackTitle: currentTrackTitle,
             playlistTrackPosition: playlistTrackPosition,
             duration: duration,
@@ -63,15 +54,6 @@ struct ContentViewStatePresenter {
             sampleRateBanner: input.sampleRateBanner,
             transport: transport,
             playlist: playlist
-        )
-
-        return ContentViewStatePresentationOutput(
-            playlistTrackPosition: playlistTrackPosition,
-            playlistTracks: playlistTracks,
-            hasPlaylist: hasPlaylist,
-            canPlayPreviousTrack: canPlayPreviousTrack,
-            canPlayNextTrack: canPlayNextTrack,
-            contentViewState: contentViewState
         )
     }
 
