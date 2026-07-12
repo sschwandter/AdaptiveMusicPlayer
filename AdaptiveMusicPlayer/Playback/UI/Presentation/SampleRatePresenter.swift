@@ -63,7 +63,7 @@ struct SampleRatePresenter {
 
     private func hasSampleRateMismatch(for input: SampleRatePresentationInput) -> Bool {
         guard input.fileSampleRate > 0 && input.hardwareSampleRate > 0 else { return false }
-        return abs(input.fileSampleRate - input.hardwareSampleRate) > SampleRateSupport.tolerance
+        return !SampleRateSupport.matches(input.fileSampleRate, input.hardwareSampleRate)
     }
 
     private func hardwareDeviceDisplayName(for input: SampleRatePresentationInput) -> String {
@@ -217,6 +217,6 @@ struct SampleRatePresenter {
     }
 
     static func sampleRate(_ target: Double, isWithin supportedRates: [Double]) -> Bool {
-        supportedRates.contains { abs($0 - target) <= SampleRateSupport.tolerance }
+        supportedRates.contains { SampleRateSupport.matches($0, target) }
     }
 }

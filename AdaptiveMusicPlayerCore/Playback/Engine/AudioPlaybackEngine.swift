@@ -174,7 +174,7 @@ public final class AudioPlaybackEngine {
         if targetSampleRate > 0 {
             let currentSampleRate = await getCurrentHardwareSampleRate()
             if currentSampleRate <= 0 ||
-                abs(currentSampleRate - targetSampleRate) > SampleRateSupport.tolerance
+                !SampleRateSupport.matches(currentSampleRate, targetSampleRate)
             {
                 do {
                     try await syncSampleRateOperation.execute(audioInfo: requestedAudioInfo, sampleRateManager: sampleRateManager)

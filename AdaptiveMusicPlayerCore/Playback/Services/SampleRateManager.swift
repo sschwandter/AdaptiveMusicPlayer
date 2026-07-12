@@ -13,11 +13,33 @@ public struct AudioDeviceInfo: Sendable, Equatable {
     }
 }
 
+public enum SampleRateManagerError: LocalizedError, Equatable, Sendable {
+    case unsupportedSampleRate(rate: Double)
+    case noDefaultOutputDevice
+    case settlingTimedOut(targetRate: Double, currentRate: Double?)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedSampleRate(let rate):
+            return "Sample rate \(Int(round(rate))) Hz not supported by device"
+        case .noDefaultOutputDevice:
+            return "No default output device available"
+        case .settlingTimedOut(let targetRate, let currentRate):
+            let currentText = currentRate.map { " (currently \(Int(round($0))) Hz)" } ?? ""
+            return "Sample rate did not settle at \(Int(round(targetRate))) Hz\(currentText)"
+        }
+    }
+}
+
 public enum SampleRateSupport {
     /// Tolerance in Hz within which two sample rates count as equal. Shared by
     /// the engine's skip-the-switch decision, the settle loop, and the UI's
     /// mismatch verdict so all three tell one story.
     public static let tolerance: Double = 1.0
+
+    public static func matches(_ lhs: Double, _ rhs: Double) -> Bool {
+        abs(lhs - rhs) <= tolerance
+    }
 
     public static func isSupported(_ rate: Double, by ranges: [AudioValueRange]) -> Bool {
         ranges.contains { range in
@@ -43,6 +65,39 @@ public enum SampleRateSupport {
     /// the one contract every supported-rates query returns.
     public static func normalizedRates(from ranges: [AudioValueRange]) -> [Double] {
         Array(Set(ranges.flatMap(expandRates(from:)))).sorted()
+    }
+}
+
+public enum SampleRateSettling {
+    public static let defaultTimeout: Duration = .milliseconds(750)
+    public static let defaultPollInterval: Duration = .milliseconds(50)
+
+    /// Awaits sample rate settling.
+    /// Immediately checks if already settled before sleeping.
+    public static func waitForSampleRateToSettle(
+        targetRate: Double,
+        timeout: Duration = defaultTimeout,
+        pollInterval: Duration = defaultPollInterval,
+        queryCurrentRate: () async -> Double?
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while true {
+            try Task.checkCancellation()
+
+            if let currentRate = await queryCurrentRate(),
+               SampleRateSupport.matches(currentRate, targetRate) {
+                return
+            }
+
+            guard clock.now < deadline else {
+                let latestRate = await queryCurrentRate()
+                throw SampleRateManagerError.settlingTimedOut(targetRate: targetRate, currentRate: latestRate)
+            }
+
+            try await Task.sleep(for: pollInterval)
+        }
     }
 }
 
@@ -72,11 +127,6 @@ public protocol SampleRateManaging: Sendable {
 
 /// Core Audio implementation of sample rate management
 public actor CoreAudioSampleRateManager: SampleRateManaging {
-    private enum Constants {
-        static let settlePollInterval: Duration = .milliseconds(50)
-        static let settleTimeout: Duration = .milliseconds(750)
-    }
-
     private let hardwareSystem = AudioHardwareSystem.shared
 
     public init() {}
@@ -98,12 +148,16 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
     public func setSampleRate(_ rate: Double) async throws {
         let device = try getDefaultAudioDevice()
 
-        // Check if sample rate is supported
+        // Check if sample rate is supported FIRST
         let supportedRanges = try device.availableNominalSampleRates
         guard SampleRateSupport.isSupported(rate, by: supportedRanges) else {
-            throw NSError(domain: "SampleRateManager", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Sample rate \(Int(rate)) Hz not supported by device"
-            ])
+            throw SampleRateManagerError.unsupportedSampleRate(rate: rate)
+        }
+
+        // Fast path: avoid hardware switch if already at target rate within tolerance
+        if let currentRate = try? device.nominalSampleRate,
+           SampleRateSupport.matches(currentRate, rate) {
+            return
         }
 
         try device.setNominalSampleRate(rate)
@@ -144,32 +198,16 @@ public actor CoreAudioSampleRateManager: SampleRateManaging {
 
     private func getDefaultAudioDevice() throws -> AudioHardwareDevice {
         guard let device = try hardwareSystem.defaultOutputDevice else {
-            throw NSError(domain: "SampleRateManager", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "No default output device available"
-            ])
+            throw SampleRateManagerError.noDefaultOutputDevice
         }
         return device
     }
 
     private func waitForSampleRateToSettle(_ targetRate: Double, on device: AudioHardwareDevice) async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: Constants.settleTimeout)
-
-        while true {
-            try Task.checkCancellation()
-
-            if let currentRate = try? device.nominalSampleRate,
-               abs(currentRate - targetRate) <= SampleRateSupport.tolerance {
-                return
-            }
-
-            guard clock.now < deadline else {
-                throw NSError(domain: "SampleRateManager", code: 3, userInfo: [
-                    NSLocalizedDescriptionKey: "Sample rate did not settle at \(Int(targetRate)) Hz"
-                ])
-            }
-
-            try await Task.sleep(for: Constants.settlePollInterval)
+        try await SampleRateSettling.waitForSampleRateToSettle(
+            targetRate: targetRate
+        ) {
+            try? device.nominalSampleRate
         }
     }
 }
