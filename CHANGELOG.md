@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.8.0...AdaptiveMusicPlayer-v0.8.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* Fixes and cleanups ([d6f88b9](https://github.com/sschwandter/AdaptiveMusicPlayer/commit/d6f88b9d49917a26bc384f2a5683067840e4673a))
+
 ## [0.8.0](https://github.com/sschwandter/AdaptiveMusicPlayer/compare/AdaptiveMusicPlayer-v0.7.4...AdaptiveMusicPlayer-v0.8.0) (2026-07-10)
 
 
