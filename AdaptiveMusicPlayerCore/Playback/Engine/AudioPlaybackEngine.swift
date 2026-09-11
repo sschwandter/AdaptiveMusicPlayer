@@ -28,6 +28,7 @@ public final class AudioPlaybackEngine {
     }
     private var player: AVAudioPlayer?
     private var playerGeneration = 0
+    private var loadGeneration = 0
 
     public let eventStream: AsyncStream<EngineEvent>
     private let eventContinuation: AsyncStream<EngineEvent>.Continuation
@@ -83,6 +84,8 @@ public final class AudioPlaybackEngine {
 
     /// Move the engine into a loading state before async file work begins.
     public func beginLoading() -> AudioInfo? {
+        // Invalidate work even when its replacement is still scanning a folder.
+        loadGeneration += 1
         let preservedAudioInfo = playbackState.audioInfo
         if let player {
             player.stop()
@@ -94,12 +97,18 @@ public final class AudioPlaybackEngine {
 
     /// Load an audio file and prepare for playback
     public func loadFile(from url: URL) async throws -> AudioInfo {
+        try Task.checkCancellation()
+        loadGeneration += 1
+        let requestedGeneration = loadGeneration
         playbackState = .loading(playbackState.audioInfo)
 
         do {
             let audioData = try await loadAudioDataOffMainActor(from: url)
 
             try Task.checkCancellation()
+            guard requestedGeneration == loadGeneration else {
+                throw CancellationError()
+            }
 
             // Create AVAudioPlayer on @MainActor from the Sendable audio data.
             // Do not prepare the player yet: playback startup may first switch the
@@ -120,27 +129,18 @@ public final class AudioPlaybackEngine {
 
             return audioInfo
 
-        } catch is CancellationError {
-            // Propagate cooperative cancellation as a plain `CancellationError`
-            // so the load coordinator can route it through its cancellation
-            // branch. Translating it here into `PlaybackError.loadingCancelled`
-            // would cause the controller to show it as a user-facing error.
-            playbackState = stateAfterCancelledLoad()
-            throw CancellationError()
-        } catch let error as PlaybackError {
-            // The load pipeline (`LoadFileOperation`) translates inner
-            // `CancellationError` into `PlaybackError.loadingCancelled`. Surface
-            // that variant as a plain cancellation too, for the same reason as
-            // above: the user did not actually fail to load the file, the load
-            // was cancelled.
-            if case .loadingCancelled = error {
+        } catch {
+            // A stale failure must not emit an engine event for a newer player.
+            // The controller's latest-request check cannot undo that event.
+            guard requestedGeneration == loadGeneration else {
+                throw CancellationError()
+            }
+            if Task.isCancelled || error is CancellationError ||
+                (error as? PlaybackError) == .loadingCancelled {
                 playbackState = stateAfterCancelledLoad()
                 throw CancellationError()
             }
-            playbackState = stateAfterFailedLoad(error)
-            throw error
-        } catch {
-            let playbackError = PlaybackError.loadFailed(error.localizedDescription)
+            let playbackError = (error as? PlaybackError) ?? .loadFailed(error.localizedDescription)
             playbackState = stateAfterFailedLoad(playbackError)
             throw playbackError
         }
@@ -251,7 +251,9 @@ public final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingOperation.seek(to: time, player: player, audioInfo: audioInfo)
+        let newTime = try seekingOperation.seek(to: time, player: player, audioInfo: audioInfo)
+        updateStateAfterSeeking(to: newTime, audioInfo: audioInfo)
+        return newTime
     }
 
     /// Skip forward by the configured interval
@@ -265,7 +267,9 @@ public final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingOperation.skipForward(from: currentTime, player: player, audioInfo: audioInfo)
+        let newTime = try seekingOperation.skipForward(from: currentTime, player: player, audioInfo: audioInfo)
+        updateStateAfterSeeking(to: newTime, audioInfo: audioInfo)
+        return newTime
     }
 
     /// Skip backward by the configured interval
@@ -279,7 +283,15 @@ public final class AudioPlaybackEngine {
             throw PlaybackError.noFileLoaded
         }
 
-        return try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
+        let newTime = try seekingOperation.skipBackward(from: currentTime, player: player, audioInfo: audioInfo)
+        updateStateAfterSeeking(to: newTime, audioInfo: audioInfo)
+        return newTime
+    }
+
+    private func updateStateAfterSeeking(to time: Double, audioInfo: AudioInfo) {
+        if case .finished = playbackState, time < audioInfo.duration {
+            playbackState = .paused(audioInfo)
+        }
     }
 
     // MARK: - Volume Control

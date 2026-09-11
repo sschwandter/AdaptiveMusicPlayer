@@ -60,11 +60,10 @@ private extension Data {
 }
 
 enum WaveData {
-    static func make() -> Data {
+    static func make(frameCount: UInt32 = 44) -> Data {
         let sampleRate: UInt32 = 44_100
         let bitsPerSample: UInt16 = 16
         let channels: UInt16 = 1
-        let frameCount: UInt32 = 44
         let bytesPerSample = UInt32(bitsPerSample / 8)
         let dataSize = frameCount * UInt32(channels) * bytesPerSample
         let byteRate = sampleRate * UInt32(channels) * bytesPerSample

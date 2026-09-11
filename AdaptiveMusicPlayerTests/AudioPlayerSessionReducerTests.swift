@@ -53,11 +53,11 @@ struct AudioPlayerSessionReducerTests {
 
         let playlistState = reducer.reduce(
             state: AudioPlayerSessionState(),
-            action: .playlistSessionUpdated(playlistSession)
+            action: .loadStarted(preservedAudioInfo: nil, phase: .loadingTrack(playlistSession))
         )
         let readyState = reducer.reduce(
             state: playlistState,
-            action: .trackReady(url: trackURL, audioInfo: audioInfo)
+            action: .trackReady(playlistSession: playlistSession, audioInfo: audioInfo)
         )
 
         #expect(readyState.playlistSession?.currentTrackURL == trackURL)
@@ -84,7 +84,10 @@ struct AudioPlayerSessionReducerTests {
 
         let nextState = reducer.reduce(
             state: initialState,
-            action: .playlistSessionUpdated(newSession)
+            action: .trackReady(
+                playlistSession: newSession,
+                audioInfo: AudioInfo(fileName: "kept.wav", displayTitle: "Kept", duration: 1, sampleRate: 44_100)
+            )
         )
 
         #expect(nextState.displayTitlesByTrackURL[keptURL] == "Kept")

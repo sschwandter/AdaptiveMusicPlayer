@@ -493,7 +493,7 @@ struct ContentView: View {
         switch viewState.sampleRateBanner.style {
         case .matched:
             return colorScheme == .dark ? Color(red: 0.82, green: 1.0, blue: 0.88) : Color(red: 0.07, green: 0.40, blue: 0.18)
-        case .switching:
+        case .switching, .resampling:
             return colorScheme == .dark ? Color(red: 1.0, green: 0.93, blue: 0.70) : Color(red: 0.56, green: 0.34, blue: 0.00)
         case .unsupported, .error:
             return colorScheme == .dark ? Color(red: 1.0, green: 0.86, blue: 0.86) : Color(red: 0.62, green: 0.07, blue: 0.10)
@@ -506,7 +506,7 @@ struct ContentView: View {
         switch viewState.sampleRateBanner.style {
         case .matched:
             return colorScheme == .dark ? .green.opacity(0.55) : .green.opacity(0.35)
-        case .switching:
+        case .switching, .resampling:
             return colorScheme == .dark ? .orange.opacity(0.60) : .orange.opacity(0.42)
         case .unsupported, .error:
             return colorScheme == .dark ? .red.opacity(0.70) : .red.opacity(0.42)
@@ -524,7 +524,7 @@ struct ContentView: View {
         switch viewState.sampleRateBanner.style {
         case .matched:
             return colorScheme == .dark ? .green.opacity(0.18) : .green.opacity(0.12)
-        case .switching:
+        case .switching, .resampling:
             return colorScheme == .dark ? .orange.opacity(0.20) : .orange.opacity(0.13)
         case .unsupported, .error:
             return colorScheme == .dark ? .red.opacity(0.24) : .red.opacity(0.14)

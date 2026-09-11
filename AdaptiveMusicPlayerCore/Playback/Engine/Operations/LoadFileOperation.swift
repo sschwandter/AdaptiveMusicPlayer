@@ -25,14 +25,14 @@ public final class LoadFileOperation: LoadFileOperationProtocol {
         do {
             let audioData = try await sessionManager.loadAudioData(from: url)
 
-            guard !Task.isCancelled else {
-                throw PlaybackError.loadingCancelled
-            }
+            try Task.checkCancellation()
 
             return audioData
 
         } catch is CancellationError {
             throw PlaybackError.loadingCancelled
+        } catch let error as PlaybackError {
+            throw error
         } catch {
             throw PlaybackError.loadFailed(error.localizedDescription)
         }

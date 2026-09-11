@@ -134,6 +134,15 @@ struct SampleRatePresenter {
         }
 
         if deviceSupportsFileSampleRate(for: input) {
+            guard input.isAttemptingPlaybackStart else {
+                return SampleRateBannerPresentation(
+                    title: "Resampling",
+                    detail: routeDescription,
+                    iconName: "waveform",
+                    helpText: statusDetail,
+                    style: .resampling
+                )
+            }
             return SampleRateBannerPresentation(
                 title: "Switching",
                 detail: routeDescription,
@@ -200,7 +209,11 @@ struct SampleRatePresenter {
             return "\(hardwareDeviceDisplayName) does not advertise support for \(Self.formatSampleRate(input.fileSampleRate)). Supported rates: \(supportedHardwareSampleRatesDescription)."
         }
 
-        return "\(hardwareDeviceDisplayName) supports \(Self.formatSampleRate(input.fileSampleRate)), but the hardware is still at \(Self.formatSampleRate(input.hardwareSampleRate)). Playback will be resampled until the device switches."
+        let mismatch = "\(hardwareDeviceDisplayName) supports \(Self.formatSampleRate(input.fileSampleRate)), but the hardware is still at \(Self.formatSampleRate(input.hardwareSampleRate))."
+        if input.isPlaying && !input.isAttemptingPlaybackStart {
+            return "\(mismatch) Playback is being resampled."
+        }
+        return "\(mismatch) Playback will be resampled unless the device switches."
     }
 
     private func deviceSupportsFileSampleRate(for input: SampleRatePresentationInput) -> Bool {

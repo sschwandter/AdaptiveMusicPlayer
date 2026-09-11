@@ -3,13 +3,14 @@ import Foundation
 
 enum AudioPlayerLoadPhase {
     case scanningFolder
-    case loadingTrack(PlaylistSession)
+    case loadingTrack(PlaylistSession, autoplayOnSuccess: Bool = false)
 }
 
 enum AudioPlayerAction {
     case loadStarted(preservedAudioInfo: AudioInfo?, phase: AudioPlayerLoadPhase)
-    case playlistSessionUpdated(PlaylistSession)
-    case trackReady(url: URL, audioInfo: AudioInfo)
+    case trackReady(playlistSession: PlaylistSession, audioInfo: AudioInfo)
+    case loadCompleted
+    case loadFailed
     case playbackStarting
     case playbackStartCancelled
     case playbackStopped(preservedAudioInfo: AudioInfo?)
@@ -48,14 +49,15 @@ struct AudioPlayerSessionReducer {
             nextState.currentTime = 0
             applyLoadingPhase(phase, to: &nextState)
 
-        case .playlistSessionUpdated(let playlistSession):
+        case .trackReady(let playlistSession, let audioInfo):
             nextState.playlistSession = playlistSession
             nextState.pruneDisplayTitles(keeping: playlistSession.playlist.tracks)
-
-        case .trackReady(let url, let audioInfo):
             nextState.playback = .ready(audioInfo)
             nextState.currentTime = 0
-            nextState.recordLoadedTrack(audioInfo, for: url)
+            nextState.recordLoadedTrack(audioInfo, for: playlistSession.currentTrackURL)
+
+        case .loadCompleted, .loadFailed:
+            nextState.pendingTrackLoad = nil
 
         case .playbackStarting:
             nextState.activity = .startingPlayback
@@ -173,12 +175,17 @@ struct AudioPlayerSessionReducer {
     ) {
         switch phase {
         case .scanningFolder:
+            state.pendingTrackLoad = nil
             state.activity = .scanningFolder
             state.status = StatusPresentationState(
                 kind: .info,
                 message: "Scanning folder..."
             )
-        case .loadingTrack(let playlistSession):
+        case .loadingTrack(let playlistSession, let autoplayOnSuccess):
+            state.pendingTrackLoad = PendingTrackLoad(
+                playlistSession: playlistSession,
+                autoplayOnSuccess: autoplayOnSuccess
+            )
             state.activity = .loadingTrack
             state.status = StatusPresentationState(
                 kind: .info,
@@ -223,4 +230,3 @@ struct AudioPlayerSessionReducer {
         return .ready(currentAudioInfo)
     }
 }
-

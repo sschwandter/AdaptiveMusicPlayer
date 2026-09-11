@@ -21,7 +21,7 @@ final class AudioPlayer {
     }
 
     private var isAttemptingPlaybackStart: Bool {
-        sessionController.isStartingPlayback
+        stateStore.sessionState.activity == .startingPlayback
     }
 
     var contentViewState: ContentViewState {

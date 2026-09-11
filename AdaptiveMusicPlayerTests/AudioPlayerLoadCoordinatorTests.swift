@@ -6,7 +6,7 @@ import Foundation
 @Suite("AudioPlayerLoadCoordinator Tests", .serialized)
 @MainActor
 struct AudioPlayerLoadCoordinatorTests {
-    @Test("single-file load emits start, playlist, and loaded-track events")
+    @Test("single-file load emits pending selection then a loaded playlist")
     func loadFileEvents() async throws {
         let coordinator = AudioPlayerLoadCoordinator()
         let trackURL = URL(fileURLWithPath: "/tmp/track.wav")
@@ -32,9 +32,8 @@ struct AudioPlayerLoadCoordinatorTests {
 
         let summaries = await recorder.summaries()
         #expect(summaries == [
-            "playlist:1 of 1",
-            "trackLoading:1 of 1",
-            "loaded:track.wav:false"
+            "trackLoading:1 of 1:false",
+            "loaded:track.wav"
         ])
     }
 
@@ -186,12 +185,11 @@ actor LoadCoordinatorEventRecorder {
         switch event {
         case .scanningFolderStarted:
             summariesStorage.append("scanning")
-        case .trackLoadingStarted(let playlistSession):
-            summariesStorage.append("trackLoading:\(playlistSession.positionDescription)")
-        case .playlistSessionUpdated(let playlistSession):
-            summariesStorage.append("playlist:\(playlistSession.positionDescription)")
-        case .trackLoaded(let url, _, let autoplayOnSuccess):
-            summariesStorage.append("loaded:\(url.lastPathComponent):\(autoplayOnSuccess)")
+        case .trackLoadingStarted(let playlistSession, let autoplayOnSuccess):
+            summariesStorage.append("trackLoading:\(playlistSession.positionDescription):\(autoplayOnSuccess)")
+        case .trackLoaded(let playlistSession, _):
+            let url = playlistSession.currentTrackURL
+            summariesStorage.append("loaded:\(url.lastPathComponent)")
             loadedTrackURLsStorage.append(url)
         case .failed(let error):
             summariesStorage.append("failed:\(error.localizedDescription)")

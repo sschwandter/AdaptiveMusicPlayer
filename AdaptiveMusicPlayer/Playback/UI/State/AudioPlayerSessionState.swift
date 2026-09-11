@@ -1,6 +1,11 @@
 import AdaptiveMusicPlayerCore
 import Foundation
 
+struct PendingTrackLoad {
+    let playlistSession: PlaylistSession
+    let autoplayOnSuccess: Bool
+}
+
 struct AudioPlayerSessionState {
     var playback: PlaybackPresentationState = .idle
     var activity: LoadingPresentationState = .idle
@@ -11,6 +16,7 @@ struct AudioPlayerSessionState {
     var volume: Double = 1.0
     var isSeeking: Bool = false
     var displayTitlesByTrackURL: [URL: String] = [:]
+    var pendingTrackLoad: PendingTrackLoad?
 
     var duration: Double { playback.audioInfo?.duration ?? 0 }
     var statusMessage: String { status.message }

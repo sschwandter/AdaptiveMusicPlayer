@@ -5,12 +5,10 @@ import Foundation
 final class AudioPlayerLoadCoordinator {
     enum Event {
         case scanningFolderStarted
-        case trackLoadingStarted(PlaylistSession)
-        case playlistSessionUpdated(PlaylistSession)
+        case trackLoadingStarted(PlaylistSession, autoplayOnSuccess: Bool)
         case trackLoaded(
-            url: URL,
-            audioInfo: AudioInfo,
-            autoplayOnSuccess: Bool
+            playlistSession: PlaylistSession,
+            audioInfo: AudioInfo
         )
         case failed(PlaybackError)
     }
@@ -40,8 +38,7 @@ final class AudioPlayerLoadCoordinator {
         handleEvent: @escaping @MainActor (Event) async -> Void
     ) {
         startNewLoad(handleEvent: handleEvent) { run in
-            await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(.trackLoadingStarted(playlistSession))
+            await handleEvent(.trackLoadingStarted(playlistSession, autoplayOnSuccess: autoplayOnSuccess))
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
@@ -52,9 +49,8 @@ final class AudioPlayerLoadCoordinator {
             try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
-                    url: url,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: autoplayOnSuccess
+                    playlistSession: playlistSession,
+                    audioInfo: audioInfo
                 )
             )
         }
@@ -70,8 +66,7 @@ final class AudioPlayerLoadCoordinator {
         let trackURL = playlistSession.currentTrackURL
 
         startNewLoad(handleEvent: handleEvent) { run in
-            await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(.trackLoadingStarted(playlistSession))
+            await handleEvent(.trackLoadingStarted(playlistSession, autoplayOnSuccess: autoplayOnSuccess))
 
             try await self.waitForImporterDismissal(
                 importerDismissalDelay,
@@ -82,9 +77,8 @@ final class AudioPlayerLoadCoordinator {
             try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
-                    url: trackURL,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: autoplayOnSuccess
+                    playlistSession: playlistSession,
+                    audioInfo: audioInfo
                 )
             )
         }
@@ -119,16 +113,14 @@ final class AudioPlayerLoadCoordinator {
                 throw PlaybackError.loadFailed("No playable audio files were found in the selected folder.")
             }
 
-            await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(.trackLoadingStarted(playlistSession))
+            await handleEvent(.trackLoadingStarted(playlistSession, autoplayOnSuccess: false))
 
             let audioInfo = try await loadTrack(playlistSession.currentTrackURL)
             try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
-                    url: playlistSession.currentTrackURL,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: false
+                    playlistSession: playlistSession,
+                    audioInfo: audioInfo
                 )
             )
         }
@@ -175,16 +167,14 @@ final class AudioPlayerLoadCoordinator {
                 throw PlaybackError.loadFailed("No playable audio files were found in the dropped items.")
             }
 
-            await handleEvent(.playlistSessionUpdated(playlistSession))
-            await handleEvent(.trackLoadingStarted(playlistSession))
+            await handleEvent(.trackLoadingStarted(playlistSession, autoplayOnSuccess: true))
 
             let audioInfo = try await loadTrack(playlistSession.currentTrackURL)
             try self.ensureLoadRemainsCurrent(run)
             await handleEvent(
                 .trackLoaded(
-                    url: playlistSession.currentTrackURL,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: true
+                    playlistSession: playlistSession,
+                    audioInfo: audioInfo
                 )
             )
         }
@@ -210,6 +200,7 @@ final class AudioPlayerLoadCoordinator {
     ) {
         latestLoad.replaceCurrentRun { run in
             do {
+                try run.ensureCurrent()
                 try await operation(run)
             } catch is CancellationError {
                 // A cancelled load always means a newer request replaced this

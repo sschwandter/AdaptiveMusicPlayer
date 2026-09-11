@@ -67,6 +67,7 @@ struct SampleRateBannerPresentation: Equatable {
         case idle
         case matched
         case switching
+        case resampling
         case unsupported
         case error
     }

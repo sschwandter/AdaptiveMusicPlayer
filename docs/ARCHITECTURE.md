@@ -165,7 +165,11 @@ This keeps command routing window-scoped instead of broadcasting process-wide ac
 
 `ContentView` delegates file and folder selection results to `AudioPlayer`, which forwards them as commands. `AudioPlayerSessionController` asks `AudioPlayerLoadCoordinator` to start a new load, applies loading-state transitions through the reducer, performs asynchronous file loading or folder scanning, and updates `AudioPlayerSessionState` when the load completes.
 
+The session keeps the pending track selection and its autoplay intent separate from the loaded playlist. A successful track load commits the playlist, audio information, and title cache together. A failed load discards the pending selection and preserves the loaded playlist, including its folder access. Autoplay intent remains available through the hardware refresh so another selection can replace the load without unintentionally stopping playback.
+
 Folder scanning runs off the main actor and uses latest-request-wins cancellation so stale scans cannot publish tracks after a newer request has taken over.
+
+The engine also tracks load generations. Both successful results and failures must still belong to the current load before they can change runtime state or emit events; controller-level cancellation alone cannot protect the engine's event stream.
 
 View-local interaction state such as importer presentation and slider editing remains in `ContentView`.
 
@@ -179,6 +183,8 @@ Playback commands pass through `AudioPlayer.send(_:)` into `AudioPlayerSessionCo
 - `PlaybackProgressTracker` emits progress and finish events back through the engine event stream.
 - The controller dispatches reducer actions into the state store.
 - Presenters derive `ContentViewState` plus status/sample-rate UI from that state.
+
+Cancelling startup does not imply that audio has not started: the controller may still be awaiting hardware diagnostics. Pause therefore reaches the engine even during startup, and startup completion checks cancellation again after refreshing hardware. The sample-rate banner uses observable session activity to distinguish an active switch from playback continuing with resampling.
 
 ## Event Flow
 

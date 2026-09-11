@@ -100,7 +100,8 @@ final class AudioPlayerSessionController {
         case .selectPlaylistTrack(let index):
             selectPlaylistTrack(
                 at: index,
-                shouldAutoplay: stateStore.isPlaying || isStartingPlayback
+                shouldAutoplay: stateStore.isPlaying || isStartingPlayback ||
+                    stateStore.sessionState.pendingTrackLoad?.autoplayOnSuccess == true
             )
         case .revealCurrentTrackInFinder:
             // Handled entirely by AudioPlayer before reaching the controller;
@@ -171,8 +172,13 @@ final class AudioPlayerSessionController {
 
     private func selectPlaylistTrack(at index: Int, shouldAutoplay: Bool) {
         guard let playlistSession = stateStore.playlistSession,
-              playlistSession.currentIndex != index,
               let nextPlaylistSession = playlistSession.movingToTrack(at: index) else { return }
+
+        // Rows belong to the committed playlist. A pending selection may be
+        // replaced, including by clicking back on the currently loaded track.
+        let selectedURL = stateStore.sessionState.pendingTrackLoad?.playlistSession.currentTrackURL
+            ?? playlistSession.currentTrackURL
+        guard selectedURL != nextPlaylistSession.currentTrackURL else { return }
 
         loadPlaylistTrack(
             playlistSession: nextPlaylistSession,
@@ -260,23 +266,12 @@ final class AudioPlayerSessionController {
         switch event {
         case .scanningFolderStarted:
             beginLoading(phase: .scanningFolder)
-        case .trackLoadingStarted(let playlistSession):
-            beginLoading(phase: .loadingTrack(playlistSession))
-        case .playlistSessionUpdated(let playlistSession):
-            dispatch(.playlistSessionUpdated(playlistSession))
-        case .trackLoaded(let url, let audioInfo, let autoplayOnSuccess):
-            do {
-                try await finishLoadingTrack(
-                    from: url,
-                    audioInfo: audioInfo,
-                    autoplayOnSuccess: autoplayOnSuccess
-                )
-            } catch let error as PlaybackError {
-                showError(error)
-            } catch {
-                showError(.loadFailed(error.localizedDescription))
-            }
+        case .trackLoadingStarted(let playlistSession, let autoplayOnSuccess):
+            beginLoading(phase: .loadingTrack(playlistSession, autoplayOnSuccess: autoplayOnSuccess))
+        case .trackLoaded(let playlistSession, let audioInfo):
+            await finishLoadingTrack(playlistSession: playlistSession, audioInfo: audioInfo)
         case .failed(let error):
+            dispatch(.loadFailed)
             showError(error)
         }
     }
@@ -289,11 +284,11 @@ final class AudioPlayerSessionController {
     }
 
     private func finishLoadingTrack(
-        from trackURL: URL,
-        audioInfo: AudioInfo,
-        autoplayOnSuccess: Bool
-    ) async throws {
-        dispatch(.trackReady(url: trackURL, audioInfo: audioInfo))
+        playlistSession: PlaylistSession,
+        audioInfo: AudioInfo
+    ) async {
+        guard !Task.isCancelled else { return }
+        dispatch(.trackReady(playlistSession: playlistSession, audioInfo: audioInfo))
         engine.setVolume(currentVolume())
         await refreshHardwareInfo()
 
@@ -304,6 +299,8 @@ final class AudioPlayerSessionController {
         // user has already moved past via an uncancelled startup task.
         guard !Task.isCancelled else { return }
 
+        let autoplayOnSuccess = stateStore.sessionState.pendingTrackLoad?.autoplayOnSuccess == true
+        dispatch(.loadCompleted)
         showReadyStatus(for: audioInfo)
 
         if autoplayOnSuccess {
@@ -330,17 +327,19 @@ final class AudioPlayerSessionController {
     }
 
     private func pause() {
-        if cancelPendingPlaybackStart() {
-            stopProgressTracking()
-            dispatchStatus(statusPresenter.presentInfo(message: "Paused"))
-            return
-        }
+        let cancelledStartup = cancelPendingPlaybackStart()
 
         do {
+            // Startup may already have started audio and be awaiting diagnostics.
             _ = try engine.pause()
             stopProgressTracking()
+            dispatchStatus(statusPresenter.presentInfo(message: "Paused"))
         } catch let error as PlaybackError {
-            showError(error)
+            if cancelledStartup && error == .noFileLoaded {
+                dispatch(.playbackStartCancelled)
+            } else {
+                showError(error)
+            }
         } catch {
             // `engine.pause()` is contractually expected to throw only
             // `PlaybackError`. Treat any other thrown value as a programming
@@ -378,8 +377,10 @@ final class AudioPlayerSessionController {
     }
 
     private func finishSuccessfulPlaybackStart(audioInfo: AudioInfo) async {
+        guard !Task.isCancelled else { return }
         startPlaybackLifetimeTasks()
         await refreshHardwareInfo()
+        guard !Task.isCancelled else { return }
         showPlayingStatus()
     }
 
